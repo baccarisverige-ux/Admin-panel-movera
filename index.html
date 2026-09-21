@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RideShare Pro Admin Dashboard</title>
+  <meta name="description" content="RideShare Pro administration dashboard" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="brand-mark">R</div><span>RideShare Pro</span></div>
+      <nav id="nav" class="nav"></nav>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <button class="icon-btn mobile-menu" id="menuBtn" aria-label="Open menu">☰</button>
+        <div>
+          <h1 id="pageTitle">RideShare Pro Admin Dashboard</h1>
+          <p class="crumb" id="pageCrumb">Dashboard Overview</p>
+        </div>
+        <div class="topbar-actions">
+          <select class="compact-select" id="globalZone">
+            <option>All Zones</option><option>Downtown (Z001)</option><option>Uptown (Z002)</option><option>Midtown (Z003)</option>
+          </select>
+          <button class="icon-btn notification-btn" aria-label="Notifications">🔔<span class="notification-count">3</span></button>
+          <div class="admin-profile"><div class="avatar">AD</div><div><strong>Admin User</strong><span>Super Admin</span></div></div>
+        </div>
+      </header>
+
+      <main class="content" id="content">
+        <section class="page active" data-page="dashboard">
+          <div class="page-heading"><div><h2>Dashboard Overview</h2><p>Monitor live platform activity and system health.</p></div><select class="compact-select"><option>All Zones</option><option>Downtown (Z001)</option><option>Uptown (Z002)</option><option>Midtown (Z003)</option></select></div>
+
+          <section class="panel fare-panel">
+            <div class="panel-title-row"><div><h3>Fare Estimation Tool</h3><p>Estimate a ride fare using zone, category, distance and duration.</p></div></div>
+            <div class="fare-grid">
+              <label>Zone<select id="fareZone"><option>Downtown (Z001)</option><option>Uptown (Z002)</option><option>Midtown (Z003)</option></select></label>
+              <label>Vehicle Category<select id="fareCategory"><option value="economy">Economy</option><option value="comfort">Comfort</option><option value="premium">Premium</option><option value="xl">XL</option></select></label>
+              <label>Distance (km)<input type="number" id="fareDistance" min="0" step=".1" placeholder="0" /></label>
+              <label>Duration (min)<input type="number" id="fareDuration" min="0" step="1" placeholder="0" /></label>
+              <button class="primary-btn fare-button" id="calcFare">Calculate Fare</button>
+              <div class="fare-result" id="fareResult">$0.00</div>
+            </div>
+          </section>
+
+          <section class="stats-grid">
+            <article class="stat-card"><div class="stat-icon">🚕</div><div><span>Online Drivers</span><strong>1,247</strong><small class="up">↗ 12% from yesterday</small></div></article>
+            <article class="stat-card"><div class="stat-icon">👥</div><div><span>Active Riders</span><strong>3,582</strong><small class="up">↗ 8% from yesterday</small></div></article>
+            <article class="stat-card"><div class="stat-icon">↗</div><div><span>Ongoing Trips</span><strong>428</strong><small class="up">↗ 3% from yesterday</small></div></article>
+            <article class="stat-card"><div class="stat-icon">💳</div><div><span>Today's Revenue</span><strong>$24,587</strong><small class="up">↗ 15% from yesterday</small></div></article>
+          </section>
+
+          <section class="dashboard-grid">
+            <article class="panel chart-panel">
+              <div class="panel-title-row"><h3>Demand vs Supply</h3><div class="segmented"><button class="active">Day</button><button>Week</button><button>Month</button></div></div>
+              <div class="fake-chart">
+                <div class="chart-grid-lines"></div>
+                <svg viewBox="0 0 800 260" preserveAspectRatio="none" aria-label="Demand versus supply chart">
+                  <polyline class="line demand" points="0,205 90,168 180,188 270,112 360,130 450,70 540,95 630,42 720,80 800,50"></polyline>
+                  <polyline class="line supply" points="0,220 90,206 180,175 270,164 360,116 450,132 540,91 630,112 720,72 800,88"></polyline>
+                </svg>
+                <div class="chart-legend"><span><i class="dot demand-dot"></i>Demand</span><span><i class="dot supply-dot"></i>Supply</span></div>
+              </div>
+            </article>
+
+            <article class="panel zone-volume">
+              <div class="panel-title-row"><h3>Trip Volume by Zone</h3></div>
+              <div class="donut-wrap"><div class="donut"><div>42,847<small>Trips</small></div></div>
+                <div class="legend-list"><div><span><i class="legend-color c1"></i>Downtown</span><b>18,420</b></div><div><span><i class="legend-color c2"></i>Uptown</span><b>13,267</b></div><div><span><i class="legend-color c3"></i>Midtown</span><b>11,160</b></div></div>
+              </div>
+            </article>
+          </section>
+
+          <section class="dashboard-grid lower">
+            <article class="panel alerts">
+              <div class="panel-title-row"><h3>System Alerts</h3><button class="text-btn">View All</button></div>
+              <div class="alert-row danger"><div class="alert-icon">!</div><div class="grow"><strong>Payment System Downtime</strong><p>Credit card processing is experiencing issues in Zone</p><small>10 min ago</small></div><button class="small-btn">Fix</button></div>
+              <div class="alert-row warning"><div class="alert-icon">!</div><div class="grow"><strong>Driver Documents Expiring</strong><p>47 drivers have documents expiring in the next 7 days</p><small>1 hour ago</small></div><button class="small-btn">Review</button></div>
+              <div class="alert-row info"><div class="alert-icon">↗</div><div class="grow"><strong>Surge Demand Detected</strong><p>High demand detected in downtown area. Consider activating boost pricing.</p><small>2 hours ago</small></div><button class="small-btn">Activate</button></div>
+            </article>
+            <article class="panel quick-actions">
+              <div class="panel-title-row"><h3>Quick Actions</h3></div>
+              <div class="quick-grid">
+                <button><span>⏸</span>Suspend Zone</button><button><span>💳</span>Disable Payments</button><button><span>⚠</span>Emergency Mode</button><button><span>💬</span>Send Popup</button><button><span>＋</span>Add Driver</button><button><span>▤</span>Generate Report</button><button><span>⚙</span>System Settings</button>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="page" data-page="zones">
+          <div class="page-heading"><div><h2>Zone Management</h2><p>Create, manage and monitor operating zones.</p></div><button class="primary-btn" data-modal="zoneModal">Create New Zone</button></div>
+          <article class="panel"><div class="panel-title-row"><h3>Existing Zones</h3></div>
+            <div class="table-wrap"><table><thead><tr><th>Zone ID</th><th>Name</th><th>City</th><th>Country</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+              <tr><td>Z001</td><td>Downtown</td><td>New York</td><td>USA</td><td><span class="status active">Active</span></td><td><button class="link-action">Edit</button><button class="link-action danger-text">Delete</button></td></tr>
+              <tr><td>Z002</td><td>Uptown</td><td>New York</td><td>USA</td><td><span class="status active">Active</span></td><td><button class="link-action">Edit</button><button class="link-action danger-text">Delete</button></td></tr>
+              <tr><td>Z003</td><td>Midtown</td><td>New York</td><td>USA</td><td><span class="status inactive">Inactive</span></td><td><button class="link-action">Edit</button><button class="link-action danger-text">Delete</button></td></tr>
+            </tbody></table></div>
+          </article>
+          <article class="panel map-placeholder"><div class="panel-title-row"><h3>Zone Map</h3><button class="secondary-btn">Reset View</button></div><div class="map-canvas"><div class="map-road r1"></div><div class="map-road r2"></div><div class="map-zone z1">Downtown</div><div class="map-zone z2">Uptown</div><div class="map-zone z3">Midtown</div></div></article>
+        </section>
+
+        <section class="page" data-page="pricing">
+          <div class="page-heading"><div><h2>Pricing & Vehicle Categories</h2><p>Configure category fares, rider adjustments, boost pricing and commission.</p></div><div class="actions"><select class="compact-select"><option>Select Zone</option><option>Downtown (Z001)</option><option>Uptown (Z002)</option><option>Midtown (Z003)</option></select><button class="primary-btn">Save All Changes</button><button class="secondary-btn" data-modal="categoryModal">Add Category</button></div></div>
+          <div class="tabs"><button class="active" data-tab="categories">Vehicle Categories</button><button data-tab="booking">Booking Controls</button><button data-tab="rules">Fare Calculation Rules</button><button data-tab="boost">Boost Pricing</button><button data-tab="commission">Commission</button></div>
+          <div class="tab-panel active" data-tab-panel="categories"><article class="panel"><div class="panel-title-row"><h3>Vehicle Categories</h3><button class="secondary-btn">Export</button></div><div class="table-wrap"><table class="pricing-table"><thead><tr><th>Category</th><th>Pickup Fare</th><th>Per KM Rate</th><th>Per Min Rate</th><th>Min Fare</th><th>Max Fare</th><th>Min Increase by Rider</th><th>Max Increase by Rider</th><th>Actions</th></tr></thead><tbody id="pricingRows"></tbody></table></div></article></div>
+          <div class="tab-panel" data-tab-panel="booking"><article class="panel"><div class="panel-title-row"><h3>Zone-Level Booking Controls</h3><button class="primary-btn">Save</button></div><div class="settings-grid"><label>Max Trip Distance (Radar)<input value="30 km"></label><label>Max Trip Distance (Reservations)<input value="60 km"></label><label>Max Trip Distance (Exclusive)<input value="120 km"></label><fieldset><legend>Allowed Payment Methods</legend><label><input type="checkbox" checked> Cash</label><label><input type="checkbox" checked> Credit Card</label><label><input type="checkbox" checked> Wallet</label><label><input type="checkbox" checked> PayPal</label></fieldset></div></article></div>
+          <div class="tab-panel" data-tab-panel="rules"><article class="panel"><h3>Fare Calculation Order</h3><ol class="rules-list"><li>Base fare (pickup + km + min)</li><li>Rider adjustment (within Min/Max Increase by Rider limits)</li><li>Boost multiplier</li><li>Apply System Min/Max</li><li>Add extras (waiting, cancellation, reservation, surcharges)</li></ol></article></div>
+          <div class="tab-panel" data-tab-panel="boost"><article class="panel"><div class="panel-title-row"><h3>Boost Pricing Controls</h3><div><button class="primary-btn">Save All</button><button class="secondary-btn">Clear All</button></div></div><div class="boost-grid"><div class="setting-card"><h4>Manual Boost</h4><strong>1.5x</strong><label>Duration (minutes)<input value="30"></label><button class="primary-btn">Activate</button><button class="secondary-btn">Save</button></div><div class="setting-card"><h4>Auto Boost</h4><strong>1.8x</strong><label>Trigger Threshold %<input value="85"></label><button class="primary-btn">Enable Auto</button><button class="secondary-btn">Save</button></div><div class="setting-card"><h4>Scheduled Boost</h4><strong>2.0x</strong><label>Start Time<input type="time" value="17:00"></label><label>End Time<input type="time" value="20:00"></label><button class="primary-btn">Schedule</button><button class="secondary-btn">Save</button></div></div></article></div>
+          <div class="tab-panel" data-tab-panel="commission"><article class="panel"><div class="panel-title-row"><h3>Commission Settings</h3><button class="primary-btn">Save All</button></div><div class="boost-grid"><div class="setting-card"><h4>Standard Commission</h4><strong>15%</strong><p>Applicable to all categories</p><button class="primary-btn">Apply</button></div><div class="setting-card"><h4>Premium Commission</h4><strong>20%</strong><p>For Premium & XL categories</p><button class="primary-btn">Apply</button></div><div class="setting-card"><h4>Partner Commission</h4><strong>12%</strong><p>For franchise partners</p><button class="primary-btn">Apply</button></div></div></article></div>
+        </section>
+
+        <section class="page generated-page" data-page="security"></section>
+        <section class="page generated-page" data-page="communications"></section>
+        <section class="page generated-page" data-page="trips"></section>
+        <section class="page generated-page" data-page="reports"></section>
+        <section class="page generated-page" data-page="franchise"></section>
+        <section class="page generated-page" data-page="onboarding"></section>
+        <section class="page generated-page" data-page="payments"></section>
+        <section class="page generated-page" data-page="support"></section>
+        <section class="page generated-page" data-page="promotions"></section>
+        <section class="page generated-page" data-page="vehicles"></section>
+        <section class="page generated-page" data-page="reviews"></section>
+        <section class="page generated-page" data-page="incidents"></section>
+        <section class="page generated-page" data-page="audit"></section>
+        <section class="page generated-page" data-page="notifications"></section>
+        <section class="page generated-page" data-page="api"></section>
+        <section class="page generated-page" data-page="chat"></section>
+        <section class="page generated-page" data-page="database"></section>
+        <section class="page generated-page" data-page="users"></section>
+        <section class="page generated-page" data-page="settings"></section>
+      </main>
+    </section>
+  </div>
+
+  <div class="modal" id="zoneModal"><div class="modal-card"><button class="modal-close">×</button><h3>Create New Zone</h3><label>Zone Name<input></label><label>City<input></label><label>Country<input></label><label>Define Zone Boundaries</label><div class="button-row"><button class="secondary-btn">Draw Polygon</button><button class="secondary-btn">Draw Rectangle</button><button class="secondary-btn">Clear</button></div><div class="modal-actions"><button class="secondary-btn modal-close-action">Cancel</button><button class="primary-btn">Create Zone</button></div></div></div>
+  <div class="modal" id="categoryModal"><div class="modal-card"><button class="modal-close">×</button><h3>Create New Vehicle Category</h3><label>Category Name<input></label><label>Description<textarea></textarea></label><div class="two-col"><label>Base Fare<input type="number"></label><label>Per KM Rate<input type="number"></label><label>Per Minute Rate<input type="number"></label><label>Minimum Fare<input type="number"></label></div><fieldset><legend>Applicable Zones</legend><label><input type="checkbox"> Downtown</label><label><input type="checkbox"> Uptown</label><label><input type="checkbox"> Midtown</label></fieldset><div class="modal-actions"><button class="secondary-btn modal-close-action">Cancel</button><button class="primary-btn">Create Category</button></div></div></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
