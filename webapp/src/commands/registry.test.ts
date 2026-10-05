@@ -7,6 +7,10 @@ const assert = (ok: unknown, message: string) => {
 
 const ids = new Set(COMMANDS.map((command) => command.id));
 assert(ids.size === COMMANDS.length, "command ids are unique");
+assert(COMMANDS.every((command) => command.owner.length > 0), "every action has an owner");
+assert(COMMANDS.every((command) => command.entity.length > 0), "every action has an entity");
+assert(COMMANDS.find((command) => command.id === "admin.trip.cancel")?.allowedStates?.includes("in_trip"), "trip cancel has state policy");
+assert(COMMANDS.find((command) => command.id === "admin.payment.refund")?.approvalThresholdOre === 20_000, "refund threshold is registered");
 
 function buttonTags(text: string): string[] {
   const tags: string[] = [];
