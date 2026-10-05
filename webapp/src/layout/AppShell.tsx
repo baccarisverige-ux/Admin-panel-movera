@@ -118,6 +118,7 @@ export function AppShell({ page, children }: AppShellProps) {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#content">Skip to content</a>
       <aside className={menuOpen ? "sidebar open" : "sidebar"}>
         <div className="brand">
           <div className="brand-mark">M</div>
@@ -220,7 +221,7 @@ export function AppShell({ page, children }: AppShellProps) {
             </ul>
           </div>
         ) : null}
-        <main className="content">{children}</main>
+        <main id="content" tabIndex={-1} className="content">{children}</main>
         <footer className="build-footer">Demo data · {env} · {buildLabel()}</footer>
       </section>
     </div>

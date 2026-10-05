@@ -1306,6 +1306,9 @@ fieldset input[type=checkbox] {
 }
 
 @media(max-width:900px) {
+  html, body {
+    overflow-x: hidden
+  }
   .sidebar {
     transform:translateX(-100%);
     transition:.22s ease
@@ -1400,4 +1403,25 @@ img { max-width: 100%; }
 }
 .confirm-field input[readonly] {
   background: #f6f7f6
+}
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -40px;
+  background: #111614;
+  color: #fff;
+  padding: 8px 12px;
+  z-index: 5;
+  border-radius: 999px
+}
+.skip-link:focus {
+  top: 8px
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important
+  }
 }
