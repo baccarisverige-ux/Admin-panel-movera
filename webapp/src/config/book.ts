@@ -83,6 +83,7 @@ export type ConfigBook = {
   approverId: string | null;
   status: ConfigStatus;
   rev: number;
+  draftRev: number;
   draft: ConfigDraft;
   published: ConfigDraft;
   history: ConfigDraft[];
@@ -194,6 +195,7 @@ export function emptyConfig(authorId = "nora"): ConfigBook {
     approverId: null,
     status: "draft",
     rev: 1,
+    draftRev: 1,
     draft,
     published,
     history: [JSON.parse(JSON.stringify(draft)) as ConfigDraft],
@@ -226,6 +228,7 @@ export function normalizeConfig(raw: Partial<ConfigBook> | null | undefined): Co
     approverId: raw.approverId ?? null,
     status,
     rev: raw.rev || 1,
+    draftRev: raw.draftRev || 1,
     draft: mergeDraft(raw.draft),
     published: mergeDraft(raw.published),
     history: raw.history?.length ? raw.history.map((item) => mergeDraft(item)) : base.history,
@@ -239,7 +242,14 @@ export function missingTranslations(reasons: readonly ReasonText[]): string[] {
 }
 
 function edited(book: ConfigBook, draft: ConfigDraft, authorId: string): ConfigBook {
-  return { ...book, authorId, approverId: null, status: "draft", draft };
+  return {
+    ...book,
+    authorId,
+    approverId: null,
+    status: "draft",
+    draftRev: book.draftRev + 1,
+    draft,
+  };
 }
 
 export function setFeature(book: ConfigBook, key: "reservations" | "wallet", value: boolean, authorId: string): ConfigBook {
@@ -458,6 +468,7 @@ export function impactPreview(book: ConfigBook): {
 export function submitConfigApproval(book: ConfigBook, actorId: string): { book: ConfigBook; error?: string } {
   const missing = missingTranslations(book.draft.reasons);
   if (missing.length > 0) return { book, error: `Missing translation: ${missing.join(", ")}` };
+  if (configDiff(book.published, book.draft).length === 0) return { book, error: "There is no unpublished change to review." };
   return { book: { ...book, authorId: actorId, approverId: null, status: "in_review" } };
 }
 
@@ -581,6 +592,10 @@ export function rollbackConfig(
       },
     ],
   };
+}
+
+export function draftRevisionMatches(current: ConfigBook, expectedDraftRev: number): boolean {
+  return current.draftRev === expectedDraftRev;
 }
 
 export function advanceConfigClock(book: ConfigBook, nowIso: string): ConfigBook {
