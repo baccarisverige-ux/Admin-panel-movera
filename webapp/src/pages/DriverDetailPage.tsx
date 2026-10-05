@@ -4,7 +4,7 @@ import { useRecords } from "../api/hooks";
 import { DRIVER_DOCUMENTS } from "../drivers/gate";
 import { formatOre } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
-import { TabPanel, Tabs } from "../ui/Tabs";
+import { TabPanel, Tabs } from "../ui/Tabs";\nimport { SensitiveValue } from "../ui/SensitiveValue";
 
 const TABS = ["Overview", "Documents", "Vehicles", "Categories", "Trips", "Earnings", "Bank", "Bonuses", "Driving log", "Ratings", "Support", "Safety", "Notes", "Activity"];
 
@@ -37,7 +37,7 @@ export function DriverDetailPage() {
       <div className="page-heading">
         <div>
           <h2>{driver.name}</h2>
-          <p>{driver.id} · {statusLabel(driver.status)} · {driver.phone} · {driver.zoneId}</p>
+          <p>{driver.id} · {statusLabel(driver.status)} · <SensitiveValue value={driver.phone} permission="drivers.viewSensitive" command="admin.driver.revealSensitive" targetId={driver.id} label="Phone" /> · {driver.zoneId}</p>
         </div>
         <Link to="/drivers">Back to drivers</Link>
       </div>
@@ -85,7 +85,7 @@ export function DriverDetailPage() {
           <p>No private note is stored on this driver yet.</p>
         </TabPanel>
         <TabPanel id="activity" activeId={tab}>
-          <p>Account {statusLabel(driver.status)} in {driver.zoneId}. Phone {driver.phone}.</p>
+          <p>Account {statusLabel(driver.status)} in {driver.zoneId}. <SensitiveValue value={driver.phone} permission="drivers.viewSensitive" command="admin.driver.revealSensitive" targetId={driver.id} label="Phone" />.</p>
         </TabPanel>
       </article>
     </>
