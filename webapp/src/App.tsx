@@ -1,15 +1,20 @@
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router";
+import { can, permissionForPage } from "./auth/permissions";
+import { SessionProvider, useSession } from "./auth/SessionContext";
 import { AppShell } from "./layout/AppShell";
 import { ADMIN_PAGES, pageForPath, type AdminPage } from "./nav";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GenericPage } from "./pages/GenericPage";
+import { LoginPage } from "./pages/LoginPage";
 import { PricingPage } from "./pages/PricingPage";
+import { TeamPage } from "./pages/TeamPage";
 import { ZonesPage } from "./pages/ZonesPage";
 
 function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "dashboard") return <DashboardPage />;
   if (pageId === "zones") return <ZonesPage />;
   if (pageId === "pricing") return <PricingPage />;
+  if (pageId === "team") return <TeamPage />;
   return <GenericPage pageId={pageId} />;
 }
 
@@ -24,8 +29,8 @@ function NotFound() {
     <div className="page-heading">
       <div>
         <h2>Page not found</h2>
-        <p>That address is not an admin screen. The link may be old, or the page has not been added yet.</p>
-        <button className="btn" type="button" onClick={() => navigate("/")}>
+        <p>That address is not an admin screen.</p>
+        <button className="primary-btn" type="button" onClick={() => navigate("/")}>
           Back to dashboard
         </button>
       </div>
@@ -33,34 +38,54 @@ function NotFound() {
   );
 }
 
+function NoAccess() {
+  return (
+    <div className="page-heading">
+      <div>
+        <h2>No access</h2>
+        <p>Your role cannot open this page. The attempt is refused here, not hidden as an empty screen.</p>
+      </div>
+    </div>
+  );
+}
+
 function ShellRoute() {
   const location = useLocation();
-  const known = ADMIN_PAGES.some((page) => page.path === location.pathname);
-  const page: AdminPage = known
-    ? pageForPath(location.pathname)
-    : {
-        id: "not-found",
-        path: location.pathname,
-        label: "Page not found",
-        crumb: "404",
-        icon: "!",
-      };
+  const { agent } = useSession();
+  const team = location.pathname === "/team";
+  const known = team || ADMIN_PAGES.some((page) => page.path === location.pathname);
+  const page: AdminPage = team
+    ? { id: "team", path: "/team", label: "Team and roles", crumb: "Team", icon: "·" }
+    : known
+      ? pageForPath(location.pathname)
+      : { id: "not-found", path: location.pathname, label: "Page not found", crumb: "404", icon: "!" };
+  const allowed = !agent || !known || can(agent.role, permissionForPage(page.id));
 
   return (
     <AppShell page={page}>
       <section className="page active" data-page={page.id}>
-        {known ? <PageBody pageId={page.id} /> : <NotFound />}
+        {!known ? <NotFound /> : allowed ? <PageBody pageId={page.id} /> : <NoAccess />}
       </section>
     </AppShell>
+  );
+}
+
+function Authed() {
+  const { agent } = useSession();
+  if (!agent) return <LoginPage />;
+  return (
+    <Routes>
+      <Route path="*" element={<ShellRoute />} />
+    </Routes>
   );
 }
 
 export function App() {
   return (
     <BrowserRouter basename={routerBasename()}>
-      <Routes>
-        <Route path="*" element={<ShellRoute />} />
-      </Routes>
+      <SessionProvider>
+        <Authed />
+      </SessionProvider>
     </BrowserRouter>
   );
 }

@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { Menu } from "lucide-react";
 import { formatInTimeZone } from "date-fns-tz";
+import { can, permissionForPage } from "../auth/permissions";
+import { useSession } from "../auth/SessionContext";
 import { ADMIN_PAGES, type AdminPage } from "../nav";
 import { ZoneSelect } from "../ui/ZoneSelect";
 
@@ -19,7 +21,9 @@ function buildLabel(): string {
 
 export function AppShell({ page, children }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { agent, signOut } = useSession();
   const heading = page.id === "dashboard" ? "Movera Admin Dashboard" : page.label;
+  const pages = ADMIN_PAGES.filter((item) => !agent || can(agent.role, permissionForPage(item.id)));
 
   return (
     <div className="app-shell">
@@ -29,7 +33,7 @@ export function AppShell({ page, children }: AppShellProps) {
           <span>Movera Admin</span>
         </div>
         <nav className="nav">
-          {ADMIN_PAGES.map((item) => (
+          {pages.map((item) => (
             <Link
               key={item.id}
               to={item.path}
@@ -57,17 +61,23 @@ export function AppShell({ page, children }: AppShellProps) {
             <p className="crumb">{page.crumb}</p>
           </div>
           <div className="topbar-actions">
-            <ZoneSelect />
+            <ZoneSelect scoped />
             <button className="icon-btn notification-btn" type="button" aria-label="Notifications">
               🔔
               <span className="notification-count">3</span>
             </button>
             <div className="admin-profile">
-              <div className="avatar">AD</div>
+              <div className="avatar">{agent ? agent.name.slice(0, 2).toUpperCase() : "AD"}</div>
               <div>
-                <strong>Admin User</strong>
-                <span>Super Admin</span>
+                <strong>{agent?.name ?? "Admin User"}</strong>
+                <span>{agent?.role ?? "signed out"}</span>
               </div>
+              {agent && can(agent.role, "team.read") ? (
+                <Link to="/team">Team</Link>
+              ) : null}
+              <button className="link-action" type="button" onClick={signOut}>
+                Sign out
+              </button>
             </div>
           </div>
         </header>
