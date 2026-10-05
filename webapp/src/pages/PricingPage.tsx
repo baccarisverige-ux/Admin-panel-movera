@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { useSlice } from "../api/hooks";
 import { PRICE_ROWS, catalogFor } from "../api/read";
+import { defaultPriceBook, type PriceBook } from "../pricing/sets";
 import { Modal } from "../ui/Modal";
 import { DataTable } from "../ui/DataTable";
 import { PageHeading } from "../ui/PageHeading";
 import { TabPanel, Tabs } from "../ui/Tabs";
 import { ZoneSelect } from "../ui/ZoneSelect";
+import { PriceEditor } from "./PriceEditor";
 import { QuotePreview } from "./QuotePreview";
 import { CommandButton } from "../ui/CommandButton";
 
@@ -40,6 +43,9 @@ export function PricingPage() {
   const [rows, setRows] = useState<RateRow[]>(() =>
     PRICE_ROWS.map(([category, ...values]) => ({ category, values: [...values] })),
   );
+  const slice = useSlice<PriceBook>("prices", defaultPriceBook());
+  const [draft, setDraft] = useState<PriceBook | null>(null);
+  const book = draft ?? (slice.value?.zones?.length ? slice.value : defaultPriceBook());
 
   function closeModal() {
     setCategoryModalOpen(false);
@@ -76,7 +82,8 @@ export function PricingPage() {
         </div>
       </PageHeading>
 
-      <QuotePreview />
+      <PriceEditor book={book} onChange={setDraft} />
+      <QuotePreview book={book} />
 
       <Tabs
         tabs={PRICING_TABS}
