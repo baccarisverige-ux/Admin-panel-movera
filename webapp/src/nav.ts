@@ -80,7 +80,7 @@ export const MENU: MenuItem[] = [
   { id: "audit", path: "/audit", label: "Audit", group: "Platform", permission: "audit.read", icon: "ScrollText" },
   { id: "settings", path: "/settings", label: "Settings", group: "Platform", permission: "settings.read", icon: "Settings" },
   { id: "confirm", path: "/confirm", label: "To confirm", group: "Platform", permission: "settings.read", icon: "ClipboardList" },
-  { id: "system", path: "/system", label: "System", group: "Platform", permission: "system.read", icon: "Server", coming: "G17" },
+  { id: "system", path: "/system", label: "System", group: "Platform", permission: "system.read", icon: "Server" },
   { id: "gates", path: "/gates", label: "Release gates", group: "Platform", permission: "system.read", icon: "Shield" },
   { id: "design", path: "/design", label: "Design", group: "Platform", permission: "system.read", icon: "Palette" },
 ];
