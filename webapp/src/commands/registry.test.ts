@@ -7,6 +7,14 @@ const assert = (ok: unknown, message: string) => {
 
 const ids = new Set(COMMANDS.map((command) => command.id));
 assert(ids.size === COMMANDS.length, "command ids are unique");
+for (const command of COMMANDS) {
+  assert(command.owner.length > 0, `${command.id} has an owner`);
+  assert(command.entity.length > 0, `${command.id} has an entity`);
+  assert(["global", "zone", "record"].includes(command.scope), `${command.id} has a scope policy`);
+  assert(command.idempotent === true, `${command.id} is idempotent`);
+  assert(command.audit === "always", `${command.id} is audited`);
+  if (command.destructive) assert(command.reason, `${command.id} destructive actions require a reason`);
+}
 assert(COMMANDS.every((command) => command.owner.length > 0), "every action has an owner");
 assert(COMMANDS.every((command) => command.entity.length > 0), "every action has an entity");
 assert(COMMANDS.find((command) => command.id === "admin.trip.cancel")?.allowedStates?.includes("in_trip"), "trip cancel has state policy");
