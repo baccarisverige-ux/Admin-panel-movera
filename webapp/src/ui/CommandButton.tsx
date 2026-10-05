@@ -8,11 +8,13 @@ type CommandButtonProps = {
   className?: string;
   type?: "button" | "submit";
   disabled?: boolean;
+  title?: string;
   targetId?: string;
   before?: string;
   after?: string;
   collection?: string;
   patch?: Record<string, string | number | boolean | null>;
+  storeReason?: boolean;
   onDone?: () => void;
   children: ReactNode;
   "aria-label"?: string;
@@ -23,11 +25,13 @@ export function CommandButton({
   className,
   type = "button",
   disabled,
+  title,
   targetId,
   before,
   after,
   collection,
   patch,
+  storeReason,
   onDone,
   children,
   "aria-label": ariaLabel,
@@ -41,7 +45,14 @@ export function CommandButton({
   const confirmed = mustType.length === 0 || typed === mustType;
 
   function fire(chosen: string) {
-    void commands.run(command, { reason: chosen, targetId, before, after, collection, patch }).then((result) => {
+    void commands.run(command, {
+      reason: chosen,
+      targetId,
+      before,
+      after,
+      collection,
+      patch: patch ? { ...patch, ...(storeReason ? { notes: chosen } : {}) } : undefined,
+    }).then((result) => {
       if (result) onDone?.();
     });
   }
@@ -54,6 +65,7 @@ export function CommandButton({
         type={type}
         aria-label={ariaLabel}
         disabled={disabled || commands.phase === "submitting" || !spec}
+        title={title}
         onClick={() => {
           if (!spec) return;
           if (spec.reason) setOpen(true);

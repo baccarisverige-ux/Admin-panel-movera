@@ -36,6 +36,7 @@ import { SupportPage } from "./pages/SupportPage";
 import { SystemPage } from "./pages/SystemPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TripsPage } from "./pages/TripsPage";
+import { TripPage } from "./pages/TripPage";
 import { ZoneDetailPage } from "./pages/ZoneDetailPage";
 import { ZonesPage } from "./pages/ZonesPage";
 
@@ -132,7 +133,7 @@ function Authed() {
         <Route path="reports" element={<Screen id="reports" />} />
         <Route path="handover" element={<Screen id="handover" />} />
         <Route path="trips" element={<Screen id="trips" />} />
-        <Route path="trips/:tripId" element={<RecordPage kind="trips" label="Trip" list="/trips" />} />
+        <Route path="trips/:tripId" element={<TripPage />} />
         <Route path="reservations" element={<Screen id="reservations" />} />
         <Route path="reservations/:id" element={<RecordPage label="Reservation" list="/reservations" />} />
         <Route path="live" element={<Screen id="live" />} />
