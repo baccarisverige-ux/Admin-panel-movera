@@ -22,6 +22,23 @@ async function expectStatus(work: Promise<unknown>, status: number, message: str
 const api = createFixtureAdminApi(0);
 
 await api.reset();
+const uiRev = await api.revision();
+const uiResult = await api.command({
+  action: "admin.auth.pickAgent",
+  targetId: "lena",
+  reason: "No person affected",
+  actorId: "signed-out",
+  actorRole: "super",
+  actorScope: ALL,
+  idempotencyKey: "pick-agent-ui",
+  expectedRev: uiRev,
+  before: "",
+  after: "Pick demo agent",
+});
+assert(uiResult.status === "committed" && uiResult.rev === uiRev, "pure UI command does not change business revision");
+assert((await api.audit()).length === 0, "pure UI command does not create business audit rows");
+
+await api.reset();
 const firstRev = await api.revision();
 const smallInput = {
   action: "admin.payment.refund",
