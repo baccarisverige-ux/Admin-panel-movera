@@ -42,6 +42,7 @@ export type OperationRow = {
   action: string;
   targetId: string;
   status: "committed" | "rejected" | "pending_approval";
+  httpStatus: number;
   message: string;
   rev: number;
   at: string;
