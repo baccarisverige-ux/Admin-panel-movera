@@ -98,32 +98,6 @@ const TARGET_COLLECTIONS = [
 
 type TargetCollection = (typeof TARGET_COLLECTIONS)[number];
 
-function isTargetCollection(value: string): value is TargetCollection {
-  return TARGET_COLLECTIONS.includes(value as TargetCollection);
-}
-
-function targetRecord(db: DemoDb, targetId: string, collection?: string): DemoRecord | null {
-  if (collection && isTargetCollection(collection)) {
-    return db[collection].find((row) => row.id === targetId) ?? null;
-  }
-  for (const key of TARGET_COLLECTIONS) {
-    const row = db[key].find((item) => item.id === targetId);
-    if (row) return row;
-  }
-  return null;
-}
-
-function targetScope(db: DemoDb, targetId: string, collection: string | undefined, requested: string | undefined): string {
-  const record = targetRecord(db, targetId, collection);
-  if (record?.zoneId) return record.zoneId;
-  if (db.zones.some((zone) => zone.id === targetId)) return targetId;
-  return requested ?? "all";
-}
-
-function targetState(db: DemoDb, targetId: string, collection: string | undefined, supplied: string | undefined): string | undefined {
-  return supplied ?? targetRecord(db, targetId, collection)?.status;
-}
-
 function unsupported(): never {
   throw new ApiError(0, "Admin API is not connected.");
 }
@@ -132,9 +106,31 @@ function operationKey(actorId: string, idempotencyKey: string): string {
   return `${actorId}:${idempotencyKey}`;
 }
 
-function operationId(actorId: string, idempotencyKey: string): string {
+function makeOperationId(actorId: string, idempotencyKey: string): string {
   const compact = idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 36);
   return `op-${actorId}-${compact || "command"}`;
+}
+
+function targetRecord(db: DemoDb, targetId: string, collection?: string): DemoRecord | null {
+  if (collection && TARGET_COLLECTIONS.includes(collection as TargetCollection)) {
+    return db[collection as TargetCollection].find((row) => row.id === targetId) ?? null;
+  }
+  for (const key of TARGET_COLLECTIONS) {
+    const row = db[key].find((item) => item.id === targetId);
+    if (row) return row;
+  }
+  return null;
+}
+
+function resolveTargetScope(db: DemoDb, input: CommandInput): string {
+  const record = targetRecord(db, input.targetId, input.collection);
+  if (record?.zoneId) return record.zoneId;
+  if (db.zones.some((zone) => zone.id === input.targetId)) return input.targetId;
+  return input.scope ?? "all";
+}
+
+function resolveTargetState(db: DemoDb, input: CommandInput): string | undefined {
+  return input.entityState ?? targetRecord(db, input.targetId, input.collection)?.status;
 }
 
 function scopeAllowed(actorScope: AgentScope, scope: string): boolean {
@@ -154,35 +150,48 @@ function rejectionResult(status: number): AuditRow["result"] {
   return "rejected";
 }
 
+function replayOperation(db: DemoDb, operation: OperationRow): CommandResult {
+  if (operation.status === "rejected") throw new ApiError(operation.httpStatus, operation.message);
+  return {
+    message: operation.message,
+    db,
+    operationId: operation.operationId,
+    status: operation.status,
+    rev: operation.rev,
+  };
+}
+
 function rememberRejected(
   db: DemoDb,
-  input: Required<Pick<CommandInput, "action" | "targetId" | "reason" | "actorId" | "before" | "after">> & {
-    idempotencyKey: string;
-    scope: string;
-  },
-  opId: string,
+  input: CommandInput,
+  resolvedScope: string,
+  idempotencyKey: string,
+  operationId: string,
   status: number,
   message: string,
+  cache: boolean,
 ): DemoDb {
-  const result = rejectionResult(status);
   let next = addAudit(
     db,
     {
-      operationId: opId,
+      operationId,
       actorId: input.actorId,
       action: input.action,
       targetId: input.targetId,
-      scope: input.scope,
+      scope: resolvedScope,
       before: input.before,
       after: input.after,
       reason: input.reason,
-      result,
+      result: rejectionResult(status),
     },
     false,
   );
+
+  if (!cache) return next;
+
   const operation: OperationRow = {
-    operationId: opId,
-    idempotencyKey: input.idempotencyKey,
+    operationId,
+    idempotencyKey,
     action: input.action,
     targetId: input.targetId,
     status: "rejected",
@@ -195,46 +204,10 @@ function rememberRejected(
     ...next,
     operations: {
       ...next.operations,
-      [operationKey(input.actorId, input.idempotencyKey)]: operation,
+      [operationKey(input.actorId, idempotencyKey)]: operation,
     },
   };
   return saveDb(next);
-}
-
-function rememberTransientFailure(
-  db: DemoDb,
-  input: Required<Pick<CommandInput, "action" | "targetId" | "reason" | "actorId" | "before" | "after">> & {
-    scope: string;
-  },
-  opId: string,
-  status: number,
-): DemoDb {
-  return addAudit(
-    db,
-    {
-      operationId: opId,
-      actorId: input.actorId,
-      action: input.action,
-      targetId: input.targetId,
-      scope: input.scope,
-      before: input.before,
-      after: input.after,
-      reason: input.reason,
-      result: rejectionResult(status),
-    },
-    false,
-  );
-}
-
-function replayOperation(db: DemoDb, operation: OperationRow): CommandResult {
-  if (operation.status === "rejected") throw new ApiError(operation.httpStatus, operation.message);
-  return {
-    message: operation.message,
-    db,
-    operationId: operation.operationId,
-    status: operation.status,
-    rev: operation.rev,
-  };
 }
 
 export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
@@ -275,39 +248,27 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       const actorScope = raw.actorScope ?? DEFAULT_SCOPE;
       const idempotencyKey = raw.idempotencyKey ?? `direct-${db.rev}-${raw.action}-${raw.targetId}`;
       const expectedRev = raw.expectedRev ?? db.rev;
-      const resolvedScope = targetScope(db, raw.targetId, raw.collection, raw.scope);
-      const resolvedState = targetState(db, raw.targetId, raw.collection, raw.entityState);
-      const opId = operationId(raw.actorId, idempotencyKey);
-      const input = {
-        action: raw.action,
-        targetId: raw.targetId,
-        reason: raw.reason,
-        actorId: raw.actorId,
-        before: raw.before,
-        after: raw.after,
-        idempotencyKey,
-        scope: resolvedScope,
-      };
+      const resolvedScope = resolveTargetScope(db, raw);
+      const resolvedState = resolveTargetState(db, raw);
+      const operationId = makeOperationId(raw.actorId, idempotencyKey);
 
       const cached = db.operations[operationKey(raw.actorId, idempotencyKey)];
       if (cached) return replayOperation(db, cached);
 
       const reject = (status: number, message: string, cache = true): never => {
-        if (cache) db = rememberRejected(db, input, opId, status, message);
-        else db = rememberTransientFailure(db, input, opId, status);
+        db = rememberRejected(db, raw, resolvedScope, idempotencyKey, operationId, status, message, cache);
         throw new ApiError(status, message);
       };
 
       if (!spec) reject(422, `Unknown action ${raw.action}.`);
-      if (!can(actorRole, spec.permission)) reject(403, "Your role cannot do that.");
+      const actionSpec = spec!;
+
+      if (!can(actorRole, actionSpec.permission)) reject(403, "Your role cannot do that.");
       if (!scopeAllowed(actorScope, resolvedScope)) reject(403, "That record is outside your active scope.");
-      if (spec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
+      if (actionSpec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
       if (expectedRev !== db.rev) reject(409, "Someone else changed this. Reload and review the newest version.");
-      if (spec.allowedStates && resolvedState && !spec.allowedStates.includes(resolvedState)) {
-        reject(422, `${spec.label} is not allowed while the record is ${resolvedState}.`);
-      }
-      if (raw.collection && raw.patch && !targetRecord(db, raw.targetId, raw.collection)) {
-        reject(422, "The target record no longer exists.");
+      if (actionSpec.allowedStates && resolvedState && !actionSpec.allowedStates.includes(resolvedState)) {
+        reject(422, `${actionSpec.label} is not allowed while the record is ${resolvedState}.`);
       }
 
       const injectedStatus = faultStatus(fault);
@@ -320,7 +281,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         );
       }
 
-      if (spec.approvalThresholdOre && (raw.amountOre ?? 0) >= spec.approvalThresholdOre) {
+      if (actionSpec.approvalThresholdOre && (raw.amountOre ?? 0) >= actionSpec.approvalThresholdOre) {
         const approval: ApprovalRow = {
           id: `approval-${db.approvals.length + 1}`,
           action: raw.action,
@@ -330,9 +291,10 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
           reason: raw.reason,
           status: "pending",
         };
+
         let next: DemoDb = { ...db, approvals: [approval, ...db.approvals] };
         next = addAudit(next, {
-          operationId: opId,
+          operationId,
           actorId: raw.actorId,
           action: raw.action,
           targetId: raw.targetId,
@@ -342,8 +304,9 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
           reason: raw.reason,
           result: "pending_approval",
         });
+
         const operation: OperationRow = {
-          operationId: opId,
+          operationId,
           idempotencyKey,
           action: raw.action,
           targetId: raw.targetId,
@@ -360,24 +323,22 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
             [operationKey(raw.actorId, idempotencyKey)]: operation,
           },
         });
+
         return {
           message: operation.message,
           db: next,
-          operationId: opId,
+          operationId,
           status: "pending_approval",
           rev: next.rev,
         };
       }
 
-      if (raw.collection && raw.patch) {
-        const key = raw.collection as keyof DemoDb;
-        const rows = db[key];
-        if (Array.isArray(rows)) {
-          db = {
-            ...db,
-            [key]: rows.map((row) => (row.id === raw.targetId ? { ...row, ...raw.patch } : row)),
-          };
-        }
+      if (raw.collection && raw.patch && TARGET_COLLECTIONS.includes(raw.collection as TargetCollection)) {
+        const key = raw.collection as TargetCollection;
+        db = {
+          ...db,
+          [key]: db[key].map((row) => row.id === raw.targetId ? { ...row, ...raw.patch } : row),
+        };
       }
 
       if (raw.sliceKey) {
@@ -391,7 +352,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       }
 
       db = addAudit(db, {
-        operationId: opId,
+        operationId,
         actorId: raw.actorId,
         action: raw.action,
         targetId: raw.targetId,
@@ -403,7 +364,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       });
 
       const operation: OperationRow = {
-        operationId: opId,
+        operationId,
         idempotencyKey,
         action: raw.action,
         targetId: raw.targetId,
@@ -420,10 +381,11 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
           [operationKey(raw.actorId, idempotencyKey)]: operation,
         },
       });
+
       return {
         message: operation.message,
         db,
-        operationId: opId,
+        operationId,
         status: "committed",
         rev: db.rev,
       };
