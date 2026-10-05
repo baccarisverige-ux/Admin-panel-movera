@@ -1,5 +1,6 @@
 import { catalogFor, type CatalogEntry } from "../data/catalog.ts";
 import { CURRENCY, TIME_ZONE } from "../domain/contract.ts";
+import { apiRequest } from "./httpClient.ts";
 
 export type ApiEnv = {
   PROD: boolean;
@@ -39,13 +40,20 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
   };
 }
 
-export function createHttpAdminApi(): AdminApi {
-  const unavailable = () => Promise.reject(new Error("Admin API is not connected."));
+export function createHttpAdminApi(baseUrl = ""): AdminApi {
   return {
     kind: "http",
     demo: false,
-    ready: unavailable,
-    page: unavailable,
+    async ready() {
+      const body = (await apiRequest(baseUrl, "/ready")) as { currency?: string; timeZone?: string };
+      if (body.currency !== CURRENCY || body.timeZone !== TIME_ZONE) {
+        throw new Error("The ready payload is not Stockholm SEK.");
+      }
+      return { currency: CURRENCY, timeZone: TIME_ZONE, demo: false };
+    },
+    async page(pageId) {
+      return (await apiRequest(baseUrl, `/pages/${encodeURIComponent(pageId)}`)) as PageResult;
+    },
   };
 }
 
@@ -55,7 +63,10 @@ export function createHttpAdminApi(): AdminApi {
  * VITE_ADMIN_API=http.
  */
 export function createAdminApi(env: ApiEnv, delayMs = DEMO_DELAY_MS): AdminApi {
-  if (env.VITE_ADMIN_API === "http") return createHttpAdminApi();
+  const api = env.VITE_ADMIN_API ?? "";
+  if (api === "http" || api.startsWith("http://") || api.startsWith("https://")) {
+    return createHttpAdminApi(api === "http" ? "" : api);
+  }
   if (env.PROD && env.VITE_DATA !== "demo") {
     throw new Error("Production refuses the simulation adapter.");
   }

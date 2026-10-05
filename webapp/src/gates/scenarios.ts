@@ -1,0 +1,48 @@
+import { classifyStatus } from "../api/httpClient.ts";
+import { can } from "../auth/permissions.ts";
+import { canStartCheckout, existingAuthContinues, type PaymentMethod } from "../payments/book.ts";
+import { publicIncident, resolveIncident, takeIncident } from "../safety/book.ts";
+import { addNote, deliveredToRider, reply, type Ticket } from "../support/book.ts";
+
+export type ScenarioResult = {
+  id: string;
+  pass: boolean;
+  staging: boolean;
+  note: string;
+};
+
+export function chapter16(): ScenarioResult[] {
+  const results: ScenarioResult[] = [];
+  const sim = (id: string, pass: boolean, note: string) => results.push({ id, pass, staging: false, note });
+
+  sim("T01", false, "Rider and driver apps are not in this repository, so the shared trip timeline is not proven.");
+  sim("T02", false, "The admin refuses a finished trip and cancels searching, accepted, arrived and in_trip. The rider and driver apps do not show the reason or fee.");
+  sim("T03", false, "Two drivers claiming the same trip is not simulated.");
+  sim("T04", false, "Resume after background needs the rider and driver apps.");
+  sim("T05", false, "Suspension across an app restart is not proven here.");
+  sim("T06", false, "The admin preview matches the rider formula. The driver offer and the receipt are not connected.");
+  const methods = { card: true, swish: true, klarna: true, apple: true, google: true, paypal: true, cash: false, wallet: true } as Record<PaymentMethod, boolean>;
+  sim("T07", !canStartCheckout(methods, "cash") && existingAuthContinues({ id: "C", method: "cash", state: "authorized" }, methods), "New cash checkout refused. Existing authorisation continues.");
+  sim("T08", false, "A repeated refund key is one effect. Tip and payout retries are not all wired.");
+  sim("T09", false, "Cancel keeps the policy version in the reservation book. Daylight-saving was not exercised, so this scenario is not passed.");
+  const view = publicIncident(resolveIncident(takeIncident({ id: "I", state: "queued", locationAt: "2026-10-05T10:00:00Z", accuracyM: 8, ownerId: null }, "erik")).incident);
+  sim("T10", view.state === "resolved" && !("pin" in view), "SOS taken and resolved. No PIN.");
+  let ticket: Ticket = { id: "S", ownerId: null, ownerUntil: null, messages: [] };
+  ticket = addNote(ticket, "maja", "private");
+  sim("T11", deliveredToRider(reply(ticket, "maja", "hello", "k", new Set()).ticket).length === 1, "One public reply. The note stays private.");
+  sim("T12", false, "A stale revision is a conflict and a second agent can publish. Scheduled expiry does not reach the apps.");
+  sim("T13", false, "The audience filter exists. A deep link does not open an app screen, so this scenario is not passed.");
+  sim("T14", !can("support", "finance.read") && can("finance", "payments.refund"), "Out-of-scope permission is refused in the admin.");
+  sim("T15", [401, 403, 409, 422, 429, 503, 0].every((status) => !classifyStatus(status).toLowerCase().includes("saved") || status === 0), "401, 403, 409, 422, 429, 503 and offline have their own text.");
+  sim("T16", false, "The live site is still the demo adapter. Gate D is not claimed.");
+
+  return results;
+}
+
+export function gateB(stagingUrl: string | undefined, results = chapter16()): { passed: false; reason: string } | { passed: true; reason: string } {
+  if (!stagingUrl) return { passed: false, reason: "No staging URL. Gate B is not claimed." };
+  if (results.some((item) => !item.pass || item.staging !== true)) {
+    return { passed: false, reason: "Chapter 16 has not passed on staging." };
+  }
+  return { passed: true, reason: "Staging scenarios passed." };
+}

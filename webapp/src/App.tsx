@@ -9,6 +9,7 @@ import { DriversPage } from "./pages/DriversPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GenericPage } from "./pages/GenericPage";
 import { FleetPage } from "./pages/FleetPage";
+import { GatesPage } from "./pages/GatesPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { PricingPage } from "./pages/PricingPage";
@@ -37,6 +38,7 @@ function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "promotions" || pageId === "reviews") return <GrowthPage />;
   if (pageId === "content") return <ContentPage />;
   if (pageId === "communications" || pageId === "notifications") return <MessagesPage />;
+  if (pageId === "gates") return <GatesPage />;
   if (pageId === "vehicles") return <FleetPage />;
   if (pageId === "support") return <SupportPage />;
   if (pageId === "incidents") return <SafetyPage />;
@@ -85,6 +87,7 @@ function ShellRoute() {
     { id: "riders", path: "/riders", label: "Riders", crumb: "Riders", icon: "·" },
     { id: "reservations", path: "/reservations", label: "Reservations", crumb: "Reservations", icon: "·" },
     { id: "content", path: "/content", label: "Content", crumb: "Content", icon: "·" },
+    { id: "gates", path: "/gates", label: "Release gates", crumb: "Release gates", icon: "·" },
   ].find((item) => item.path === location.pathname);
   const known = Boolean(extra) || ADMIN_PAGES.some((page) => page.path === location.pathname);
   const page: AdminPage = extra
