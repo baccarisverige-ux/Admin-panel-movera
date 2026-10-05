@@ -26,7 +26,16 @@ export function loadDb(): DemoDb {
   try {
     const parsed = JSON.parse(raw) as DemoDb;
     if (!parsed || !Array.isArray(parsed.drivers)) return createSeed();
-    return parsed;
+    return {
+      ...parsed,
+      operations: parsed.operations ?? {},
+      approvals: parsed.approvals ?? [],
+      audits: (parsed.audits ?? []).map((entry, index) => ({
+        ...entry,
+        operationId: entry.operationId ?? `legacy-${index + 1}`,
+        scope: entry.scope ?? "all",
+      })),
+    };
   } catch {
     return createSeed();
   }
