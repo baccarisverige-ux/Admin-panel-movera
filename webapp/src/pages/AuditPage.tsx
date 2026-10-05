@@ -1,33 +1,24 @@
-import { useMemo, useState } from "react";
-import { useApprovals, useAudit } from "../api/hooks";
+import { formatOre } from "../domain/contract";
+import { useApprovals, useAudit, useRevision } from "../api/hooks";
 import { DataTable } from "../ui/DataTable";
 import { CommandButton } from "../ui/CommandButton";
 
 export function AuditPage() {
   const audit = useAudit();
   const approvals = useApprovals();
-  const [actor, setActor] = useState("");
-  const [action, setAction] = useState("");
-  const [target, setTarget] = useState("");
-
-  const rows = useMemo(() => {
-    const actorNeedle = actor.trim().toLowerCase();
-    const actionNeedle = action.trim().toLowerCase();
-    const targetNeedle = target.trim().toLowerCase();
-    return (audit.data ?? []).filter((entry) => {
-      if (actorNeedle && !entry.actorId.toLowerCase().includes(actorNeedle)) return false;
-      if (actionNeedle && !entry.action.toLowerCase().includes(actionNeedle)) return false;
-      if (targetNeedle && !entry.targetId.toLowerCase().includes(targetNeedle)) return false;
-      return true;
-    });
-  }, [action, actor, audit.data, target]);
+  const revision = useRevision();
+  const rows = audit.data ?? [];
+  const pending = (approvals.data ?? []).filter((item) => item.status === "pending");
 
   return (
     <>
       <div className="page-heading">
         <div>
           <h2>Audit and approvals</h2>
-          <p>Every simulated mutation records operation, actor, scope, target, before, after, reason and result.</p>
+          <p>
+            Generic command audit. Revision {revision.data ?? "…"}. Every business command records actor, action,
+            target, scope, before, after, reason and result.
+          </p>
         </div>
         <div className="actions">
           <CommandButton
@@ -47,7 +38,7 @@ export function AuditPage() {
             type="button"
             targetId="RF-LARGE"
             before="open"
-            after="refunded"
+            after="pending approval"
             amountOre={25_000}
           >
             Refund 250 kr
@@ -56,51 +47,38 @@ export function AuditPage() {
       </div>
 
       <article className="panel">
-        <h3>Approval queue</h3>
-        <p className="state-line">Actions at or above their ActionSpec threshold stop before the mutation and enter this queue.</p>
-        <DataTable
-          head={["Approval", "Action", "Target", "Requested by", "Amount", "Reason", "Status"]}
-          rowIds={(approvals.data ?? []).map((item) => item.id)}
-          rows={(approvals.data ?? []).map((item) => [
-            item.id,
-            item.action,
-            item.targetId,
-            item.requestedBy,
-            `${(item.amountOre / 100).toFixed(2)} kr`,
-            item.reason,
-            item.status,
-          ])}
-          state={approvals.isLoading ? "loading" : approvals.isError ? "error" : "ready"}
-          onRetry={() => void approvals.refetch()}
-        />
+        <h3>Pending approvals</h3>
+        {pending.length === 0 ? (
+          <p className="state-line">No pending approvals.</p>
+        ) : (
+          <DataTable
+            head={["Approval", "Action", "Target", "Requested by", "Amount", "Reason", "Status"]}
+            rowIds={pending.map((item) => item.id)}
+            rows={pending.map((item) => [
+              item.id,
+              item.action,
+              item.targetId,
+              item.requestedBy,
+              formatOre(item.amountOre),
+              item.reason,
+              item.status,
+            ])}
+          />
+        )}
       </article>
 
       <article className="panel">
-        <h3>Immutable activity</h3>
-        <div className="field-grid">
-          <label>
-            Agent
-            <input value={actor} onChange={(event) => setActor(event.target.value)} />
-          </label>
-          <label>
-            Action
-            <input value={action} onChange={(event) => setAction(event.target.value)} />
-          </label>
-          <label>
-            Target
-            <input value={target} onChange={(event) => setTarget(event.target.value)} />
-          </label>
-        </div>
+        <h3>Command audit</h3>
         <DataTable
-          head={["Operation", "When", "Agent", "Scope", "Action", "Target", "Before", "After", "Reason", "Result"]}
+          head={["When", "Operation", "Agent", "Action", "Target", "Scope", "Before", "After", "Reason", "Result"]}
           rowIds={rows.map((entry) => entry.id)}
           rows={rows.map((entry) => [
-            entry.operationId,
             entry.at,
+            entry.operationId,
             entry.actorId,
-            entry.scope,
             entry.action,
             entry.targetId,
+            entry.scope,
             entry.before,
             entry.after,
             entry.reason,
