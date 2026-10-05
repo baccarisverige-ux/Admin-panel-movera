@@ -4,7 +4,8 @@ import { useRecords } from "../api/hooks";
 import { DRIVER_DOCUMENTS } from "../drivers/gate";
 import { formatOre } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
-import { TabPanel, Tabs } from "../ui/Tabs";\nimport { SensitiveValue } from "../ui/SensitiveValue";
+import { TabPanel, Tabs } from "../ui/Tabs";
+import { SensitiveValue } from "../ui/SensitiveValue";
 
 const TABS = ["Overview", "Documents", "Vehicles", "Categories", "Trips", "Earnings", "Bank", "Bonuses", "Driving log", "Ratings", "Support", "Safety", "Notes", "Activity"];
 
