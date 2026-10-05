@@ -12,6 +12,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { PricingPage } from "./pages/PricingPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
+import { GrowthPage } from "./pages/GrowthPage";
 import { ContentPage } from "./pages/ContentPage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { SupportPage } from "./pages/SupportPage";
@@ -30,6 +31,7 @@ function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "payments") return <PaymentsPage />;
   if (pageId === "pricing") return <PricingPage />;
   if (pageId === "reservations") return <ReservationsPage />;
+  if (pageId === "promotions" || pageId === "reviews") return <GrowthPage />;
   if (pageId === "content") return <ContentPage />;
   if (pageId === "communications") return <MessagesPage />;
   if (pageId === "support") return <SupportPage />;
