@@ -78,9 +78,14 @@ function localFromIso(value: string | null | undefined): string {
   return local.toISOString().slice(0, 16);
 }
 
+function sameBook(a: ConfigBook, b: ConfigBook): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function ConfigPage() {
   const { agent } = useSession();
   const store = useSlice<ConfigBook>("config", emptyConfig());
+  const persisted = useMemo(() => normalizeConfig(store.value), [store.value]);
   const [book, setBook] = useState<ConfigBook>(() => emptyConfig());
   const [notice, setNotice] = useState("Draft is not live.");
   const [zoneId, setZoneId] = useState("op-norrmalm");
@@ -102,24 +107,24 @@ export function ConfigPage() {
 
   useEffect(() => {
     if (store.loading) return;
-    const normalized = normalizeConfig(store.value);
-    const advanced = advanceConfigClock(normalized, new Date().toISOString());
+    const advanced = advanceConfigClock(persisted, new Date().toISOString());
     setBook(advanced);
 
-    if (agent && JSON.stringify(advanced) !== JSON.stringify(normalized)) {
+    if (agent && !sameBook(advanced, persisted)) {
       void store.save(advanced, {
         targetId: "configuration",
         reason: "Apply scheduled configuration lifecycle",
         actorId: agent.id,
-        before: `draft ${normalized.draftRev}`,
-        after: `draft ${advanced.draftRev}`,
-        expectedSliceRev: normalized.draftRev,
+        before: `config ${persisted.draftRev}`,
+        after: `config ${advanced.draftRev}`,
+        expectedSliceRev: persisted.draftRev,
       }).then((result) => {
         if (result) setNotice("Scheduled configuration lifecycle applied.");
       });
     }
-  }, [agent?.id, store.loading, store.value]);
+  }, [agent?.id, persisted, store.loading]);
 
+  const dirty = !sameBook(book, persisted);
   const missing = missingTranslations(book.draft.reasons);
   const staff = useRecords("staff", null);
   const diff = configDiff(book.published, book.draft);
@@ -130,28 +135,9 @@ export function ConfigPage() {
   const wallet = effectiveValue(book.draft, "wallet", context);
   const options = targetOptions(level, book);
 
-  async function persist(next: ConfigBook, text: string) {
-    if (!agent) return;
-    const result = await store.save(next, {
-      targetId: "configuration",
-      reason: "Configuration draft edit",
-      actorId: agent.id,
-      before: `draft ${book.draftRev}`,
-      after: `draft ${next.draftRev}`,
-      expectedSliceRev: book.draftRev,
-    });
-    if (result) {
-      setBook(next);
-      setNotice(text);
-      return;
-    }
-    await store.refetch();
-    setNotice("Save refused. Another agent changed this configuration; the newest draft has been reloaded.");
-  }
-
-  function mutate(build: (current: ConfigBook) => ConfigBook, text: string) {
-    if (!agent) return;
-    void persist(build(book), text);
+  function edit(build: (current: ConfigBook) => ConfigBook, text = "Unsaved draft changes.") {
+    setBook((current) => build(current));
+    setNotice(text);
   }
 
   function changeLevel(next: OverrideLevel) {
@@ -164,7 +150,7 @@ export function ConfigPage() {
   const publication = agent ? publishConfig(book, agent.id, new Date().toISOString()) : null;
   const rollback = agent ? rollbackConfig(book, agent.id, new Date().toISOString()) : book;
   const clocked = advanceConfigClock(book, new Date().toISOString());
-  const clockChanged = JSON.stringify(clocked) !== JSON.stringify(book);
+  const clockChanged = !sameBook(clocked, book);
 
   if (store.loading) return <p className="state-line">Loading configuration.</p>;
 
@@ -181,13 +167,14 @@ export function ConfigPage() {
         <Link to="/confirm">Open to confirm</Link>
       </div>
 
-      <p className="state-line">
+      <p className="state-line" data-config-dirty={dirty ? "yes" : "no"}>
         {notice}
         {store.message ? ` ${store.message}` : ""}
         {missing.length > 0 ? ` Missing translation: ${missing.join(", ")}.` : ""}
+        {dirty ? " Unsaved changes." : " Saved draft."}
       </p>
 
-      <article className="panel">
+      <article className="panel" data-testid="config-impact">
         <h3>Impact preview</h3>
         <div className="field-grid">
           <label>Changed items<input readOnly value={preview.changed} /></label>
@@ -206,6 +193,41 @@ export function ConfigPage() {
       </article>
 
       <article className="panel">
+        <h3>Draft controls</h3>
+        <div className="actions">
+          <CommandButton
+            command="admin.config.save"
+            confirmTarget={false}
+            className="primary-btn"
+            type="button"
+            targetId="configuration"
+            before={`config ${persisted.draftRev}`}
+            after={`config ${book.draftRev}`}
+            disabled={!dirty}
+            title={dirty ? undefined : "No unsaved configuration changes."}
+            expectedSliceRev={persisted.draftRev}
+            sliceKey="config"
+            value={book}
+            onDone={() => setNotice("Draft saved through AdminApi.")}
+          >
+            Save draft
+          </CommandButton>
+          <button
+            data-command="admin.card.action"
+            className="secondary-btn"
+            type="button"
+            disabled={!dirty}
+            onClick={() => {
+              setBook(persisted);
+              setNotice("Unsaved draft changes discarded.");
+            }}
+          >
+            Discard unsaved
+          </button>
+        </div>
+      </article>
+
+      <article className="panel">
         <h3>Features</h3>
         <p className="state-line">Rider app</p>
         {book.draft.switches.filter((item) => item.app === "rider").map((item) => (
@@ -213,9 +235,8 @@ export function ConfigPage() {
             <input
               type="checkbox"
               checked={item.on}
-              onChange={(event) => mutate(
-                (current) => setSwitch(current, item.id, event.target.checked, agent!.id),
-                "Draft saved. Not published.",
+              onChange={(event) => agent && edit(
+                (current) => setSwitch(current, item.id, event.target.checked, agent.id),
               )}
             />
             {item.label}
@@ -227,9 +248,8 @@ export function ConfigPage() {
             <input
               type="checkbox"
               checked={item.on}
-              onChange={(event) => mutate(
-                (current) => setSwitch(current, item.id, event.target.checked, agent!.id),
-                "Draft saved. Not published.",
+              onChange={(event) => agent && edit(
+                (current) => setSwitch(current, item.id, event.target.checked, agent.id),
               )}
             />
             {item.label}
@@ -246,7 +266,7 @@ export function ConfigPage() {
               value={book.draft.versions.rider}
               onChange={(event) => {
                 if (!agent) return;
-                mutate((current) => setAppVersion(current, "rider", event.target.value, agent.id), "Draft saved. Not published.");
+                edit((current) => setAppVersion(current, "rider", event.target.value, agent.id));
                 setContext((current) => ({ ...current, appVersion: event.target.value }));
               }}
             />
@@ -255,9 +275,8 @@ export function ConfigPage() {
             Driver app
             <input
               value={book.draft.versions.driver}
-              onChange={(event) => agent && mutate(
+              onChange={(event) => agent && edit(
                 (current) => setAppVersion(current, "driver", event.target.value, agent.id),
-                "Draft saved. Not published.",
               )}
             />
           </label>
@@ -270,9 +289,8 @@ export function ConfigPage() {
                   {name} minimum
                   <input
                     value={item.minimumVersion}
-                    onChange={(event) => agent && mutate(
+                    onChange={(event) => agent && edit(
                       (current) => setAppUpdate(current, item.app, item.platform, { minimumVersion: event.target.value }, agent.id),
-                      "Draft saved. Not published.",
                     )}
                   />
                 </label>
@@ -280,9 +298,8 @@ export function ConfigPage() {
                   {name} latest
                   <input
                     value={item.latestVersion}
-                    onChange={(event) => agent && mutate(
+                    onChange={(event) => agent && edit(
                       (current) => setAppUpdate(current, item.app, item.platform, { latestVersion: event.target.value }, agent.id),
-                      "Draft saved. Not published.",
                     )}
                   />
                 </label>
@@ -290,9 +307,8 @@ export function ConfigPage() {
                   {name} message
                   <input
                     value={item.message}
-                    onChange={(event) => agent && mutate(
+                    onChange={(event) => agent && edit(
                       (current) => setAppUpdate(current, item.app, item.platform, { message: event.target.value }, agent.id),
-                      "Draft saved. Not published.",
                     )}
                   />
                 </label>
@@ -300,9 +316,8 @@ export function ConfigPage() {
                   <input
                     type="checkbox"
                     checked={item.mandatory}
-                    onChange={(event) => agent && mutate(
+                    onChange={(event) => agent && edit(
                       (current) => setAppUpdate(current, item.app, item.platform, { mandatory: event.target.checked }, agent.id),
-                      "Draft saved. Not published.",
                     )}
                   />
                   {name} mandatory
@@ -320,10 +335,7 @@ export function ConfigPage() {
               onChange={(event) => {
                 if (!agent) return;
                 const scheduleAt = isoFromLocal(event.target.value);
-                mutate(
-                  (current) => setSchedule(current, scheduleAt, agent.id),
-                  scheduleAt ? "Schedule added to draft." : "Schedule cleared.",
-                );
+                edit((current) => setSchedule(current, scheduleAt, agent.id));
               }}
             />
           </label>
@@ -336,10 +348,7 @@ export function ConfigPage() {
               onChange={(event) => {
                 if (!agent) return;
                 const expiresAt = isoFromLocal(event.target.value);
-                mutate(
-                  (current) => setExpiry(current, expiresAt, agent.id),
-                  expiresAt ? "Expiry added to draft." : "Expiry cleared.",
-                );
+                edit((current) => setExpiry(current, expiresAt, agent.id));
               }}
             />
           </label>
@@ -365,9 +374,10 @@ export function ConfigPage() {
           </label>
           <label>
             Target
-            <select aria-label="Override target" value={target} onChange={(event) => setTarget(event.target.value)}>
+            <input aria-label="Override target" list="override-target-options" value={target} onChange={(event) => setTarget(event.target.value)} />
+            <datalist id="override-target-options">
               {options.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
+            </datalist>
           </label>
           <label>
             Value
@@ -386,73 +396,52 @@ export function ConfigPage() {
           </label>
         </div>
 
-        {(() => {
-          if (!agent) return null;
-          const id = `${featureKey}-${level}-${target}`;
-          const next = setOverride(book, {
-            id,
-            key: featureKey,
-            level,
-            target,
-            value: overrideValue,
-            startsAt: isoFromLocal(startsAt),
-            expiresAt: isoFromLocal(ruleExpiresAt),
-          }, agent.id);
-          return (
-            <CommandButton
-              command="admin.config.save"
-              confirmTarget={false}
-              className="primary-btn"
-              type="button"
-              targetId="configuration"
-              before={`draft ${book.draftRev}`}
-              after={`${featureKey} ${level}:${target} ${overrideValue ? "on" : "off"}`}
-              expectedSliceRev={book.draftRev}
-              sliceKey="config"
-              value={next}
-              onDone={() => {
-                setBook(next);
-                setNotice(`Override ${id} saved to draft.`);
-              }}
-            >
-              Add or replace override
-            </CommandButton>
-          );
-        })()}
+        <button
+          data-command="admin.card.action"
+          className="primary-btn"
+          type="button"
+          onClick={() => {
+            if (!agent || !target.trim()) return;
+            const id = `${featureKey}-${level}-${target.trim()}`;
+            edit((current) => setOverride(current, {
+              id,
+              key: featureKey,
+              level,
+              target: target.trim(),
+              value: overrideValue,
+              startsAt: isoFromLocal(startsAt),
+              expiresAt: isoFromLocal(ruleExpiresAt),
+            }, agent.id));
+            setNotice(`Override ${id} added to the unsaved draft.`);
+          }}
+        >
+          Add or replace override
+        </button>
 
         {book.draft.overrides.length === 0 ? (
           <p className="state-line">No advanced overrides in this draft.</p>
         ) : (
           <ul className="version-list" aria-label="Advanced overrides">
-            {book.draft.overrides.map((rule) => {
-              const next = agent ? removeOverride(book, rule.id, agent.id) : book;
-              return (
-                <li key={rule.id}>
-                  <strong>{rule.key}</strong> · {rule.level}:{rule.target} · {rule.value ? "on" : "off"}
-                  {rule.startsAt ? ` · starts ${rule.startsAt}` : ""}
-                  {rule.expiresAt ? ` · expires ${rule.expiresAt}` : ""}
-                  {" "}
-                  <CommandButton
-                    command="admin.config.save"
-                    confirmTarget={false}
-                    className="link-action"
-                    type="button"
-                    targetId="configuration"
-                    before={rule.id}
-                    after="removed"
-                    expectedSliceRev={book.draftRev}
-                    sliceKey="config"
-                    value={next}
-                    onDone={() => {
-                      setBook(next);
-                      setNotice(`Removed override ${rule.id}.`);
-                    }}
-                  >
-                    Remove
-                  </CommandButton>
-                </li>
-              );
-            })}
+            {book.draft.overrides.map((rule) => (
+              <li key={rule.id}>
+                <strong>{rule.key}</strong> · {rule.level}:{rule.target} · {rule.value ? "on" : "off"}
+                {rule.startsAt ? ` · starts ${rule.startsAt}` : ""}
+                {rule.expiresAt ? ` · expires ${rule.expiresAt}` : ""}
+                {" "}
+                <button
+                  data-command="admin.card.action"
+                  className="link-action"
+                  type="button"
+                  onClick={() => {
+                    if (!agent) return;
+                    edit((current) => removeOverride(current, rule.id, agent.id));
+                    setNotice(`Override ${rule.id} removed from the unsaved draft.`);
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
           </ul>
         )}
       </article>
@@ -461,48 +450,48 @@ export function ConfigPage() {
         <h3>Effective value viewer</h3>
         <div className="field-grid">
           <label>
-            Market
-            <input aria-label="Effective market" value={context.market ?? ""} onChange={(event) => setContext((current) => ({ ...current, market: event.target.value }))} />
+            Preview market
+            <input value={context.market ?? ""} onChange={(event) => setContext((current) => ({ ...current, market: event.target.value }))} />
           </label>
           <label>
-            Zone
-            <select aria-label="Effective zone" value={context.zoneId ?? ""} onChange={(event) => setContext((current) => ({ ...current, zoneId: event.target.value }))}>
+            Preview zone
+            <select value={context.zoneId ?? ""} onChange={(event) => setContext((current) => ({ ...current, zoneId: event.target.value }))}>
               {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
             </select>
           </label>
           <label>
-            Category
-            <select aria-label="Effective category" value={context.category ?? "economy"} onChange={(event) => setContext((current) => ({ ...current, category: event.target.value }))}>
+            Preview category
+            <select value={context.category ?? "economy"} onChange={(event) => setContext((current) => ({ ...current, category: event.target.value }))}>
               {CATEGORIES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
           </label>
           <label>
-            App
-            <select aria-label="Effective app" value={context.app ?? "rider"} onChange={(event) => setContext((current) => ({ ...current, app: event.target.value as "rider" | "driver" }))}>
+            Preview app
+            <select value={context.app ?? "rider"} onChange={(event) => setContext((current) => ({ ...current, app: event.target.value as "rider" | "driver" }))}>
               <option value="rider">Rider</option>
               <option value="driver">Driver</option>
             </select>
           </label>
           <label>
-            Platform
-            <select aria-label="Effective platform" value={context.platform ?? "ios"} onChange={(event) => setContext((current) => ({ ...current, platform: event.target.value as "ios" | "android" }))}>
+            Preview platform
+            <select value={context.platform ?? "ios"} onChange={(event) => setContext((current) => ({ ...current, platform: event.target.value as "ios" | "android" }))}>
               <option value="ios">iOS</option>
               <option value="android">Android</option>
             </select>
           </label>
           <label>
-            App version
-            <input aria-label="Effective app version" value={context.appVersion ?? ""} onChange={(event) => setContext((current) => ({ ...current, appVersion: event.target.value }))} />
+            Preview app version
+            <input value={context.appVersion ?? ""} onChange={(event) => setContext((current) => ({ ...current, appVersion: event.target.value }))} />
           </label>
           <label>
-            Cohort
-            <input aria-label="Effective cohort" value={context.cohort ?? ""} onChange={(event) => setContext((current) => ({ ...current, cohort: event.target.value }))} />
+            Preview cohort
+            <input value={context.cohort ?? ""} onChange={(event) => setContext((current) => ({ ...current, cohort: event.target.value }))} />
           </label>
         </div>
         <p className="state-line" data-effective={reservations.level}>
           Effective reservations: {reservations.value}. Winning level: {reservations.level}. {reservations.chain.join(" · ")}
         </p>
-        <p className="state-line" data-effective-wallet={wallet.level}>
+        <p className="state-line" data-testid="effective-precedence" data-effective-wallet={wallet.level}>
           Effective wallet: {wallet.value}. Winning level: {wallet.level}. {wallet.chain.join(" · ")}
         </p>
       </article>
@@ -526,9 +515,8 @@ export function ConfigPage() {
           <input
             type="checkbox"
             checked={legacyOverride.reservations ?? book.draft.features.reservations}
-            onChange={(event) => agent && mutate(
+            onChange={(event) => agent && edit(
               (current) => setZoneOverride(current, zoneId, "reservations", event.target.checked, agent.id),
-              "Zone override saved in the draft.",
             )}
           />
           Reservations in this zone
@@ -537,9 +525,8 @@ export function ConfigPage() {
           <input
             type="checkbox"
             checked={legacyOverride.wallet ?? book.draft.features.wallet}
-            onChange={(event) => agent && mutate(
+            onChange={(event) => agent && edit(
               (current) => setZoneOverride(current, zoneId, "wallet", event.target.checked, agent.id),
-              "Zone override saved in the draft.",
             )}
           />
           Wallet in this zone
@@ -555,16 +542,14 @@ export function ConfigPage() {
               <div className="field-grid" key={reason.id}>
                 <label>
                   {reason.id} Swedish
-                  <input value={reason.sv} onChange={(event) => agent && mutate(
+                  <input value={reason.sv} onChange={(event) => agent && edit(
                     (current) => setReason(current, reason.id, "sv", event.target.value, agent.id),
-                    "Draft saved. Not published.",
                   )} />
                 </label>
                 <label>
                   {reason.id} English
-                  <input value={reason.en} onChange={(event) => agent && mutate(
+                  <input value={reason.en} onChange={(event) => agent && edit(
                     (current) => setReason(current, reason.id, "en", event.target.value, agent.id),
-                    "Draft saved. Not published.",
                   )} />
                 </label>
               </div>
@@ -581,9 +566,8 @@ export function ConfigPage() {
             type="number"
             min={0}
             value={book.draft.booking.maxStops}
-            onChange={(event) => agent && mutate(
+            onChange={(event) => agent && edit(
               (current) => setMaxStops(current, Number(event.target.value), agent.id),
-              "Draft saved. Not published.",
             )}
           />
         </label>
@@ -601,9 +585,8 @@ export function ConfigPage() {
             <input
               type="checkbox"
               checked={book.draft.environment[key]}
-              onChange={(event) => agent && mutate(
+              onChange={(event) => agent && edit(
                 (current) => setEnvironment(current, key, event.target.checked, agent.id),
-                "Draft saved. Not published.",
               )}
             />
             {label}
@@ -631,7 +614,7 @@ export function ConfigPage() {
         <ol aria-label="Publish history">
           {book.publications.length === 0 ? <li>No publishes yet.</li> : book.publications.map((item, index) => (
             <li key={`${item.rev}-${item.kind ?? "publish"}-${index}`}>
-              Version {item.rev} · {item.kind ?? "publish"} · by {item.actorId}
+              Version {item.rev} · {item.kind ?? "publish"} by {item.actorId}
               {item.effectiveAt ? ` · effective ${item.effectiveAt}` : ""}
               {item.expiresAt ? ` · expires ${item.expiresAt}` : ""}
               {item.diff.length ? `: ${item.diff.join("; ")}` : ": no diff"}
@@ -651,9 +634,9 @@ export function ConfigPage() {
             targetId="configuration"
             before={book.status}
             after="in_review"
-            disabled={!review || !!review.error}
-            title={review?.error}
-            expectedSliceRev={book.draftRev}
+            disabled={dirty || !review || !!review.error}
+            title={dirty ? "Save the draft first." : review?.error}
+            expectedSliceRev={persisted.draftRev}
             sliceKey="config"
             value={review?.book}
             onDone={() => {
@@ -673,15 +656,15 @@ export function ConfigPage() {
             targetId="configuration"
             before={book.status}
             after="approved"
-            disabled={!approval || !!approval.error}
-            title={approval?.error}
-            expectedSliceRev={book.draftRev}
+            disabled={dirty || !approval || !!approval.error}
+            title={dirty ? "Save the draft first." : approval?.error}
+            expectedSliceRev={persisted.draftRev}
             sliceKey="config"
             value={approval?.book}
             onDone={() => {
               if (!approval || approval.error) return;
               setBook(approval.book);
-              setNotice("Approved. A second authorised agent can publish.");
+              setNotice("Approved. A second agent can publish.");
             }}
           >
             Approve
@@ -695,9 +678,9 @@ export function ConfigPage() {
             targetId="configuration"
             before={book.status}
             after={book.draft.scheduleAt ? "scheduled" : "published"}
-            disabled={!publication || !!publication.error}
-            title={publication?.error}
-            expectedSliceRev={book.draftRev}
+            disabled={dirty || !publication || !!publication.error}
+            title={dirty ? "Save the draft first." : publication?.error}
+            expectedSliceRev={persisted.draftRev}
             sliceKey="config"
             value={publication?.book}
             onDone={() => {
@@ -721,14 +704,14 @@ export function ConfigPage() {
             targetId="configuration"
             before={`version ${book.rev}`}
             after="previous snapshot as new version"
-            disabled={book.history.length < 2}
-            title={book.history.length < 2 ? "No previous published version exists." : undefined}
-            expectedSliceRev={book.draftRev}
+            disabled={dirty || book.history.length < 2}
+            title={dirty ? "Discard or save unsaved changes first." : book.history.length < 2 ? "No previous published version exists." : undefined}
+            expectedSliceRev={persisted.draftRev}
             sliceKey="config"
             value={rollback}
             onDone={() => {
               setBook(rollback);
-              setNotice(`Rolled back as new version ${rollback.rev}.`);
+              setNotice(`Rolled back as version ${rollback.rev}.`);
             }}
           >
             Roll back
@@ -740,11 +723,11 @@ export function ConfigPage() {
             className="secondary-btn"
             type="button"
             targetId="configuration"
-            before={`draft ${book.draftRev}`}
-            after={`draft ${clocked.draftRev}`}
-            disabled={!clockChanged}
-            title={clockChanged ? undefined : "No schedule or expiry is due."}
-            expectedSliceRev={book.draftRev}
+            before={`config ${book.draftRev}`}
+            after={`config ${clocked.draftRev}`}
+            disabled={dirty || !clockChanged}
+            title={dirty ? "Save or discard unsaved changes first." : clockChanged ? undefined : "No schedule or expiry is due."}
+            expectedSliceRev={persisted.draftRev}
             sliceKey="config"
             value={clocked}
             onDone={() => {
