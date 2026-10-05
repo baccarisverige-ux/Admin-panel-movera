@@ -51,6 +51,7 @@ export const PAGE_PERMISSION: Record<string, string> = {
   reservations: "trips.read",
   content: "settings.read",
   gates: "system.read",
+  handover: "overview.read",
 };
 
 export function permissionForPage(pageId: string): string {
