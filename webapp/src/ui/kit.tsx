@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { can, type Role } from "../auth/permissions";
+import { CommandButton } from "./CommandButton";
 
 export function StatusDot({ tone, children }: { tone: "green" | "amber" | "red" | "muted"; children: ReactNode }) {
   return (
@@ -30,7 +31,7 @@ export function EmptyState({ title }: { title: string }) {
 export function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <p className="state-line">
-      Something failed. <button className="link-action" type="button" onClick={onRetry}>Retry</button>
+      Something failed. <CommandButton command="admin.ui.retry" className="link-action" type="button" onDone={onRetry}>Retry</CommandButton>
     </p>
   );
 }
@@ -89,7 +90,7 @@ export function Drawer({ open, title, onClose, children }: { open: boolean; titl
   if (!open) return null;
   return (
     <aside className="drawer" role="dialog" aria-label={title}>
-      <button className="link-action" type="button" onClick={onClose}>Close</button>
+      <CommandButton command="admin.ui.drawerClose" className="link-action" type="button" onDone={onClose}>Close</CommandButton>
       <h3>{title}</h3>
       {children}
     </aside>
@@ -119,11 +120,11 @@ export function DocumentViewer() {
   return (
     <div className="doc-viewer">
       <div className="actions">
-        <button className="secondary-btn" type="button" onClick={() => setKind("image")}>Image</button>
-        <button className="secondary-btn" type="button" onClick={() => setKind("pdf")}>PDF</button>
-        <button className="secondary-btn" type="button" onClick={() => setZoom((value) => Math.min(2, value + 0.25))}>Zoom in</button>
-        <button className="secondary-btn" type="button" onClick={() => setZoom((value) => Math.max(0.5, value - 0.25))}>Zoom out</button>
-        <button className="secondary-btn" type="button" onClick={() => setTurn((value) => value + 1)}>Rotate</button>
+        <CommandButton command="admin.doc.image" className="secondary-btn" type="button" onDone={() => setKind("image")}>Image</CommandButton>
+        <CommandButton command="admin.doc.pdf" className="secondary-btn" type="button" onDone={() => setKind("pdf")}>PDF</CommandButton>
+        <CommandButton command="admin.doc.zoomIn" className="secondary-btn" type="button" onDone={() => setZoom((value) => Math.min(2, value + 0.25))}>Zoom in</CommandButton>
+        <CommandButton command="admin.doc.zoomOut" className="secondary-btn" type="button" onDone={() => setZoom((value) => Math.max(0.5, value - 0.25))}>Zoom out</CommandButton>
+        <CommandButton command="admin.doc.rotate" className="secondary-btn" type="button" onDone={() => setTurn((value) => value + 1)}>Rotate</CommandButton>
       </div>
       {kind === "image" ? (
         <img src={`${base}license.png`} alt="Taxi driver license" style={style} />
@@ -177,8 +178,8 @@ export function ConfirmDialog({
             <input value={text} onChange={(event) => setText(event.target.value)} />
           </label>
         ) : null}
-        <button className="primary-btn" type="submit" disabled={!confirmed}>Confirm</button>
-        <button className="secondary-btn" type="button" onClick={onClose}>Cancel</button>
+        <CommandButton command="admin.confirm.submit" className="primary-btn" type="submit" disabled={!confirmed}>Confirm</CommandButton>
+        <CommandButton command="admin.confirm.cancel" className="secondary-btn" type="button" onDone={onClose}>Cancel</CommandButton>
       </form>
     </div>
   );

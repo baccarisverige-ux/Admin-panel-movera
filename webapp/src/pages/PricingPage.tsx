@@ -6,6 +6,7 @@ import { PageHeading } from "../ui/PageHeading";
 import { TabPanel, Tabs } from "../ui/Tabs";
 import { ZoneSelect } from "../ui/ZoneSelect";
 import { QuotePreview } from "./QuotePreview";
+import { CommandButton } from "../ui/CommandButton";
 
 const PRICING_TABS = [
   { id: "categories", label: "Vehicle Categories" },
@@ -66,12 +67,12 @@ export function PricingPage() {
             placeholderOption="Select Zone"
             defaultValue="Select Zone"
           />
-          <button className="primary-btn" type="button">
+          <CommandButton command="admin.pricing.saveAll" className="primary-btn" type="button">
             Save All Changes
-          </button>
-          <button className="secondary-btn" type="button" onClick={() => setCategoryModalOpen(true)}>
+          </CommandButton>
+          <CommandButton command="admin.pricing.addCategory" className="secondary-btn" type="button" onDone={() => setCategoryModalOpen(true)}>
             Add Category
-          </button>
+          </CommandButton>
         </div>
       </PageHeading>
 
@@ -87,9 +88,9 @@ export function PricingPage() {
         <article className="panel">
           <div className="panel-title-row">
             <h3>Vehicle Categories</h3>
-            <button className="secondary-btn" type="button">
+            <CommandButton command="admin.pricing.export" className="secondary-btn" type="button">
               Export
-            </button>
+            </CommandButton>
           </div>
           <div className="table-wrap">
             <DataTable
@@ -101,8 +102,8 @@ export function PricingPage() {
                   <input key={RATE_COLUMNS[valueIndex]} value={value} onChange={(event) => updateRate(rowIndex, valueIndex, event.target.value)} />
                 )),
                 <span key={row.category}>
-                  <button className="link-action" type="button">Save</button>
-                  <button className="link-action danger-text" type="button">Delete</button>
+                  <CommandButton command="admin.pricing.saveRow" className="link-action" type="button">Save</CommandButton>
+                  <CommandButton command="admin.pricing.deleteRow" className="link-action danger-text" type="button">Delete</CommandButton>
                 </span>,
               ])}
             />
@@ -114,9 +115,9 @@ export function PricingPage() {
         <article className="panel">
           <div className="panel-title-row">
             <h3>Zone-Level Booking Controls</h3>
-            <button className="primary-btn" type="button">
+            <CommandButton command="admin.pricing.saveBooking" className="primary-btn" type="button">
               Save
-            </button>
+            </CommandButton>
           </div>
           <div className="settings-grid">
             <label>
@@ -168,12 +169,12 @@ export function PricingPage() {
           <div className="panel-title-row">
             <h3>Boost Pricing Controls</h3>
             <div>
-              <button className="primary-btn" type="button">
+              <CommandButton command="admin.pricing.saveSurge" className="primary-btn" type="button">
                 Save All
-              </button>
-              <button className="secondary-btn" type="button">
+              </CommandButton>
+              <CommandButton command="admin.pricing.clearSurge" className="secondary-btn" type="button">
                 Clear All
-              </button>
+              </CommandButton>
             </div>
           </div>
           <div className="boost-grid">
@@ -184,12 +185,12 @@ export function PricingPage() {
                 Duration (minutes)
                 <input defaultValue="30" />
               </label>
-              <button className="primary-btn" type="button">
+              <CommandButton command="admin.pricing.activateBoost" className="primary-btn" type="button">
                 Activate
-              </button>
-              <button className="secondary-btn" type="button">
+              </CommandButton>
+              <CommandButton command="admin.pricing.saveBoost" className="secondary-btn" type="button">
                 Save
-              </button>
+              </CommandButton>
             </div>
             <div className="setting-card">
               <h4>Auto Boost</h4>
@@ -198,12 +199,12 @@ export function PricingPage() {
                 Trigger Threshold %
                 <input defaultValue="85" />
               </label>
-              <button className="primary-btn" type="button">
+              <CommandButton command="admin.pricing.enableAuto" className="primary-btn" type="button">
                 Enable Auto
-              </button>
-              <button className="secondary-btn" type="button">
+              </CommandButton>
+              <CommandButton command="admin.pricing.saveAuto" className="secondary-btn" type="button">
                 Save
-              </button>
+              </CommandButton>
             </div>
             <div className="setting-card">
               <h4>Scheduled Boost</h4>
@@ -216,12 +217,12 @@ export function PricingPage() {
                 End Time
                 <input type="time" defaultValue="20:00" />
               </label>
-              <button className="primary-btn" type="button">
+              <CommandButton command="admin.pricing.schedule" className="primary-btn" type="button">
                 Schedule
-              </button>
-              <button className="secondary-btn" type="button">
+              </CommandButton>
+              <CommandButton command="admin.pricing.saveSchedule" className="secondary-btn" type="button">
                 Save
-              </button>
+              </CommandButton>
             </div>
           </div>
         </article>
@@ -231,34 +232,34 @@ export function PricingPage() {
         <article className="panel">
           <div className="panel-title-row">
             <h3>Commission Settings</h3>
-            <button className="primary-btn" type="button">
+            <CommandButton command="admin.pricing.saveRules" className="primary-btn" type="button">
               Save All
-            </button>
+            </CommandButton>
           </div>
           <div className="boost-grid">
             <div className="setting-card">
               <h4>Standard Commission</h4>
               <strong>15%</strong>
               <p>Applicable to all categories</p>
-              <button className="primary-btn" type="button">
+              <CommandButton command="admin.pricing.applyOne" className="primary-btn" type="button">
                 Apply
-              </button>
+              </CommandButton>
             </div>
             <div className="setting-card">
               <h4>Premium Commission</h4>
               <strong>20%</strong>
               <p>For Premium & XL categories</p>
-              <button className="primary-btn" type="button">
+              <CommandButton command="admin.pricing.applyTwo" className="primary-btn" type="button">
                 Apply
-              </button>
+              </CommandButton>
             </div>
             <div className="setting-card">
               <h4>Partner Commission</h4>
               <strong>12%</strong>
               <p>For franchise partners</p>
-              <button className="primary-btn" type="button">
+              <CommandButton command="admin.pricing.applyThree" className="primary-btn" type="button">
                 Apply
-              </button>
+              </CommandButton>
             </div>
           </div>
         </article>
@@ -304,12 +305,12 @@ export function PricingPage() {
           </label>
         </fieldset>
         <div className="modal-actions">
-          <button className="secondary-btn modal-close-action" type="button" onClick={closeModal}>
+          <CommandButton command="admin.pricing.cancelCategory" className="secondary-btn modal-close-action" type="button" onDone={closeModal}>
             Cancel
-          </button>
-          <button className="primary-btn" type="button" onClick={closeModal}>
+          </CommandButton>
+          <CommandButton command="admin.pricing.createCategory" className="primary-btn" type="button" onDone={closeModal}>
             Create Category
-          </button>
+          </CommandButton>
         </div>
       </Modal>
     </>

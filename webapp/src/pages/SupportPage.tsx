@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { addNote, claim, deliveredToRider, reply, useRecords, type Ticket } from "../api/hooks";
+import { CommandButton } from "../ui/CommandButton";
 
 export function SupportPage() {
   const seen = useMemo(() => new Set<string>(), []);
@@ -23,15 +24,15 @@ export function SupportPage() {
           <input value={text} onChange={(event) => setText(event.target.value)} />
         </label>
         <div className="actions">
-          <button className="secondary-btn" type="button" onClick={() => { setTicket(claim(ticket, "maja", new Date().toISOString())); setNotice("Claimed for 3 days."); }}>
+          <CommandButton command="admin.support.claim" className="secondary-btn" type="button" onDone={() => { setTicket(claim(ticket, "maja", new Date().toISOString())); setNotice("Claimed for 3 days."); }}>
             Claim
-          </button>
-          <button className="primary-btn" type="button" onClick={() => { const result = reply(ticket, "maja", text, "reply-1", seen); setTicket(result.ticket); setNotice(result.delivered ? "Delivered once." : "Already delivered. Not sent again."); }}>
+          </CommandButton>
+          <CommandButton command="admin.support.reply" className="primary-btn" type="button" onDone={() => { const result = reply(ticket, "maja", text, "reply-1", seen); setTicket(result.ticket); setNotice(result.delivered ? "Delivered once." : "Already delivered. Not sent again."); }}>
             Reply
-          </button>
-          <button className="secondary-btn" type="button" onClick={() => { setTicket(addNote(ticket, "maja", "Private: possible duplicate.")); setNotice("Note saved. The rider cannot see it."); }}>
+          </CommandButton>
+          <CommandButton command="admin.support.note" className="secondary-btn" type="button" onDone={() => { setTicket(addNote(ticket, "maja", "Private: possible duplicate.")); setNotice("Note saved. The rider cannot see it."); }}>
             Private note
-          </button>
+          </CommandButton>
         </div>
         <ul>
           {deliveredToRider(ticket).map((message) => (

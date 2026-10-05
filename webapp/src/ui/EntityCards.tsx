@@ -1,4 +1,5 @@
 import type { CardTuple } from "../api/read";
+import { CommandButton } from "./CommandButton";
 
 type EntityCardsProps = {
   title?: string;
@@ -19,9 +20,9 @@ export function EntityCards({ title = "Overview", cards }: EntityCardsProps) {
             {actions ? (
               <div className="card-actions">
                 {actions.split("|").map((action) => (
-                  <button key={action} className="small-btn" type="button">
+                  <CommandButton command="admin.card.action" key={action} className="small-btn" type="button">
                     {action}
-                  </button>
+                  </CommandButton>
                 ))}
               </div>
             ) : null}

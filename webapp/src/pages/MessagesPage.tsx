@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { advance, testSend, useRecords, type Delivery, type Outbound } from "../api/hooks";
 import { fillTemplate } from "../messages/template";
+import { CommandButton } from "../ui/CommandButton";
 
 const PEOPLE = [
   { id: "R1", app: "rider" as const, zone: "Norrmalm" },
@@ -37,26 +38,23 @@ export function MessagesPage() {
           <input value={trip} onChange={(event) => setTrip(event.target.value)} />
         </label>
         <p>{filled.error ?? filled.body}</p>
-        <button
-          className="secondary-btn"
-          type="button"
-          onClick={() => {
+        <CommandButton command="admin.message.useText" className="secondary-btn"
+          type="button" onDone={() => {
             if (!filled.error) setMessage({ ...message, body: filled.body, status: "accepted" });
-          }}
-        >
+          }}>
           Use this text
-        </button>
+        </CommandButton>
       </article>
       <article className="panel">
         <p>{message.body}</p>
         <div className="actions">
-          <button className="secondary-btn" type="button" onClick={() => setHits(testSend(message.audience, PEOPLE))}>
+          <CommandButton command="admin.message.testSend" className="secondary-btn" type="button" onDone={() => setHits(testSend(message.audience, PEOPLE))}>
             Test send
-          </button>
+          </CommandButton>
           {(["sent", "delivered", "failed"] as Delivery[]).map((status) => (
-            <button key={status} className="secondary-btn" type="button" onClick={() => setMessage(advance(message, status))}>
+            <CommandButton command="admin.message.mark" key={status} className="secondary-btn" type="button" onDone={() => setMessage(advance(message, status))}>
               Mark {status}
-            </button>
+            </CommandButton>
           ))}
         </div>
         <p>Would reach: {hits.length === 0 ? "nobody yet" : hits.join(", ")}</p>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { publicIncident, resolveIncident, takeIncident, useRecords, type Incident } from "../api/hooks";
+import { CommandButton } from "../ui/CommandButton";
 
 export function SafetyPage() {
   const [incident, setIncident] = useState<Incident>({ id: "INC-1", state: "queued", locationAt: "2026-10-05T10:00:00Z", accuracyM: 12, ownerId: null });
@@ -21,12 +22,12 @@ export function SafetyPage() {
           {view.id} · {view.state} · located {view.locationAt} · accuracy {view.accuracyM} m
         </p>
         <div className="actions">
-          <button className="secondary-btn" type="button" onClick={() => { setIncident(takeIncident(incident, "erik")); setNotice("Taken."); }}>
+          <CommandButton command="admin.safety.take" className="secondary-btn" type="button" onDone={() => { setIncident(takeIncident(incident, "erik")); setNotice("Taken."); }}>
             Take
-          </button>
-          <button className="primary-btn" type="button" onClick={() => { const result = resolveIncident(incident); if (result.error) setNotice(result.error); else { setIncident(result.incident); setNotice("Resolved."); } }}>
+          </CommandButton>
+          <CommandButton command="admin.safety.resolve" className="primary-btn" type="button" onDone={() => { const result = resolveIncident(incident); if (result.error) setNotice(result.error); else { setIncident(result.incident); setNotice("Resolved."); } }}>
             Resolve
-          </button>
+          </CommandButton>
         </div>
       </article>
     </>

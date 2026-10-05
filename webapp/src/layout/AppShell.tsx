@@ -39,6 +39,7 @@ import { useFreshness, useInbox, useSearch } from "../api/hooks";
 import { ZONES } from "../api/seed";
 import type { Fault } from "../api/demoStore";
 import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
+import { CommandButton } from "../ui/CommandButton";
 
 const ICONS: Record<NavIcon, typeof Menu> = {
   LayoutDashboard,
@@ -98,6 +99,12 @@ export function AppShell({ page, children }: AppShellProps) {
   const found = useSearch(searchOpen ? query : "");
   const inbox = useInbox();
   const freshness = useFreshness();
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const stockholm = new Intl.DateTimeFormat("sv-SE", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Stockholm" }).format(clock);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -143,9 +150,9 @@ export function AppShell({ page, children }: AppShellProps) {
       </aside>
       <section className="workspace">
         <header className="topbar">
-          <button className="icon-btn mobile-menu" type="button" aria-label="Open menu" onClick={() => setMenuOpen((open) => !open)}>
+          <CommandButton command="admin.shell.menu" className="icon-btn mobile-menu" type="button" aria-label="Open menu" onDone={() => setMenuOpen((open) => !open)}>
             <Menu size={18} aria-hidden="true" />
-          </button>
+          </CommandButton>
           <div>
             <h1>{page.label}</h1>
             <p className="crumb">{page.group}</p>
@@ -166,13 +173,13 @@ export function AppShell({ page, children }: AppShellProps) {
                 <option key={id} value={id}>{name}</option>
               ))}
             </select>
-            <button className="secondary-btn" type="button" onClick={() => setSearchOpen(true)}>Search</button>
-            <button className="secondary-btn" type="button" aria-label="Inbox" onClick={() => setInboxOpen((open) => !open)}>Inbox</button>
+            <CommandButton command="admin.shell.search" className="secondary-btn" type="button" onDone={() => setSearchOpen(true)}>Search</CommandButton>
+            <CommandButton command="admin.shell.inbox" className="secondary-btn" type="button" aria-label="Inbox" onDone={() => setInboxOpen((open) => !open)}>Inbox</CommandButton>
             <div className="admin-profile">
               <div className="avatar">{agent ? agent.name.slice(0, 2).toUpperCase() : "AD"}</div>
               <div>
                 <strong>{agent?.name ?? "Signed out"}</strong>
-                <span>{env} · {scope || "all"} · {agent?.role ?? "signed out"} · {freshness.data ?? "…"}</span>
+                <span>{stockholm} · {env} · {scope || "all"} · {agent?.role ?? "signed out"} · {freshness.data ?? "…"}</span>
               </div>
               {agent?.role === "super" ? (
                 <>
@@ -181,10 +188,10 @@ export function AppShell({ page, children }: AppShellProps) {
                       <option key={fault} value={fault}>{fault}</option>
                     ))}
                   </select>
-                  <button className="link-action" type="button" onClick={() => void api.reset().then(() => client.invalidateQueries())}>Reset demo</button>
+                  <CommandButton command="admin.shell.reset" className="link-action" type="button" onDone={() => void api.reset().then(() => client.invalidateQueries())}>Reset demo</CommandButton>
                 </>
               ) : null}
-              <button className="link-action" type="button" onClick={signOut}>Sign out</button>
+              <CommandButton command="admin.shell.signOut" className="link-action" type="button" onDone={signOut}>Sign out</CommandButton>
             </div>
           </div>
         </header>
@@ -197,11 +204,11 @@ export function AppShell({ page, children }: AppShellProps) {
             <ul>
               {(found.data ?? []).map((hit) => (
                 <li key={`${hit.kind}-${hit.id}`}>
-                  <button className="link-action" type="button" onClick={() => { setSearchOpen(false); navigate(hit.path); }}>{hit.kind}: {hit.label}</button>
+                  <CommandButton command="admin.shell.openHit" className="link-action" type="button" onDone={() => { setSearchOpen(false); navigate(hit.path); }}>{hit.kind}: {hit.label}</CommandButton>
                 </li>
               ))}
             </ul>
-            <button className="secondary-btn" type="button" onClick={() => setSearchOpen(false)}>Close</button>
+            <CommandButton command="admin.shell.closeSearch" className="secondary-btn" type="button" onDone={() => setSearchOpen(false)}>Close</CommandButton>
           </div>
         ) : null}
         {inboxOpen ? (

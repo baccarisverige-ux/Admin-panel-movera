@@ -5,6 +5,7 @@ import { DataTable } from "../ui/DataTable";
 import { Modal } from "../ui/Modal";
 import { PageHeading } from "../ui/PageHeading";
 import { ZoneMap } from "./ZoneMap";
+import { CommandButton } from "../ui/CommandButton";
 
 export function ZonesPage() {
   const page = catalogFor("zones");
@@ -18,9 +19,9 @@ export function ZonesPage() {
   return (
     <>
       <PageHeading title={page.title} subtitle={page.subtitle}>
-        <button className="primary-btn" type="button" onClick={() => setModalOpen(true)}>
+        <CommandButton command="admin.zone.create" className="primary-btn" type="button" onDone={() => setModalOpen(true)}>
           Create New Zone
-        </button>
+        </CommandButton>
       </PageHeading>
 
       <article className="panel">
@@ -47,23 +48,23 @@ export function ZonesPage() {
         </label>
         <label>Define Zone Boundaries</label>
         <div className="button-row">
-          <button className="secondary-btn" type="button">
+          <CommandButton command="admin.zone.drawPolygon" className="secondary-btn" type="button">
             Draw Polygon
-          </button>
-          <button className="secondary-btn" type="button">
+          </CommandButton>
+          <CommandButton command="admin.zone.drawRectangle" className="secondary-btn" type="button">
             Draw Rectangle
-          </button>
-          <button className="secondary-btn" type="button">
+          </CommandButton>
+          <CommandButton command="admin.zone.clear" className="secondary-btn" type="button">
             Clear
-          </button>
+          </CommandButton>
         </div>
         <div className="modal-actions">
-          <button className="secondary-btn modal-close-action" type="button" onClick={closeModal}>
+          <CommandButton command="admin.zone.cancel" className="secondary-btn modal-close-action" type="button" onDone={closeModal}>
             Cancel
-          </button>
-          <button className="primary-btn" type="button" onClick={closeModal}>
+          </CommandButton>
+          <CommandButton command="admin.zone.save" className="primary-btn" type="button" onDone={closeModal}>
             Create Zone
-          </button>
+          </CommandButton>
         </div>
       </Modal>
     </>

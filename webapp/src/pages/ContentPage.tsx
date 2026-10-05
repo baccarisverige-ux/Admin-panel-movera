@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSession } from "../auth/SessionContext";
 import { editContent, phonePreview, publishContent, rollbackContent, useRecords, type ContentBook } from "../api/hooks";
 import { CONTENT_SLOTS, emptySlot, type SlotId } from "../content/slots";
+import { CommandButton } from "../ui/CommandButton";
 
 export function ContentPage() {
   const { agent } = useSession();
@@ -30,9 +31,9 @@ export function ContentPage() {
       <p className="state-line">{notice}</p>
       <div className="actions">
         {CONTENT_SLOTS.map((id) => (
-          <button key={id} className="secondary-btn" type="button" onClick={() => setSlot(id)}>
+          <CommandButton command="admin.content.slot" key={id} className="secondary-btn" type="button" onDone={() => setSlot(id)}>
             {id}
-          </button>
+          </CommandButton>
         ))}
       </div>
       <article className="panel">
@@ -43,10 +44,8 @@ export function ContentPage() {
         </label>
         <pre>{phonePreview(book.published)}</pre>
         <div className="actions">
-          <button
-            className="primary-btn"
-            type="button"
-            onClick={() => {
+          <CommandButton command="admin.content.publish" className="primary-btn"
+            type="button" onDone={() => {
               if (!agent) return;
               const result = publishContent(book, agent.id);
               if (result.error) setNotice(result.error);
@@ -54,20 +53,16 @@ export function ContentPage() {
                 save(result.book);
                 setNotice(`${slot} published. The other texts are unchanged.`);
               }
-            }}
-          >
+            }}>
             Publish
-          </button>
-          <button
-            className="secondary-btn"
-            type="button"
-            onClick={() => {
+          </CommandButton>
+          <CommandButton command="admin.content.rollback" className="secondary-btn"
+            type="button" onDone={() => {
               save(rollbackContent(book));
               setNotice(`${slot} rolled back.`);
-            }}
-          >
+            }}>
             Roll back
-          </button>
+          </CommandButton>
         </div>
       </article>
     </>

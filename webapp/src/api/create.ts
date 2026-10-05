@@ -21,6 +21,8 @@ export type CommandInput = {
   after: string;
   sliceKey?: string;
   value?: unknown;
+  collection?: string;
+  patch?: Record<string, string | number | boolean | null>;
 };
 
 export type AdminApi = {
@@ -72,6 +74,16 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       await pause(delayMs, fault);
       assertWritable(fault);
       let db = loadDb();
+      if (input.collection && input.patch) {
+        const key = input.collection as keyof DemoDb;
+        const rows = db[key];
+        if (Array.isArray(rows)) {
+          db = {
+            ...db,
+            [key]: rows.map((row) => (row.id === input.targetId ? { ...row, ...input.patch } : row)),
+          };
+        }
+      }
       if (input.sliceKey) db = { ...db, slices: { ...db.slices, [input.sliceKey]: input.value } };
       db = addAudit(db, {
         actorId: input.actorId,
