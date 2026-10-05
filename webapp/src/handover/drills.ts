@@ -1,6 +1,7 @@
 import { ROLE_PERMISSIONS, type Role } from "../auth/permissions.ts";
 import { editContent, emptyContent, publishContent, rollbackContent } from "../content/book.ts";
 import { blankDocuments, setAccount, type Driver } from "../drivers/gate.ts";
+import { APPS } from "../gates/apps.ts";
 import { gateB } from "../gates/scenarios.ts";
 import { canStartCheckout, existingAuthContinues, type PaymentMethod } from "../payments/book.ts";
 import { assignReservation, needsDriverSoon, type Reservation } from "../reservations/book.ts";
@@ -31,7 +32,7 @@ export function healthAlerts(): { id: string; text: string }[] {
     { id: "demo", text: "The live admin is the demo adapter." },
     { id: "gate-b", text: gate.reason },
     { id: "maps", text: "The zone map is OpenStreetMap. No Google key is set." },
-    { id: "rider", text: "The rider critical-flow check was red and has not been reproduced in this repository." },
+    { id: "rider", text: `${APPS.map((app) => `${app.name} ${app.sha.slice(0, 7)}`).join(" and ")} are live frontends. They are not connected to this admin. The rider critical-flow check is still red.` },
   ];
 }
 
