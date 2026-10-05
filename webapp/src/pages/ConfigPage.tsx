@@ -645,6 +645,7 @@ export function ConfigPage() {
         <div className="actions">
           <CommandButton
             command="admin.config.review"
+            confirmTarget={false}
             className="secondary-btn"
             type="button"
             targetId="configuration"
@@ -662,6 +663,7 @@ export function ConfigPage() {
 
           <CommandButton
             command="admin.config.approve"
+            confirmTarget={false}
             className="secondary-btn"
             type="button"
             targetId="configuration"
@@ -679,6 +681,7 @@ export function ConfigPage() {
 
           <CommandButton
             command="admin.config.publish"
+            confirmTarget={false}
             className="primary-btn"
             type="button"
             targetId="configuration"
@@ -704,6 +707,7 @@ export function ConfigPage() {
 
           <CommandButton
             command="admin.config.rollback"
+            confirmTarget={false}
             className="secondary-btn"
             type="button"
             targetId="configuration"
