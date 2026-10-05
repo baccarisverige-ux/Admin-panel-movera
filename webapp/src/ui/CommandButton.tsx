@@ -23,6 +23,7 @@ type CommandButtonProps = {
   expectedRev?: number;
   sliceKey?: string;
   value?: unknown;
+  confirmTarget?: boolean;
   storeReason?: boolean;
   onDone?: (result?: CommandResult) => void;
   children: ReactNode;
@@ -46,6 +47,7 @@ export function CommandButton({
   expectedRev,
   sliceKey,
   value,
+  confirmTarget = true,
   storeReason,
   onDone,
   children,
@@ -59,7 +61,7 @@ export function CommandButton({
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState(ACTION_REASONS[0]);
   const [typed, setTyped] = useState("");
-  const mustType = targetId ?? "";
+  const mustType = confirmTarget ? (targetId ?? "") : "";
   const confirmed = mustType.length === 0 || typed === mustType;
 
   function fire(chosen: string) {
