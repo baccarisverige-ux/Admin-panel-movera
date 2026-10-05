@@ -1,12 +1,12 @@
 import { useState } from "react";
+import { useAdminPage } from "../api/AdminApiContext";
 import {
-  catalogFor,
   type ChatCustom,
   type CommunicationsCustom,
   type CustomPage,
   type SettingsCustom,
   type TripsCustom,
-} from "../data/catalog";
+} from "../api/read";
 import { DataTable } from "../ui/DataTable";
 import { EntityCards } from "../ui/EntityCards";
 import { MapCanvas } from "../ui/MapCanvas";
@@ -21,7 +21,10 @@ type GenericPageProps = {
 };
 
 export function GenericPage({ pageId }: GenericPageProps) {
-  const entry = catalogFor(pageId);
+  const query = useAdminPage(pageId);
+  if (query.isPending) return <p className="state-line">Loading</p>;
+  if (query.isError || !query.data) return <p className="state-line">Could not load this page.</p>;
+  const entry = query.data;
 
   return (
     <>

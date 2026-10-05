@@ -10,9 +10,9 @@ import {
   ZONE_VOLUMES,
   calculateFare,
   catalogFor,
-  formatUsd,
+  formatSek,
   type FareCategoryId,
-} from "../data/catalog";
+} from "../api/read";
 import { PageHeading } from "../ui/PageHeading";
 import { StatsGrid } from "../ui/StatsGrid";
 import { ZoneSelect } from "../ui/ZoneSelect";
@@ -24,7 +24,7 @@ export function DashboardPage() {
   const [category, setCategory] = useState<FareCategoryId>("economy");
   const [distance, setDistance] = useState("");
   const [duration, setDuration] = useState("");
-  const [fare, setFare] = useState("$0.00");
+  const [fare, setFare] = useState("0,00 kr");
   const [chartRange, setChartRange] = useState<(typeof CHART_RANGES)[number]>("Day");
 
   function onCalculate() {
@@ -33,7 +33,7 @@ export function DashboardPage() {
       Number(distance) || 0,
       Number(duration) || 0,
     );
-    setFare(formatUsd(total));
+    setFare(formatSek(total));
   }
 
   return (

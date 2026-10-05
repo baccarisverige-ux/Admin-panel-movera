@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ZONE_MAP_LABELS, ZONES_TABLE, catalogFor } from "../data/catalog";
+import { useForm } from "react-hook-form";
+import { ZONE_MAP_LABELS, ZONES_TABLE, catalogFor } from "../api/read";
 import { DataTable } from "../ui/DataTable";
 import { MapCanvas } from "../ui/MapCanvas";
 import { Modal } from "../ui/Modal";
@@ -8,6 +9,7 @@ import { PageHeading } from "../ui/PageHeading";
 export function ZonesPage() {
   const page = catalogFor("zones");
   const [modalOpen, setModalOpen] = useState(false);
+  const form = useForm({ defaultValues: { name: "", city: "Stockholm", country: "Sweden" } });
 
   function closeModal() {
     setModalOpen(false);
@@ -41,15 +43,15 @@ export function ZonesPage() {
       <Modal open={modalOpen} title="Create New Zone" onClose={closeModal}>
         <label>
           Zone Name
-          <input />
+          <input {...form.register("name")} />
         </label>
         <label>
           City
-          <input />
+          <input {...form.register("city")} />
         </label>
         <label>
           Country
-          <input />
+          <input {...form.register("country")} />
         </label>
         <label>Define Zone Boundaries</label>
         <div className="button-row">

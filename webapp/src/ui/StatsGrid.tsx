@@ -1,4 +1,4 @@
-import type { DashboardStat, StatTuple } from "../data/catalog";
+import type { DashboardStat, StatTuple } from "../api/read";
 
 type MiniStatsProps = {
   variant?: "mini";

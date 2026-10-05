@@ -113,23 +113,23 @@ export type PriceRow = [
 export const DEDICATED_PAGE_IDS = ["dashboard", "zones", "pricing"] as const;
 
 export const ZONE_OPTIONS = [
-  "All Zones",
-  "Downtown (Z001)",
-  "Uptown (Z002)",
-  "Midtown (Z003)",
+  "All Stockholm zones",
+  "Norrmalm (Z001)",
+  "Södermalm (Z002)",
+  "Östermalm (Z003)",
 ] as const;
 
 export const FARE_ZONE_OPTIONS = [
-  "Downtown (Z001)",
-  "Uptown (Z002)",
-  "Midtown (Z003)",
+  "Norrmalm (Z001)",
+  "Södermalm (Z002)",
+  "Östermalm (Z003)",
 ] as const;
 
 export const FARE_RATES: Record<FareCategoryId, FareRates> = {
-  economy: [4, 1.5, 0.3, 8],
-  comfort: [6, 2.1, 0.42, 12],
-  premium: [10, 3.25, 0.6, 20],
-  xl: [8, 2.7, 0.5, 16],
+  economy: [29, 12, 4, 49],
+  comfort: [39, 15, 5, 69],
+  premium: [59, 22, 7, 99],
+  xl: [49, 18, 6, 79],
 };
 
 export const FARE_CATEGORIES: { id: FareCategoryId; label: string }[] = [
@@ -150,21 +150,22 @@ export function calculateFare(
   return Math.max(rates[3], rates[0] + distance * rates[1] + duration * rates[2]);
 }
 
-export function formatUsd(amount: number): string {
-  return `$${amount.toFixed(2)}`;
+export function formatSek(amount: number): string {
+  const [whole, frac] = amount.toFixed(2).split(".");
+  return `${whole},${frac} kr`;
 }
 
 export const PRICE_ROWS: PriceRow[] = [
-  ["Economy", "4.00", "1.50", "0.30", "8.00", "150.00", "0", "20"],
-  ["Comfort", "6.00", "2.10", "0.42", "12.00", "220.00", "0", "25"],
-  ["Premium", "10.00", "3.25", "0.60", "20.00", "350.00", "0", "30"],
+  ["Movera", "29", "12", "4", "49", "1500", "0", "20"],
+  ["Comfort", "39", "15", "5", "69", "2200", "0", "25"],
+  ["Premium", "59", "22", "7", "99", "3500", "0", "30"],
 ];
 
 export const DASHBOARD_STATS: DashboardStat[] = [
   { icon: "🚕", label: "Online Drivers", value: "1,247", trend: "↗ 12% from yesterday" },
   { icon: "👥", label: "Active Riders", value: "3,582", trend: "↗ 8% from yesterday" },
   { icon: "↗", label: "Ongoing Trips", value: "428", trend: "↗ 3% from yesterday" },
-  { icon: "💳", label: "Today's Revenue", value: "$24,587", trend: "↗ 15% from yesterday" },
+  { icon: "💳", label: "Today's Revenue", value: "24 587 kr", trend: "↗ 15% from yesterday" },
 ];
 
 export const DASHBOARD_ALERTS: DashboardAlert[] = [
@@ -188,16 +189,16 @@ export const DASHBOARD_ALERTS: DashboardAlert[] = [
     tone: "info",
     icon: "↗",
     title: "Surge Demand Detected",
-    body: "High demand detected in downtown area. Consider activating boost pricing.",
+    body: "High demand detected in Norrmalm. Consider activating boost pricing.",
     time: "2 hours ago",
     action: "Activate",
   },
 ];
 
 export const ZONE_VOLUMES: ZoneVolume[] = [
-  { name: "Downtown", count: "18,420", swatch: "c1" },
-  { name: "Uptown", count: "13,267", swatch: "c2" },
-  { name: "Midtown", count: "11,160", swatch: "c3" },
+  { name: "Norrmalm", count: "18,420", swatch: "c1" },
+  { name: "Södermalm", count: "13,267", swatch: "c2" },
+  { name: "Östermalm", count: "11,160", swatch: "c3" },
 ];
 
 export const QUICK_ACTIONS: QuickAction[] = [
@@ -219,16 +220,16 @@ export const TOTAL_TRIPS = "42,847";
 export const ZONES_TABLE: TableData = {
   head: ["Zone ID", "Name", "City", "Country", "Status", "Actions"],
   rows: [
-    ["Z001", "Downtown", "New York", "USA", "Active", "Edit|Delete"],
-    ["Z002", "Uptown", "New York", "USA", "Active", "Edit|Delete"],
-    ["Z003", "Midtown", "New York", "USA", "Inactive", "Edit|Delete"],
+    ["Z001", "Norrmalm", "Stockholm", "Sweden", "Active", "Edit|Delete"],
+    ["Z002", "Södermalm", "Stockholm", "Sweden", "Active", "Edit|Delete"],
+    ["Z003", "Östermalm", "Stockholm", "Sweden", "Inactive", "Edit|Delete"],
   ],
 };
 
-export const ZONE_MAP_LABELS = ["Downtown", "Uptown", "Midtown"] as const;
+export const ZONE_MAP_LABELS = ["Norrmalm", "Södermalm", "Östermalm"] as const;
 
 const ADMIN_CHAT: ChatThread = {
-  heading: "Chat with John Doe (Driver) - Zone: Downtown",
+  heading: "Chat with Erik Lind (Driver) - Zone: Norrmalm",
   messages: [
     { role: "admin", text: "Hello John, how can I help you today?" },
     {
@@ -247,7 +248,7 @@ const ADMIN_CHAT: ChatThread = {
 };
 
 const DRIVER_CHAT: ChatThread = {
-  heading: "John Driver (D2847) • Zone: Downtown • Active",
+  heading: "Erik Lind (D2847) • Zone: Norrmalm • Active",
   messages: [
     { role: "admin", text: "Hello John, how can I help you today?" },
     {
@@ -269,7 +270,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
       ["Online Drivers", "1,247"],
       ["Active Riders", "3,582"],
       ["Ongoing Trips", "428"],
-      ["Today's Revenue", "$24,587"],
+      ["Today's Revenue", "24 587 kr"],
     ],
   },
   zones: {
@@ -307,7 +308,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     cards: [
       [
         "SOS Alert - Trip #T38472",
-        "Driver John D. triggered SOS at 14:32. Location: 5th Ave & 42nd St",
+        "Driver John D. triggered SOS at 14:32. Location: Sveavägen 12",
         "Respond|View on Map|Archive",
       ],
       [
@@ -337,7 +338,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
       tabs: ["Popups", "Chat", "Notifications", "Templates"],
       targets: ["All Users", "Specific Zone", "Single User"],
       messageTypes: ["Info", "Warning", "Action Required"],
-      zones: ["Downtown (Z001)", "Uptown (Z002)", "Midtown (Z003)"],
+      zones: ["Norrmalm (Z001)", "Södermalm (Z002)", "Östermalm (Z003)"],
       recentPopups: [
         {
           title: "System maintenance scheduled for tonight",
@@ -345,7 +346,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
         },
         {
           title: "Heavy traffic expected due to parade",
-          detail: "Zone: Downtown • Warning • 92% acknowledged",
+          detail: "Zone: Norrmalm • Warning • 92% acknowledged",
         },
       ],
       chat: ADMIN_CHAT,
@@ -364,7 +365,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
             "T38472",
             "John D. (D2847)",
             "Emma R.",
-            "5th Ave & 42nd St",
+            "Sveavägen 12",
             "Central Park",
             "Ongoing",
             "Reassign · Cancel",
@@ -386,17 +387,17 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     title: "Reports & Analytics",
     subtitle: "Review financial, driver, passenger and zone performance.",
     stats: [
-      ["Downtown Revenue", "$198,452"],
-      ["Uptown Revenue", "$152,369"],
-      ["Midtown Revenue", "$124,785"],
+      ["Norrmalm Revenue", "198 452 kr"],
+      ["Södermalm Revenue", "152 369 kr"],
+      ["Östermalm Revenue", "124 785 kr"],
       ["Reporting Period", "Last 30 days"],
     ],
     table: {
       head: ["Zone", "Today", "This Week", "This Month", "Growth"],
       rows: [
-        ["Downtown", "$8,452", "$52,147", "$198,452", "+12%"],
-        ["Uptown", "$6,784", "$41,258", "$152,369", "+8%"],
-        ["Midtown", "$5,321", "$32,147", "$124,785", "-3%"],
+        ["Norrmalm", "8 452 kr", "52 147 kr", "198 452 kr", "+12%"],
+        ["Södermalm", "6 784 kr", "41 258 kr", "152 369 kr", "+8%"],
+        ["Östermalm", "5 321 kr", "32 147 kr", "124 785 kr", "-3%"],
       ],
     },
   },
@@ -406,13 +407,13 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     stats: [
       ["NYC Drivers", "247"],
       ["NYC Riders", "1,582"],
-      ["NYC Revenue", "$24.5K"],
+      ["Stockholm revenue", "24,5K kr"],
       ["NYC Rating", "4.7"],
     ],
     cards: [
       [
         "NYC Metro",
-        "Owner: John Smith • Zones: Downtown, Uptown, Midtown • Commission: 15%",
+        "Owner: John Smith • Zones: Norrmalm, Södermalm, Östermalm • Commission: 15%",
         "Edit|Reports|Remove",
       ],
       [
@@ -422,7 +423,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
       ],
       [
         "LA Metro",
-        "Owner: Michael Brown • Zones: Hollywood, Downtown, Beverly Hills • Commission: 20%",
+        "Owner: Michael Brown • Zones: Solna, Norrmalm, Bromma • Commission: 20%",
         "Edit|Reports|Activate",
       ],
     ],
@@ -443,19 +444,19 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
           "APP-8472",
           "Michael Johnson",
           "2023-11-20",
-          "Downtown",
+          "Norrmalm",
           "Document Review",
           "Review · Approve · Reject",
         ],
         [
           "APP-8471",
-          "Sarah Wilson",
+          "Sara Berg",
           "2023-11-19",
-          "Uptown",
+          "Södermalm",
           "Background Check",
           "View · Request Info",
         ],
-        ["APP-8470", "David Brown", "2023-11-18", "Midtown", "Approved", "Details · Activate"],
+        ["APP-8470", "David Brown", "2023-11-18", "Östermalm", "Approved", "Details · Activate"],
       ],
     },
   },
@@ -463,16 +464,16 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     title: "Payment & Finance Management",
     subtitle: "Manage revenue, payouts, commission, refunds and gateways.",
     stats: [
-      ["Total Revenue", "$248,752"],
-      ["Driver Payouts", "$186,564"],
-      ["Commission", "$62,188"],
-      ["Refunds", "$2,458"],
+      ["Total Revenue", "248 752 kr"],
+      ["Driver Payouts", "186 564 kr"],
+      ["Commission", "62 188 kr"],
+      ["Refunds", "2 458 kr"],
     ],
     table: {
       head: ["Driver ID", "Driver Name", "Zone", "Amount", "Period", "Status", "Actions"],
       rows: [
-        ["D2847", "John Driver", "Downtown", "$1,247.50", "Nov 1-15, 2023", "Pending", "Pay · Details"],
-        ["D3921", "Sarah Wilson", "Uptown", "$984.75", "Nov 1-15, 2023", "Pending", "Pay · Details"],
+        ["D2847", "Erik Lind", "Norrmalm", "1 247,50 kr", "Nov 1-15, 2023", "Pending", "Pay · Details"],
+        ["D3921", "Sara Berg", "Södermalm", "984,75 kr", "Nov 1-15, 2023", "Pending", "Pay · Details"],
       ],
     },
   },
@@ -482,17 +483,17 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     cards: [
       [
         "Payment Failed - Trip T38472",
-        "CRITICAL • User: Emma Rider (R4821) • Zone: Downtown • Created: 15 min ago",
+        "CRITICAL • User: Emma Rider (R4821) • Zone: Norrmalm • Created: 15 min ago",
         "Take Action|View Details",
       ],
       [
         "Driver Navigation Issue",
-        "HIGH • User: John Driver (D2847) • Zone: Downtown • Created: 45 min ago",
+        "HIGH • User: Erik Lind (D2847) • Zone: Norrmalm • Created: 45 min ago",
         "Assign|View Details",
       ],
       [
         "Account Verification Request",
-        "NORMAL • User: Michael Thompson • Zone: Midtown • Created: 2 hours ago",
+        "NORMAL • User: Michael Thompson • Zone: Östermalm • Created: 2 hours ago",
         "Respond|View Details",
       ],
     ],
@@ -503,7 +504,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
           "TKT-8472",
           "Payment Failed - Trip T38472",
           "Emma Rider",
-          "Downtown",
+          "Norrmalm",
           "CRITICAL",
           "Open",
           "Respond · View",
@@ -511,8 +512,8 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
         [
           "TKT-8471",
           "Driver Navigation Issue",
-          "John Driver",
-          "Downtown",
+          "Erik Lind",
+          "Norrmalm",
           "HIGH",
           "In Progress",
           "Update · View",
@@ -526,15 +527,15 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     stats: [
       ["Active Promotions", "3 Active"],
       ["Total Uses", "24.5K"],
-      ["Discount Value", "$18.7K"],
+      ["Discount Value", "18,7K kr"],
       ["Conversion Rate", "12.8%"],
     ],
     table: {
       head: ["Promo Code", "Description", "Discount", "Zone", "Uses", "Status", "Actions"],
       rows: [
-        ["WELCOME20", "New User Welcome Discount", "20% off", "All Zones", "8,452", "Active", "Edit · Pause"],
-        ["RIDENOW15", "Weekend Special", "15% off", "Downtown", "3,247", "Active", "Edit · Pause"],
-        ["SAFETY10", "Safety Promotion", "10% off", "All Zones", "5,821", "Expired", "Copy · Reactivate"],
+        ["WELCOME20", "New User Welcome Discount", "20% off", "All Stockholm zones", "8,452", "Active", "Edit · Pause"],
+        ["RIDENOW15", "Weekend Special", "15% off", "Norrmalm", "3,247", "Active", "Edit · Pause"],
+        ["SAFETY10", "Safety Promotion", "10% off", "All Stockholm zones", "5,821", "Expired", "Copy · Reactivate"],
       ],
     },
   },
@@ -544,15 +545,15 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     cards: [
       [
         "Toyota Camry 2022 (V7842)",
-        "Owner: John Driver • Zone: Downtown • License Plate: ABC-1234 • Color: White • Seats: 4",
+        "Owner: Erik Lind • Zone: Norrmalm • License Plate: ABC-1234 • Color: White • Seats: 4",
         "Schedule Maintenance|View Documents|Service History",
       ],
     ],
     table: {
       head: ["Vehicle ID", "Model", "Owner", "Zone", "License Plate", "Status", "Actions"],
       rows: [
-        ["V7842", "Toyota Camry 2022", "John Driver", "Downtown", "ABC-1234", "Active", "Edit · Maintenance"],
-        ["V7843", "Honda Accord 2021", "Sarah Wilson", "Uptown", "XYZ-5678", "Active", "Edit · Maintenance"],
+        ["V7842", "Toyota Camry 2022", "Erik Lind", "Norrmalm", "ABC-1234", "Active", "Edit · Maintenance"],
+        ["V7843", "Honda Accord 2021", "Sara Berg", "Södermalm", "XYZ-5678", "Active", "Edit · Maintenance"],
       ],
     },
   },
@@ -562,21 +563,21 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     cards: [
       [
         "Emma Rider — ⭐⭐⭐⭐⭐",
-        "Trip: T38472 • Driver: John Driver • “Excellent service! Driver was punctual, car was clean, and the ride was smooth.”",
+        "Trip: T38472 • Driver: Erik Lind • “Excellent service! Driver was punctual, car was clean, and the ride was smooth.”",
         "Approve|Reject|Flag",
       ],
       [
         "Michael Thompson — ⭐⭐",
-        "Trip: T38471 • Driver: Sarah Wilson • “Driver took a longer route and the car wasn’t very clean.”",
+        "Trip: T38471 • Driver: Sara Berg • “Driver took a longer route and the car wasn’t very clean.”",
         "Respond|View Details",
       ],
     ],
     table: {
       head: ["Zone", "Average Rating", "Total Reviews", "5 Stars", "1-2 Stars", "Response Rate"],
       rows: [
-        ["Downtown", "4.7", "8,452", "6,841 (81%)", "247 (3%)", "94%"],
-        ["Uptown", "4.5", "6,784", "5,128 (76%)", "339 (5%)", "89%"],
-        ["Midtown", "4.6", "5,321", "4,152 (78%)", "213 (4%)", "91%"],
+        ["Norrmalm", "4.7", "8,452", "6,841 (81%)", "247 (3%)", "94%"],
+        ["Södermalm", "4.5", "6,784", "5,128 (76%)", "339 (5%)", "89%"],
+        ["Östermalm", "4.6", "5,321", "4,152 (78%)", "213 (4%)", "91%"],
       ],
     },
   },
@@ -586,15 +587,15 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     cards: [
       [
         "SOS Alert - Trip #T38472",
-        "Driver: John Driver • Rider: Emma Rider • Zone: Downtown • Location: 5th Ave & 42nd St • CRITICAL",
+        "Driver: Erik Lind • Rider: Emma Rider • Zone: Norrmalm • Location: Sveavägen 12 • CRITICAL",
         "Contact Emergency|View Location|Contact Driver",
       ],
     ],
     table: {
       head: ["Incident ID", "Type", "Trip ID", "Zone", "Severity", "Status", "Actions"],
       rows: [
-        ["INC-8472", "SOS Alert", "T38472", "Downtown", "CRITICAL", "Active", "Respond · Details"],
-        ["INC-8471", "Accident Report", "T38465", "Uptown", "HIGH", "Investigating", "Update · Details"],
+        ["INC-8472", "SOS Alert", "T38472", "Norrmalm", "CRITICAL", "Active", "Respond · Details"],
+        ["INC-8471", "Accident Report", "T38465", "Södermalm", "HIGH", "Investigating", "Update · Details"],
       ],
     },
   },
@@ -602,9 +603,9 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     title: "Audit & Compliance",
     subtitle: "Review system activity and compliance reports.",
     cards: [
-      ["2023-11-21 14:32:15", "Admin login from IP 192.168.1.105 • User: admin@rideshare.com", ""],
-      ["2023-11-21 13:45:22", "Driver document approved • Driver: D2847 (John Driver)", ""],
-      ["2023-11-21 12:15:08", "Pricing updated for Zone Downtown • User: admin@rideshare.com", ""],
+      ["2023-11-21 14:32:15", "Admin login from IP 192.168.1.105 • User: admin@movera.se", ""],
+      ["2023-11-21 13:45:22", "Driver document approved • Driver: D2847 (Erik Lind)", ""],
+      ["2023-11-21 12:15:08", "Pricing updated for Zone Norrmalm • User: admin@movera.se", ""],
     ],
     table: {
       head: ["Report Type", "Period", "Generated", "Status", "Actions"],
@@ -629,7 +630,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
       rows: [
         ["Weekend Promotion", "Push + Email", "All Users", "24,852", "22.7%", "Completed", "View · Duplicate"],
         ["Driver App Update", "Push", "All Drivers", "8,452", "45.2%", "Completed", "View · Duplicate"],
-        ["Safety Reminder", "SMS", "Zone: Downtown", "12,458", "18.3%", "Scheduled", "Edit · Cancel"],
+        ["Safety Reminder", "SMS", "Zone: Norrmalm", "12,458", "18.3%", "Scheduled", "Edit · Cancel"],
       ],
     },
   },
@@ -700,12 +701,12 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
       ["Driver's License", "Expires: 2024-06-15"],
       ["Vehicle Insurance", "Expires: 2024-03-20"],
       ["Account Status", "Active"],
-      ["Zone", "Downtown"],
+      ["Zone", "Norrmalm"],
     ],
     cards: [
       [
-        "John Driver",
-        "Driver ID: D2847 • Zone: Downtown • Joined: 2023-01-15 • john.driver@example.com • +1 (555) 123-4567",
+        "Erik Lind",
+        "Driver ID: D2847 • Zone: Norrmalm • Joined: 2023-01-15 • john.driver@example.com • +46 70 123 45 67",
         "Suspend|Edit|Delete",
       ],
     ],
@@ -716,12 +717,10 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     custom: {
       kind: "settings",
       tabs: ["General", "Security", "Notifications", "Integrations"],
-      systemName: "RideShare Pro",
-      currencies: ["USD ($)", "EUR (€)", "GBP (£)", "SEK (kr)", "TND (د.ت)"],
+      systemName: "Movera",
+      currencies: ["SEK (kr)"],
       timeZones: [
-        "UTC-5 (Eastern Time)",
-        "UTC-6 (Central Time)",
-        "UTC-8 (Pacific Time)",
+        "Europe/Stockholm"
       ],
       sessionTimeout: "30",
       maxLoginAttempts: "5",

@@ -34,6 +34,7 @@ jobs:
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
+          VITE_DATA: demo
         run: |
           npm ci
           npm test
