@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
   BarChart3,
@@ -33,8 +34,11 @@ import {
 } from "lucide-react";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
+import { useAdminApi } from "../api/AdminApiContext";
+import { useFreshness, useInbox, useSearch } from "../api/hooks";
+import { ZONES } from "../api/seed";
+import type { Fault } from "../api/demoStore";
 import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
-import { ZoneSelect } from "../ui/ZoneSelect";
 
 const ICONS: Record<NavIcon, typeof Menu> = {
   LayoutDashboard,
@@ -79,10 +83,32 @@ function buildLabel(): string {
 
 export function AppShell({ page, children }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const client = useQueryClient();
+  const api = useAdminApi();
   const { agent, signOut } = useSession();
   const visible = MENU.filter((item) => !agent || can(agent.role, item.permission));
   const groups = MENU_GROUPS.filter((group) => visible.some((item) => item.group === group));
   const env = import.meta.env.VITE_DATA || "demo";
+  const scope = params.get("scope") ?? "";
+  const found = useSearch(searchOpen ? query : "");
+  const inbox = useInbox();
+  const freshness = useFreshness();
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="app-shell">
@@ -125,19 +151,69 @@ export function AppShell({ page, children }: AppShellProps) {
             <p className="crumb">{page.group}</p>
           </div>
           <div className="topbar-actions">
-            <ZoneSelect scoped />
+            <select
+              aria-label="Scope"
+              value={scope}
+              onChange={(event) => {
+                const next = new URLSearchParams(params);
+                if (event.target.value) next.set("scope", event.target.value);
+                else next.delete("scope");
+                setParams(next);
+              }}
+            >
+              <option value="">All Stockholm</option>
+              {ZONES.map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+            <button className="secondary-btn" type="button" onClick={() => setSearchOpen(true)}>Search</button>
+            <button className="secondary-btn" type="button" aria-label="Inbox" onClick={() => setInboxOpen((open) => !open)}>Inbox</button>
             <div className="admin-profile">
               <div className="avatar">{agent ? agent.name.slice(0, 2).toUpperCase() : "AD"}</div>
               <div>
                 <strong>{agent?.name ?? "Signed out"}</strong>
-                <span>{agent?.role ?? "signed out"}</span>
+                <span>{env} · {scope || "all"} · {agent?.role ?? "signed out"} · {freshness.data ?? "…"}</span>
               </div>
-              <button className="link-action" type="button" onClick={signOut}>
-                Sign out
-              </button>
+              {agent?.role === "super" ? (
+                <>
+                  <select aria-label="Simulate errors" defaultValue="none" onChange={(event) => void api.setFault(event.target.value as Fault)}>
+                    {["none", "401", "403", "409", "422", "429", "503", "offline", "slow", "empty"].map((fault) => (
+                      <option key={fault} value={fault}>{fault}</option>
+                    ))}
+                  </select>
+                  <button className="link-action" type="button" onClick={() => void api.reset().then(() => client.invalidateQueries())}>Reset demo</button>
+                </>
+              ) : null}
+              <button className="link-action" type="button" onClick={signOut}>Sign out</button>
             </div>
           </div>
         </header>
+        {searchOpen ? (
+          <div className="panel">
+            <label>
+              Search
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Plate, trip or phone" />
+            </label>
+            <ul>
+              {(found.data ?? []).map((hit) => (
+                <li key={`${hit.kind}-${hit.id}`}>
+                  <button className="link-action" type="button" onClick={() => { setSearchOpen(false); navigate(hit.path); }}>{hit.kind}: {hit.label}</button>
+                </li>
+              ))}
+            </ul>
+            <button className="secondary-btn" type="button" onClick={() => setSearchOpen(false)}>Close</button>
+          </div>
+        ) : null}
+        {inboxOpen ? (
+          <div className="panel">
+            <h3>Inbox</h3>
+            <ul>
+              {(inbox.data ?? []).map((item) => (
+                <li key={item.id}><Link to={item.path} onClick={() => setInboxOpen(false)}>{item.title}</Link></li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <main className="content">{children}</main>
         <footer className="build-footer">Demo data · {env} · {buildLabel()}</footer>
       </section>

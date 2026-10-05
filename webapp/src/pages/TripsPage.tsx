@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router";
+import { useTrips } from "../api/hooks";
+import { statusLabel } from "../domain/labels";
 import { DataTable } from "../ui/DataTable";
+import { StatusDot } from "../ui/kit";
 import {
   DEFAULT_DISPATCH,
   adjustFare,
@@ -35,6 +38,7 @@ export function TripsPage() {
   const [rules, setRules] = useState<DispatchRules>(DEFAULT_DISPATCH);
   const [notice, setNotice] = useState("Pick a trip. A finished trip cannot be cancelled.");
   const selected = trips.find((trip) => trip.id === params.get("trip")) ?? null;
+  const seeded = useTrips(null);
 
   function replace(next: Trip) {
     setTrips(trips.map((trip) => (trip.id === next.id ? next : trip)));
@@ -45,14 +49,19 @@ export function TripsPage() {
       <div className="page-heading">
         <div>
           <h2>Trips</h2>
-          <p>Offer window {rules.offerSeconds} s. Search radius {rules.radiusKm} km. Rule version price-3.</p>
+          <p>Offer window {rules.offerSeconds} s. Search radius {rules.radiusKm} km. {seeded.data?.length ?? "…"} trips in the demo.</p>
         </div>
       </div>
       <p className="state-line">{notice}</p>
       <article className="panel">
         <DataTable
           head={["Trip", "Status", "Fare", "Driver"]}
-          rows={trips.map((trip) => [trip.id, trip.status, kr(trip.fareOre), trip.driverId ?? "none"])}
+          rows={trips.map((trip) => [
+            trip.id,
+            <StatusDot key={trip.id} tone={trip.status === "completed" ? "green" : trip.status.includes("cancel") || trip.status === "failed" ? "red" : "amber"}>{statusLabel(trip.status)}</StatusDot>,
+            kr(trip.fareOre),
+            trip.driverId ?? "none",
+          ])}
           onRow={(index) => setParams({ trip: trips[index]?.id ?? "" })}
         />
       </article>

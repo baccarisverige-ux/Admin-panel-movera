@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { advance, testSend, type Delivery, type Outbound } from "../messages/book";
+import { advance, testSend, useRecords, type Delivery, type Outbound } from "../api/hooks";
 import { fillTemplate } from "../messages/template";
 
 const PEOPLE = [
@@ -16,13 +16,14 @@ export function MessagesPage() {
   const [name, setName] = useState("Sara");
   const [trip, setTrip] = useState("");
   const filled = fillTemplate(LATE, { name, trip });
+  const templates = useRecords("templates", null);
 
   return (
     <>
       <div className="page-heading">
         <div>
           <h2>Messages</h2>
-          <p>Status {message.status}. Accepted, sent, delivered and failed stay separate.</p>
+          <p>Status {message.status}. {templates.data?.length ?? "…"} island templates. Accepted, sent, delivered and failed stay separate.</p>
         </div>
       </div>
       <article className="panel">

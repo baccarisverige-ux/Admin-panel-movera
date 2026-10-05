@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { averageStars, BONUSES, hideReview, type Review } from "../growth/book";
+import { averageStars, BONUSES, hideReview, useRecords, type Review } from "../api/hooks";
 import { redeemReferral, type Referral } from "../growth/referral";
 
 const SEED: Review[] = [
@@ -12,13 +12,14 @@ export function GrowthPage() {
   const [notice, setNotice] = useState(`Bonuses: ${BONUSES.map((bonus) => bonus.id).join(", ")}.`);
   const [code, setCode] = useState<Referral>({ code: "SARA20", ownerId: "R9", uses: 0, cap: 2 });
   const [rider, setRider] = useState("R1");
+  const bonuses = useRecords("bonuses", null);
 
   return (
     <>
       <div className="page-heading">
         <div>
           <h2>Growth</h2>
-          <p>Average of visible reviews: {averageStars(reviews).toFixed(1)}</p>
+          <p>Average of visible reviews: {averageStars(reviews).toFixed(1)}. Bonuses in the demo: {bonuses.data?.length ?? "…"}.</p>
         </div>
       </div>
       <p className="state-line">{notice}</p>

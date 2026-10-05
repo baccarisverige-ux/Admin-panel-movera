@@ -1,6 +1,8 @@
 import { catalogFor, type CatalogEntry } from "../data/catalog.ts";
 import { CURRENCY, TIME_ZONE } from "../domain/contract.ts";
-import { apiRequest } from "./httpClient.ts";
+import { addAudit, assertWritable, findHit, loadDb, pause, readFault, resetDb, rowsFor, writeFault, type Fault } from "./demoStore.ts";
+import { ApiError, apiRequest } from "./httpClient.ts";
+import type { DemoDb, DemoRecord, InboxItem } from "./seed.ts";
 
 export type ApiEnv = {
   PROD: boolean;
@@ -10,19 +12,37 @@ export type ApiEnv = {
 
 export type PageResult = CatalogEntry;
 
+export type CommandInput = {
+  action: string;
+  targetId: string;
+  reason: string;
+  actorId: string;
+  before: string;
+  after: string;
+  sliceKey?: string;
+  value?: unknown;
+};
+
 export type AdminApi = {
   kind: "fixture" | "http";
   demo: boolean;
   ready: () => Promise<{ currency: typeof CURRENCY; timeZone: typeof TIME_ZONE; demo: boolean }>;
   page: (pageId: string) => Promise<PageResult>;
+  list: (name: string, scope: string | null) => Promise<DemoRecord[]>;
+  search: (query: string) => Promise<{ kind: string; id: string; label: string; path: string }[]>;
+  command: (input: CommandInput) => Promise<{ message: string; db: DemoDb }>;
+  reset: () => Promise<DemoDb>;
+  getFault: () => Promise<Fault>;
+  setFault: (fault: Fault) => Promise<void>;
+  inbox: () => Promise<InboxItem[]>;
+  freshness: () => Promise<string>;
+  readSlice: <T>(key: string, fallback: T) => Promise<T>;
 };
 
 const DEMO_DELAY_MS = 200;
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+function unsupported(): never {
+  throw new ApiError(0, "Admin API is not connected.");
 }
 
 export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
@@ -30,12 +50,62 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
     kind: "fixture",
     demo: true,
     async ready() {
-      await wait(delayMs);
+      await pause(delayMs, "none");
       return { currency: CURRENCY, timeZone: TIME_ZONE, demo: true };
     },
     async page(pageId) {
-      await wait(delayMs);
+      await pause(delayMs, "none");
       return catalogFor(pageId);
+    },
+    async list(name, scope) {
+      const fault = readFault();
+      await pause(delayMs, fault);
+      if (fault === "offline") assertWritable(fault);
+      return rowsFor(loadDb(), name, scope, fault);
+    },
+    async search(query) {
+      await pause(delayMs, "none");
+      return findHit(loadDb(), query);
+    },
+    async command(input) {
+      const fault = readFault();
+      await pause(delayMs, fault);
+      assertWritable(fault);
+      let db = loadDb();
+      if (input.sliceKey) db = { ...db, slices: { ...db.slices, [input.sliceKey]: input.value } };
+      db = addAudit(db, {
+        actorId: input.actorId,
+        action: input.action,
+        targetId: input.targetId,
+        before: input.before,
+        after: input.after,
+        reason: input.reason,
+        result: "committed",
+      });
+      return { message: "Saved in demo.", db };
+    },
+    async reset() {
+      await pause(delayMs, "none");
+      return resetDb();
+    },
+    async getFault() {
+      return readFault();
+    },
+    async setFault(fault) {
+      writeFault(fault);
+    },
+    async inbox() {
+      return loadDb().inbox;
+    },
+    async freshness() {
+      return loadDb().updatedAt;
+    },
+    async readSlice(key, fallback) {
+      const fault = readFault();
+      await pause(delayMs, fault);
+      if (fault === "empty") return fallback;
+      const value = loadDb().slices[key];
+      return (value ?? fallback) as typeof fallback;
     },
   };
 }
@@ -54,14 +124,18 @@ export function createHttpAdminApi(baseUrl = ""): AdminApi {
     async page(pageId) {
       return (await apiRequest(baseUrl, `/pages/${encodeURIComponent(pageId)}`)) as PageResult;
     },
+    list: async () => unsupported(),
+    search: async () => unsupported(),
+    command: async () => unsupported(),
+    reset: async () => unsupported(),
+    getFault: async () => unsupported(),
+    setFault: async () => unsupported(),
+    inbox: async () => unsupported(),
+    freshness: async () => unsupported(),
+    readSlice: async () => unsupported(),
   };
 }
 
-/**
- * A production build refuses the simulation unless this deploy is explicitly
- * the demo environment (VITE_DATA=demo). Real production must set
- * VITE_ADMIN_API=http.
- */
 export function createAdminApi(env: ApiEnv, delayMs = DEMO_DELAY_MS): AdminApi {
   const api = env.VITE_ADMIN_API ?? "";
   if (api === "http" || api.startsWith("http://") || api.startsWith("https://")) {

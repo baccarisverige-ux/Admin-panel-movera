@@ -1,14 +1,29 @@
 import { useState } from "react";
-import { advancePrivacy, blockRider, creditWallet, findRiders, RIDERS, signOutRider, type Rider } from "../riders/book";
+import { useSession } from "../auth/SessionContext";
+import { ACTION_REASONS } from "../domain/labels";
+import { RIDERS, blockRider, creditWallet, findRiders, signOutRider, advancePrivacy, useCommand, useRiders, useSlice, type Rider } from "../api/hooks";
+import { ConfirmDialog } from "../ui/kit";
 
 export function RidersPage() {
-  const [riders, setRiders] = useState<Rider[]>(RIDERS);
+  const session = useSession();
+  const seeded = useRiders(null);
+  const stored = useSlice("rider-cards", RIDERS);
+  const command = useCommand("admin.rider.block");
+  const riders = stored.value;
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("Search by name, phone or trip id.");
+  const [pending, setPending] = useState<Rider | null>(null);
   const found = findRiders(riders, query);
 
-  function replace(next: Rider) {
-    setRiders(riders.map((rider) => (rider.id === next.id ? next : rider)));
+  async function replace(next: Rider, reason: string, before: string) {
+    const rows = riders.map((rider) => (rider.id === next.id ? next : rider));
+    await stored.save(rows, {
+      targetId: next.id,
+      reason,
+      actorId: session.agent?.id ?? "nora",
+      before,
+      after: next.blocked ? "blocked" : "active",
+    });
   }
 
   return (
@@ -16,7 +31,7 @@ export function RidersPage() {
       <div className="page-heading">
         <div>
           <h2>Riders</h2>
-          <p>Block, sign-out, wallet credit and privacy requests.</p>
+          <p>Demo set: {seeded.data?.length ?? "…"} riders. Changes stay after reload.</p>
         </div>
       </div>
       <label>
@@ -36,18 +51,11 @@ export function RidersPage() {
             <button
               className="secondary-btn"
               type="button"
-              onClick={() => {
-                const result = blockRider(rider, !rider.blocked, rider.blocked ? "Appeal accepted" : "Safety review");
-                if (result.error) setNotice(result.error);
-                else {
-                  replace(result.rider);
-                  setNotice(result.rider.blocked ? "Rider blocked." : "Rider unblocked.");
-                }
-              }}
+              onClick={() => setPending(rider)}
             >
               {rider.blocked ? "Unblock" : "Block"}
             </button>
-            <button className="secondary-btn" type="button" onClick={() => { replace(signOutRider(rider)); setNotice("Signed out of all devices."); }}>
+            <button className="secondary-btn" type="button" onClick={() => { void replace(signOutRider(rider), "Sign out", `${rider.sessions} sessions`); setNotice("Signed out of all devices."); }}>
               Sign out
             </button>
             <button
@@ -57,19 +65,36 @@ export function RidersPage() {
                 const result = creditWallet(rider, 10_000);
                 if (result.error) setNotice(result.error);
                 else {
-                  replace(result.rider);
-                  setNotice("Wallet credited 100 kr.");
+                  replace(result.rider, "Wallet credit", `${rider.walletOre}`);
+                  setNotice(command.message || "Wallet credited 100 kr.");
                 }
               }}
             >
               Credit 100 kr
             </button>
-            <button className="primary-btn" type="button" onClick={() => { replace(advancePrivacy(rider)); setNotice("Privacy request moved forward."); }}>
+            <button className="primary-btn" type="button" onClick={() => { void replace(advancePrivacy(rider), "Privacy step", rider.privacy); setNotice("Privacy request moved forward."); }}>
               Privacy step
             </button>
           </div>
         </article>
       ))}
+      <ConfirmDialog
+        open={pending !== null}
+        record={pending ? `${pending.name} (${pending.id})` : ""}
+        typed={pending?.id ?? ""}
+        reasons={[...ACTION_REASONS]}
+        onClose={() => setPending(null)}
+        onConfirm={(reason) => {
+          if (!pending) return;
+          const result = blockRider(pending, !pending.blocked, reason);
+          if (result.error) setNotice(result.error);
+          else {
+            void replace(result.rider, reason, pending.blocked ? "blocked" : "active");
+            setNotice(result.rider.blocked ? "Rider blocked." : "Rider unblocked.");
+          }
+          setPending(null);
+        }}
+      />
     </>
   );
 }

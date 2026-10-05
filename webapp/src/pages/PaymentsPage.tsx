@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { markPaid, PAYMENT_METHODS, setMethod, type PaymentMethod } from "../payments/book";
+import { markPaid, PAYMENT_METHODS, setMethod, useRecords, type PaymentMethod } from "../api/hooks";
 
 const ON = Object.fromEntries(PAYMENT_METHODS.map((id) => [id, true])) as Record<PaymentMethod, boolean>;
 
@@ -7,13 +7,14 @@ export function PaymentsPage() {
   const [enabled, setEnabled] = useState(ON);
   const [notice, setNotice] = useState("Turning a method off affects new checkouts only.");
   const [paid, setPaid] = useState(false);
+  const payments = useRecords("payments", null);
 
   return (
     <>
       <div className="page-heading">
         <div>
           <h2>Payments</h2>
-          <p>Methods, refunds and payouts. Amounts are SEK.</p>
+          <p>Methods, refunds and payouts. {payments.data?.length ?? "…"} payments. Amounts are SEK.</p>
         </div>
       </div>
       <p className="state-line">{notice}</p>
