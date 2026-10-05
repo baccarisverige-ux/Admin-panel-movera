@@ -133,6 +133,7 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.modal.close", label: "Close dialog", reason: false, permission: "overview.read" },
   { id: "admin.tabs.select", label: "Select tab", reason: false, permission: "overview.read" },
   { id: "admin.ui.retry", label: "Retry", reason: false, permission: "overview.read" },
+  { id: "admin.ui.configEdit", label: "Edit configuration draft locally", reason: false, permission: "settings.edit" },
   { id: "admin.ui.drawerClose", label: "Close drawer", reason: false, permission: "overview.read" },
   { id: "admin.doc.image", label: "Show license image", reason: false, permission: "system.read" },
   { id: "admin.doc.pdf", label: "Show license PDF", reason: false, permission: "system.read" },
