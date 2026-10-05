@@ -8,6 +8,7 @@ import { ConfigPage } from "./pages/ConfigPage";
 import { DriversPage } from "./pages/DriversPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GenericPage } from "./pages/GenericPage";
+import { FleetPage } from "./pages/FleetPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { PricingPage } from "./pages/PricingPage";
@@ -35,7 +36,8 @@ function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "reports") return <ReportsPage />;
   if (pageId === "promotions" || pageId === "reviews") return <GrowthPage />;
   if (pageId === "content") return <ContentPage />;
-  if (pageId === "communications") return <MessagesPage />;
+  if (pageId === "communications" || pageId === "notifications") return <MessagesPage />;
+  if (pageId === "vehicles") return <FleetPage />;
   if (pageId === "support") return <SupportPage />;
   if (pageId === "incidents") return <SafetyPage />;
   if (pageId === "riders") return <RidersPage />;
