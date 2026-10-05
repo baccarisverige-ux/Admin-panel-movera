@@ -14,7 +14,7 @@ test("live map flags stale drivers", async ({ page }) => {
   await signIn(page);
   await page.getByRole("link", { name: "Live map" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Live map" })).toBeVisible();
-  await expect(page.getByText("OpenStreetMap")).toBeVisible();
+  await expect(page.locator(".page-heading")).toContainText("OpenStreetMap");
   await expect(page.getByRole("list", { name: "Live drivers" })).toContainText("Maja Holm · Stale");
   await expect(page.locator("[data-live='counts']")).toContainText("Stale 1");
   expect(errors, errors.join("\n")).toEqual([]);
