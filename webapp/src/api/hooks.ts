@@ -23,7 +23,7 @@ export { averageStars, BONUSES, hideReview } from "../growth/book.ts";
 export type { Review } from "../growth/book.ts";
 export { editContent, phonePreview, publishContent, rollbackContent } from "../content/book.ts";
 export type { ContentBook } from "../content/book.ts";
-export { advanceConfigClock, approveConfig, configDiff, effectiveValue, emptyConfig, impactPreview, missingTranslations, normalizeConfig, publishConfig, removeOverride, rollbackConfig, REASON_GROUPS, setAppUpdate, setAppVersion, setEnvironment, setExpiry, setFeature, setMaxStops, setOverride, setReason, setSchedule, setSwitch, setZoneOverride, submitConfigApproval } from "../config/book.ts";
+export { advanceConfigClock, approveConfig, configDiff, draftRevisionMatches, effectiveValue, emptyConfig, impactPreview, missingTranslations, normalizeConfig, publishConfig, removeOverride, rollbackConfig, REASON_GROUPS, setAppUpdate, setAppVersion, setEnvironment, setExpiry, setFeature, setMaxStops, setOverride, setReason, setSchedule, setSwitch, setZoneOverride, submitConfigApproval } from "../config/book.ts";
 export type { ConfigBook, EffectiveContext, FeatureKey, OverrideLevel, OverrideRule } from "../config/book.ts";
 
 export function useRecords(name: string, scope?: string | null) {
