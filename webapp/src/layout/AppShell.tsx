@@ -35,7 +35,7 @@ import {
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { useAdminApi } from "../api/AdminApiContext";
-import { useFreshness, useInbox, useSearch } from "../api/hooks";
+import { useInbox, useSearch } from "../api/hooks";
 import { ZONES } from "../api/seed";
 import type { Fault } from "../api/demoStore";
 import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
@@ -98,7 +98,6 @@ export function AppShell({ page, children }: AppShellProps) {
   const scope = params.get("scope") ?? "";
   const found = useSearch(searchOpen ? query : "");
   const inbox = useInbox();
-  const freshness = useFreshness();
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date()), 1000);
@@ -179,7 +178,7 @@ export function AppShell({ page, children }: AppShellProps) {
               <div className="avatar">{agent ? agent.name.slice(0, 2).toUpperCase() : "AD"}</div>
               <div>
                 <strong>{agent?.name ?? "Signed out"}</strong>
-                <span>{stockholm} · {env} · {scope || "all"} · {agent?.role ?? "signed out"} · {freshness.data ?? "…"}</span>
+                <span>{stockholm} · {env} · {scope || "all"} · {agent?.role ?? "signed out"}</span>
               </div>
               {agent?.role === "super" ? (
                 <>

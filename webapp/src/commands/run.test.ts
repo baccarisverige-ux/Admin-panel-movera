@@ -1,4 +1,4 @@
-import { emptyDb, runCommand, type CommandInput } from "./run.ts";
+import { emptyDb, readCommandDb, runCommand, withSignIn, type CommandInput } from "./run.ts";
 
 const assert = (ok: unknown, message: string) => {
   if (!ok) throw new Error(message);
@@ -28,6 +28,11 @@ assert(own.outcome.status === 403, "requester cannot approve");
 
 const clash = runCommand(db, base({ idempotencyKey: "k3", expectedRev: 1, actorId: "astrid" }), "2026-10-05T08:02:00Z");
 assert(clash.outcome.status === 409, "stale version conflicts");
+
+const signed = withSignIn(emptyDb(), "nora", "nora@movera.se", "2026-10-05T09:00:00Z");
+assert(signed.audits[0]?.action === "admin.auth.signIn", "sign-in is logged");
+assert(signed.audits[0]?.result === "committed", "sign-in log is committed");
+assert(readCommandDb(JSON.stringify(signed)).audits.length === 1, "sign-in log can be read back");
 
 const second = runCommand(db, base({ idempotencyKey: "k4", expectedRev: db.rev, actorId: "astrid" }), "2026-10-05T08:03:00Z");
 db = second.db;

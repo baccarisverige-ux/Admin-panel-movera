@@ -1,6 +1,8 @@
 webapp/node_modules/
 webapp/dist/
 webapp/tsconfig.tsbuildinfo
+webapp/test-results/
+webapp/playwright-report/
 .DS_Store
 _site/
 .env

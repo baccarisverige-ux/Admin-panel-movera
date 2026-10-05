@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DEMO_CODE, DEMO_PASSWORD } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
+import { COMMAND_STORE_KEY, readCommandDb, withSignIn } from "../commands/run";
 import { CommandButton } from "../ui/CommandButton";
 
 export function LoginPage() {
@@ -15,7 +16,13 @@ export function LoginPage() {
         className="login-card"
         onSubmit={(event) => {
           event.preventDefault();
-          session.signInWith(email, password, code);
+          const agent = session.signInWith(email, password, code);
+          if (!agent) return;
+          const book = readCommandDb(localStorage.getItem(COMMAND_STORE_KEY));
+          localStorage.setItem(
+            COMMAND_STORE_KEY,
+            JSON.stringify(withSignIn(book, agent.id, agent.email, new Date().toISOString())),
+          );
         }}
       >
         <p className="crumb">Movera Admin · Demo</p>
@@ -34,9 +41,9 @@ export function LoginPage() {
           <input inputMode="numeric" value={code} onChange={(event) => setCode(event.target.value)} />
         </label>
         {session.error ? <p className="state-line">{session.error}</p> : null}
-        <CommandButton command="admin.auth.signIn" className="primary-btn" type="submit">
+        <button className="primary-btn" type="submit" data-command="admin.auth.signIn">
           Sign in
-        </CommandButton>
+        </button>
         <ul className="demo-agents">
           {session.agents.filter((agent) => agent.active).map((agent) => (
             <li key={agent.id}>
