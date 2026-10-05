@@ -93,6 +93,11 @@ export function useFreshness() {
   return useQuery({ queryKey: ["freshness"], queryFn: () => api.freshness() });
 }
 
+export function useRevision() {
+  const api = useAdminApi();
+  return useQuery({ queryKey: ["revision"], queryFn: () => api.revision() });
+}
+
 export function useAudit() {
   const api = useAdminApi();
   return useQuery({ queryKey: ["audit"], queryFn: () => api.audit() });
@@ -144,7 +149,18 @@ export function useCommands() {
     setMessage("");
 
     const targetId = extra.targetId ?? id;
-    const fingerprint = `${id}:${targetId}`;
+    const fingerprint = JSON.stringify([
+      id,
+      targetId,
+      extra.reason ?? "",
+      extra.before ?? "",
+      extra.after ?? spec.label,
+      extra.collection ?? "",
+      extra.entityState ?? "",
+      extra.amountOre ?? null,
+      extra.scope ?? params.get("scope") ?? "all",
+      extra.patch ?? null,
+    ]);
     const retry = phase === "unknown" && lastAttempt.current?.fingerprint === fingerprint;
     const idempotencyKey = extra.idempotencyKey ?? (retry ? lastAttempt.current!.idempotencyKey : newIdempotencyKey(id));
     const expectedRev = extra.expectedRev ?? (retry ? lastAttempt.current!.expectedRev : await api.revision());
@@ -181,7 +197,7 @@ export function useCommands() {
       if (!unknown) {
         setPhase(result.status);
         setMessage(result.message);
-        if (result.status === "committed") lastAttempt.current = null;
+        lastAttempt.current = null;
       }
       await client.invalidateQueries();
       return result;
