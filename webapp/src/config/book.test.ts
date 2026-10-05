@@ -1,4 +1,4 @@
-import { emptyConfig, missingTranslations, publishConfig, rollbackConfig, setFeature } from "./book.ts";
+import { configDiff, emptyConfig, missingTranslations, publishConfig, rollbackConfig, setFeature, setZoneOverride } from "./book.ts";
 
 const assert = (ok: unknown, message: string) => {
   if (!ok) throw new Error(message);
@@ -23,5 +23,10 @@ assert(publishConfig(book, "lena", "2026-10-05T10:00:00Z").error?.includes("Miss
 book = emptyConfig("nora");
 book = { ...book, authorId: "nora", draft: { ...book.draft, scheduleAt: "2026-10-06T00:00:00Z" } };
 assert(publishConfig(book, "lena", "2026-10-05T10:00:00Z").error?.includes("Scheduled"), "future schedule waits");
+
+const changed = setZoneOverride(setFeature(emptyConfig("nora"), "wallet", false, "nora"), "op-norrmalm", "reservations", false, "nora");
+const lines = configDiff(changed.published, changed.draft);
+assert(lines.some((line) => line.includes("Wallet on → off")), "diff shows the wallet change");
+assert(lines.some((line) => line.includes("op-norrmalm")), "diff shows the zone override");
 
 console.log("config ok");
