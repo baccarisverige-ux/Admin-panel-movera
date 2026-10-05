@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useCommands } from "../api/hooks";
+import type { CommandResult } from "../api/create";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { ACTION_REASONS } from "../domain/labels";
@@ -19,8 +20,11 @@ type CommandButtonProps = {
   collection?: string;
   patch?: Record<string, string | number | boolean | null>;
   scope?: string;
+  expectedRev?: number;
+  sliceKey?: string;
+  value?: unknown;
   storeReason?: boolean;
-  onDone?: () => void;
+  onDone?: (result: CommandResult) => void;
   children: ReactNode;
   "aria-label"?: string;
 };
@@ -39,6 +43,9 @@ export function CommandButton({
   collection,
   patch,
   scope,
+  expectedRev,
+  sliceKey,
+  value,
   storeReason,
   onDone,
   children,
@@ -70,8 +77,11 @@ export function CommandButton({
       collection,
       patch: patch ? { ...patch, ...(storeReason ? { notes: chosen } : {}) } : undefined,
       scope,
+      expectedRev,
+      sliceKey,
+      value,
     }).then((result) => {
-      if (result) onDone?.();
+      if (result) onDone?.(result);
     });
   }
 
