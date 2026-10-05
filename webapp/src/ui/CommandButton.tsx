@@ -56,6 +56,10 @@ export function CommandButton({
   const confirmed = mustType.length === 0 || typed === mustType;
 
   function fire(chosen: string) {
+    if (!session.agent && command === "admin.auth.pickAgent") {
+      onDone?.();
+      return;
+    }
     void commands.run(command, {
       reason: chosen,
       targetId,
