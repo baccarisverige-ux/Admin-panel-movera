@@ -111,34 +111,73 @@ export function DetailLayout({ title, status, actions, tabs, children }: { title
 }
 
 export function DocumentViewer() {
+  const [zoom, setZoom] = useState(1);
   const [turn, setTurn] = useState(0);
+  const [kind, setKind] = useState<"image" | "pdf">("image");
+  const base = import.meta.env.BASE_URL;
+  const style = { transform: `scale(${zoom}) rotate(${turn * 90}deg)`, transformOrigin: "top left" };
   return (
     <div className="doc-viewer">
-      <p>Document preview. Rotate {turn * 90} degrees.</p>
-      <button className="secondary-btn" type="button" onClick={() => setTurn((value) => value + 1)}>Rotate</button>
+      <div className="actions">
+        <button className="secondary-btn" type="button" onClick={() => setKind("image")}>Image</button>
+        <button className="secondary-btn" type="button" onClick={() => setKind("pdf")}>PDF</button>
+        <button className="secondary-btn" type="button" onClick={() => setZoom((value) => Math.min(2, value + 0.25))}>Zoom in</button>
+        <button className="secondary-btn" type="button" onClick={() => setZoom((value) => Math.max(0.5, value - 0.25))}>Zoom out</button>
+        <button className="secondary-btn" type="button" onClick={() => setTurn((value) => value + 1)}>Rotate</button>
+      </div>
+      {kind === "image" ? (
+        <img src={`${base}license.png`} alt="Taxi driver license" style={style} />
+      ) : (
+        <iframe title="Taxi driver license PDF" src={`${base}license.pdf`} style={{ ...style, width: 280, height: 360, border: 0 }} />
+      )}
     </div>
   );
 }
 
-export function ConfirmDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [reason, setReason] = useState("Safety");
+export function ConfirmDialog({
+  open,
+  record,
+  reasons,
+  typed,
+  onConfirm,
+  onClose,
+}: {
+  open: boolean;
+  record: string;
+  reasons: string[];
+  typed: string;
+  onConfirm: (reason: string) => void;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState(reasons[0] ?? "Other");
+  const [text, setText] = useState("");
   if (!open) return null;
+  const confirmed = typed.length === 0 || text === typed;
   function submit(event: FormEvent) {
     event.preventDefault();
-    onClose();
+    if (!confirmed) return;
+    onConfirm(reason);
   }
   return (
     <div className="modal open" role="presentation">
       <form className="modal-card" role="dialog" aria-modal="true" aria-label="Confirm" onSubmit={submit}>
         <h3>Confirm</h3>
+        <p>This acts on {record}.</p>
         <label>
           Reason
           <select value={reason} onChange={(event) => setReason(event.target.value)}>
-            <option>Safety</option>
-            <option>Other</option>
+            {reasons.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
           </select>
         </label>
-        <button className="primary-btn" type="submit">Confirm</button>
+        {typed ? (
+          <label>
+            Type {typed} to confirm
+            <input value={text} onChange={(event) => setText(event.target.value)} />
+          </label>
+        ) : null}
+        <button className="primary-btn" type="submit" disabled={!confirmed}>Confirm</button>
         <button className="secondary-btn" type="button" onClick={onClose}>Cancel</button>
       </form>
     </div>

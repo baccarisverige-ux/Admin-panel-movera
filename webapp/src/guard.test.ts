@@ -24,7 +24,10 @@ for (const path of files(root)) {
   assert(!banned.test(text), `${path} has old demo copy`);
   assert(!text.includes("GenericPage"), `${path} still names the old page`);
   assert(!emoji.test(text), `${path} has an emoji`);
-  if (path.includes("/pages/") && path.endsWith(".tsx")) assert(!text.includes("<table"), `${path} has its own table`);
+  if (path.includes("/pages/") && path.endsWith(".tsx")) {
+    assert(!text.includes("<table"), `${path} has its own table`);
+    assert(!/from ["'][^"']*\/(book|seed)["']/.test(text) && !text.includes("/data/"), `${path} imports data outside the API`);
+  }
 }
 
 console.log("guard ok");

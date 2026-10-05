@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSession } from "../auth/SessionContext";
-import { emptyConfig, missingTranslations, publishConfig, rollbackConfig, setFeature, type ConfigBook } from "../config/book";
+import { emptyConfig, missingTranslations, publishConfig, rollbackConfig, setFeature, useRecords, type ConfigBook } from "../api/hooks";
 
 const STORE_KEY = "movera-admin-config";
 
@@ -19,6 +19,7 @@ export function ConfigPage() {
   const [book, setBook] = useState<ConfigBook>(() => load());
   const [notice, setNotice] = useState("Draft is not live.");
   const missing = missingTranslations(book.draft.reasons);
+  const staff = useRecords("staff", null);
 
   function save(next: ConfigBook, text: string) {
     localStorage.setItem(STORE_KEY, JSON.stringify(next));
@@ -31,7 +32,7 @@ export function ConfigPage() {
       <div className="page-heading">
         <div>
           <h2>Configuration</h2>
-          <p>Version {book.rev}. Rider {book.published.versions.rider}. Driver {book.published.versions.driver}. Luxury is not a feature.</p>
+          <p>Version {book.rev}. Rider {book.published.versions.rider}. Driver {book.published.versions.driver}. Staff {staff.data?.length ?? "…"}. Luxury is not a feature.</p>
         </div>
       </div>
       <p className="state-line">{notice}{missing.length > 0 ? ` Missing translation: ${missing.join(", ")}.` : ""}</p>

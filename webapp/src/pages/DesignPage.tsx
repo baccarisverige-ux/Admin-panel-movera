@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ACTION_REASONS } from "../domain/labels";
 import { useSession } from "../auth/SessionContext";
 import { DataTable } from "../ui/DataTable";
 import { Can, ConfirmDialog, DateTime, DetailLayout, DiffView, DocumentViewer, Drawer, Duration, EmptyState, ErrorState, Money, PhonePreview, StatusDot, Timeline, Toast, useDirty } from "../ui/kit";
@@ -42,7 +43,7 @@ export function DesignPage() {
         <button className="secondary-btn" type="button" onClick={() => setDrawer(true)}>Open drawer</button>
         <button className="primary-btn" type="button" onClick={() => setOpen(true)}>Open confirm</button>
         <Drawer open={drawer} title="Quick view" onClose={() => setDrawer(false)}><p>Drawer content.</p></Drawer>
-        <ConfirmDialog open={open} onClose={() => setOpen(false)} />
+        <ConfirmDialog open={open} record="Erik Lind (D0001)" typed="D0001" reasons={[...ACTION_REASONS]} onConfirm={() => setOpen(false)} onClose={() => setOpen(false)} />
       </article>
       <DetailLayout title="Sample record" status={<StatusDot tone="green">Active</StatusDot>} actions={<button className="secondary-btn" type="button">Action</button>} tabs={<p>Tab</p>}>
         <DataTable head={["Name", "Status"]} rows={[["Erik Lind", "Active"]]} state={tableState} onRetry={() => setTableState("ready")} />

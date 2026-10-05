@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { assignReservation, cancelReservation, needsDriverSoon, type Reservation } from "../reservations/book";
+import { assignReservation, cancelReservation, needsDriverSoon, useRecords, type Reservation } from "../api/hooks";
 
 const NOW = "2026-10-05T10:40:00Z";
 const SEED: Reservation[] = [
@@ -10,13 +10,14 @@ const SEED: Reservation[] = [
 export function ReservationsPage() {
   const [rows, setRows] = useState(SEED);
   const [notice, setNotice] = useState("A booking under 60 minutes without a driver is flagged. Give-up is 5 minutes.");
+  const seeded = useRecords("reservations", null);
 
   return (
     <>
       <div className="page-heading">
         <div>
           <h2>Reservations</h2>
-          <p>Policy version stays on the booking when you cancel.</p>
+          <p>Policy version stays on the booking when you cancel. Demo queue {seeded.data?.length ?? "…"}.</p>
         </div>
       </div>
       <p className="state-line">{notice}</p>

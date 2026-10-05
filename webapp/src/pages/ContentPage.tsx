@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSession } from "../auth/SessionContext";
-import { editContent, phonePreview, publishContent, rollbackContent, type ContentBook } from "../content/book";
+import { editContent, phonePreview, publishContent, rollbackContent, useRecords, type ContentBook } from "../api/hooks";
 import { CONTENT_SLOTS, emptySlot, type SlotId } from "../content/slots";
 
 export function ContentPage() {
@@ -13,6 +13,7 @@ export function ContentPage() {
   }));
   const [notice, setNotice] = useState("Each text publishes on its own. A second agent is required.");
   const book = books[slot];
+  const banners = useRecords("banners", null);
 
   function save(next: ContentBook) {
     setBooks({ ...books, [slot]: next });
@@ -23,7 +24,7 @@ export function ContentPage() {
       <div className="page-heading">
         <div>
           <h2>Content</h2>
-          <p>Home, help and legal are separate. Publishing one does not change the others.</p>
+          <p>Home, help and legal are separate. {banners.data?.length ?? "…"} rider-home banners. Publishing one does not change the others.</p>
         </div>
       </div>
       <p className="state-line">{notice}</p>
