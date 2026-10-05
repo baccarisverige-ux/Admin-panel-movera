@@ -14,7 +14,7 @@ export type { Ticket } from "../support/book.ts";
 export { publicIncident, resolveIncident, takeIncident } from "../safety/book.ts";
 export type { Incident } from "../safety/book.ts";
 export { markPaid, PAYMENT_METHODS, setMethod } from "../payments/book.ts";
-export type { PaymentMethod } from "../payments/book.ts";
+export type { BankAccount, PaymentMethod, Payout } from "../payments/book.ts";
 export { assignReservation, cancelReservation, needsDriverSoon } from "../reservations/book.ts";
 export type { Reservation } from "../reservations/book.ts";
 export { averageStars, BONUSES, hideReview } from "../growth/book.ts";

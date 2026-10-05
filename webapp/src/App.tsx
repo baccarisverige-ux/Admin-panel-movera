@@ -22,6 +22,7 @@ import { LivePage } from "./pages/LivePage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
+import { PayoutsPage } from "./pages/PayoutsPage";
 import { PricingPage } from "./pages/PricingPage";
 import { RecordPage } from "./pages/RecordPage";
 import { ReportsPage } from "./pages/ReportsPage";
@@ -47,6 +48,7 @@ function Screen({ id }: { id: string }) {
   if (id === "dashboard") return <DashboardPage />;
   if (id === "zones") return <ZonesPage />;
   if (id === "payments") return <PaymentsPage />;
+  if (id === "payouts") return <PayoutsPage />;
   if (id === "pricing") return <PricingPage />;
   if (id === "reservations") return <ReservationsPage />;
   if (id === "reports") return <ReportsPage />;
