@@ -321,10 +321,66 @@ textarea:focus {
 }
 
 .live-map {
-  height: 420px;
+  height: 520px;
   margin-top: 12px;
   border-radius: 12px;
-  overflow: hidden
+  overflow: hidden;
+  position: relative
+}
+
+.zone-label {
+  pointer-events: none;
+  background: #fff;
+  border: 2px solid #111614;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font: 700 12px/1.2 sans-serif;
+  color: #111614;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+  white-space: nowrap
+}
+
+.zone-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0
+}
+
+.zone-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px
+}
+
+.zone-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, .3)
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 12px
+}
+
+.version-list {
+  margin: 8px 0 0;
+  padding-left: 18px
 }
 
 .build-footer {

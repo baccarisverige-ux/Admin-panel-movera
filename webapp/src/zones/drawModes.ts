@@ -1,4 +1,5 @@
 import {
+  TerraDrawCircleMode,
   TerraDrawPointMode,
   TerraDrawPolygonMode,
   TerraDrawRectangleMode,
@@ -21,6 +22,7 @@ export function zoneDrawModes() {
     }),
     new TerraDrawPolygonMode(),
     new TerraDrawRectangleMode(),
+    new TerraDrawCircleMode(),
     new TerraDrawPointMode(),
     new TerraDrawSelectMode({
       flags: {

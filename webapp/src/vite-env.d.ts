@@ -6,3 +6,12 @@ interface ImportMetaEnv {
   readonly VITE_DATA?: string;
   readonly VITE_ADMIN_API?: string;
 }
+
+interface MoveraMapHandle {
+  project: (lat: number, lng: number) => { x: number; y: number };
+  generation: number;
+}
+
+interface Window {
+  __moveraMap?: MoveraMapHandle;
+}
