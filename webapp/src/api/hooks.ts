@@ -133,7 +133,8 @@ export function useCommands() {
     const spec = commandById(id);
     if (!spec) throw new Error(`Unknown command ${id}`);
     if (lock.current) return undefined;
-    if (!session.agent) {
+    const publicPick = id === "admin.auth.pickAgent";
+    if (!session.agent && !publicPick) {
       setPhase("rejected");
       setMessage("Sign in again.");
       return undefined;
@@ -178,9 +179,9 @@ export function useCommands() {
         action: id,
         targetId,
         reason: extra.reason ?? "No person affected",
-        actorId: extra.actorId ?? session.agent.id,
-        actorRole: extra.actorRole ?? session.agent.role,
-        actorScope: extra.actorScope ?? session.agent.scope,
+        actorId: extra.actorId ?? session.agent?.id ?? "signed-out",
+        actorRole: extra.actorRole ?? session.agent?.role ?? "super",
+        actorScope: extra.actorScope ?? session.agent?.scope ?? { zones: "all", market: "SE-STO" },
         scope: extra.scope ?? params.get("scope") ?? "all",
         idempotencyKey,
         expectedRev,
