@@ -29,6 +29,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
 import { RiderDetailPage } from "./pages/RiderDetailPage";
 import { RidersPage } from "./pages/RidersPage";
+import { RiskPage } from "./pages/RiskPage";
 import { SafetyPage } from "./pages/SafetyPage";
 import { SupportPage } from "./pages/SupportPage";
 import { TeamPage } from "./pages/TeamPage";
@@ -61,6 +62,7 @@ function Screen({ id }: { id: string }) {
   if (id === "vehicles") return <FleetPage />;
   if (id === "support") return <SupportPage />;
   if (id === "incidents") return <SafetyPage />;
+  if (id === "risk") return <RiskPage />;
   if (id === "riders") return <RidersPage />;
   if (id === "trips") return <TripsPage />;
   if (id === "live") return <LivePage />;
