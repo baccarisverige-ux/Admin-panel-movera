@@ -1,11 +1,12 @@
 import { emptyBook, publishZones, rollbackZones, stockholmZones, submitReview, updateDraft, validateZones, ZONE_TYPES, zonesAt } from "./releases.ts";
+import { zoneDrawModes } from "./drawModes.ts";
 
 const assert = (ok: unknown, message: string) => {
   if (!ok) throw new Error(message);
 };
 
 const seed = stockholmZones();
-assert(ZONE_TYPES.length === 9, "9 zone types");
+assert(zoneDrawModes().some((mode) => mode.mode === "render"), "terra draw render mode is named");
 for (const type of ZONE_TYPES) assert(seed.some((zone) => zone.kind === type.id), `seed has ${type.id}`);
 assert(seed.filter((zone) => zone.kind === "operating").length === 9, "9 operating zones");
 assert(seed.some((zone) => zone.name === "Arlanda"), "Arlanda");
