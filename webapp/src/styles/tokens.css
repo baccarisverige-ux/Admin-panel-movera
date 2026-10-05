@@ -311,6 +311,13 @@ textarea:focus {
   gap: 6px
 }
 
+.live-map {
+  height: 420px;
+  margin-top: 12px;
+  border-radius: 12px;
+  overflow: hidden
+}
+
 .build-footer {
   display:flex;
   justify-content:space-between;

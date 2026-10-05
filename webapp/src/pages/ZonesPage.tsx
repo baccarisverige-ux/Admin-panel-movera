@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { ZONE_MAP_LABELS, ZONES_TABLE, catalogFor } from "../api/read";
+import { ZONES_TABLE, catalogFor } from "../api/read";
 import { DataTable } from "../ui/DataTable";
-import { MapCanvas } from "../ui/MapCanvas";
 import { Modal } from "../ui/Modal";
 import { PageHeading } from "../ui/PageHeading";
+import { ZoneMap } from "./ZoneMap";
 
 export function ZonesPage() {
   const page = catalogFor("zones");
@@ -30,15 +30,7 @@ export function ZonesPage() {
         <DataTable head={ZONES_TABLE.head} rows={ZONES_TABLE.rows} />
       </article>
 
-      <article className="panel map-placeholder">
-        <div className="panel-title-row">
-          <h3>Zone Map</h3>
-          <button className="secondary-btn" type="button">
-            Reset View
-          </button>
-        </div>
-        <MapCanvas labels={ZONE_MAP_LABELS} />
-      </article>
+      <ZoneMap />
 
       <Modal open={modalOpen} title="Create New Zone" onClose={closeModal}>
         <label>
