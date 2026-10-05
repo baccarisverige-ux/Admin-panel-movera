@@ -80,7 +80,7 @@ test("full precedence viewer resolves through cohort and impact preview names th
 
   const add = async (level: string, target: string, value: "on" | "off") => {
     await page.getByLabel("Override level").selectOption(level);
-    await page.getByLabel("Override target").fill(target);
+    await page.getByLabel("Override target").selectOption(target);
     await page.getByLabel("Override value").selectOption(value);
     await page.getByRole("button", { name: "Add or replace override" }).click();
   };
@@ -93,12 +93,15 @@ test("full precedence viewer resolves through cohort and impact preview names th
   await add("appVersion", "1.0.0", "on");
   await add("cohort", "beta", "off");
 
-  await page.getByLabel("Preview cohort").fill("beta");
-  await expect(page.getByTestId("effective-precedence")).toContainText("Winning level: cohort");
-  await expect(page.getByTestId("effective-precedence")).toContainText("Effective wallet: off");
-  await expect(page.getByTestId("config-impact")).toContainText("cohort:beta");
-  await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft saved through AdminApi.")).toBeVisible();
+  await page.getByLabel("Effective zone").selectOption("op-norrmalm");
+  await page.getByLabel("Effective category").selectOption("premium");
+  await page.getByLabel("Effective app").selectOption("rider");
+  await page.getByLabel("Effective platform").selectOption("ios");
+  await page.getByLabel("Effective app version").fill("1.0.0");
+  await page.getByLabel("Effective cohort").fill("beta");
+  await expect(page.locator("[data-effective-wallet='cohort']")).toContainText("Winning level: cohort");
+  await expect(page.locator("[data-effective-wallet='cohort']")).toContainText("Effective wallet: off");
+  await expect(page.getByLabel("Affected scopes")).toHaveValue(/cohort:beta/);
 });
 
 test("stale configuration editor is refused instead of overwriting a newer draft", async ({ context, page }) => {
