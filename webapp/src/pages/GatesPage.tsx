@@ -1,4 +1,5 @@
 import { chapter16, gateB } from "../gates/scenarios";
+import { APPS } from "../gates/apps";
 
 export function GatesPage() {
   const rows = chapter16();
@@ -15,6 +16,16 @@ export function GatesPage() {
           </p>
         </div>
       </div>
+      <article className="panel">
+        <h3>Frontends</h3>
+        <ul>
+          {APPS.map((app) => (
+            <li key={app.id}>
+              {app.name} {app.sha.slice(0, 7)} · <a href={app.url}>{app.url}</a>
+            </li>
+          ))}
+        </ul>
+      </article>
       <table>
         <thead>
           <tr>

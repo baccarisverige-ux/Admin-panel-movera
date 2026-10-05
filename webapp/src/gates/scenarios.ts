@@ -1,5 +1,6 @@
 import { classifyStatus } from "../api/httpClient.ts";
 import { can } from "../auth/permissions.ts";
+import { APPS, tripContractMatchesApps } from "./apps.ts";
 import { canStartCheckout, existingAuthContinues, type PaymentMethod } from "../payments/book.ts";
 import { publicIncident, resolveIncident, takeIncident } from "../safety/book.ts";
 import { addNote, deliveredToRider, reply, type Ticket } from "../support/book.ts";
@@ -15,11 +16,13 @@ export function chapter16(): ScenarioResult[] {
   const results: ScenarioResult[] = [];
   const sim = (id: string, pass: boolean, note: string) => results.push({ id, pass, staging: false, note });
 
-  sim("T01", false, "Rider and driver apps are not in this repository, so the shared trip timeline is not proven.");
-  sim("T02", false, "The admin refuses a finished trip and cancels searching, accepted, arrived and in_trip. The rider and driver apps do not show the reason or fee.");
+  const apps = APPS.map((app) => `${app.name} ${app.sha.slice(0, 7)}`).join(" and ");
+  const sameStatuses = tripContractMatchesApps();
+  sim("T01", false, sameStatuses ? `${apps} are live frontends and use the same 18 trip statuses. They do not share a trip id with this admin.` : "Trip statuses do not match the apps.");
+  sim("T02", false, "The admin refuses a finished trip. The driver frontend has a cancelled-by-Movera sheet. There is no shared trip, so the fee is not proven in both apps.");
   sim("T03", false, "Two drivers claiming the same trip is not simulated.");
-  sim("T04", false, "Resume after background needs the rider and driver apps.");
-  sim("T05", false, "Suspension across an app restart is not proven here.");
+  sim("T04", false, `${apps} exist. Resume after background was not run on them.`);
+  sim("T05", false, "The driver frontend exists. Suspension across a restart was not run on it.");
   sim("T06", false, "The admin preview matches the rider formula. The driver offer and the receipt are not connected.");
   const methods = { card: true, swish: true, klarna: true, apple: true, google: true, paypal: true, cash: false, wallet: true } as Record<PaymentMethod, boolean>;
   sim("T07", !canStartCheckout(methods, "cash") && existingAuthContinues({ id: "C", method: "cash", state: "authorized" }, methods), "New cash checkout refused. Existing authorisation continues.");
