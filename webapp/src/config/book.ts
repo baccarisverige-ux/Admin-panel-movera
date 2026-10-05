@@ -469,13 +469,13 @@ export function submitConfigApproval(book: ConfigBook, actorId: string): { book:
   const missing = missingTranslations(book.draft.reasons);
   if (missing.length > 0) return { book, error: `Missing translation: ${missing.join(", ")}` };
   if (configDiff(book.published, book.draft).length === 0) return { book, error: "There is no unpublished change to review." };
-  return { book: { ...book, authorId: actorId, approverId: null, status: "in_review" } };
+  return { book: { ...book, authorId: actorId, approverId: null, status: "in_review", draftRev: book.draftRev + 1 } };
 }
 
 export function approveConfig(book: ConfigBook, actorId: string): { book: ConfigBook; error?: string } {
   if (book.status !== "in_review") return { book, error: "Send the draft for approval first." };
   if (actorId === book.authorId) return { book, error: "A second agent must approve." };
-  return { book: { ...book, approverId: actorId, status: "approved" } };
+  return { book: { ...book, approverId: actorId, status: "approved", draftRev: book.draftRev + 1 } };
 }
 
 function cloneDraft(draft: ConfigDraft): ConfigDraft {
@@ -514,6 +514,7 @@ export function publishConfig(
         approverId: null,
         status: "draft",
         rev: nextRev,
+        draftRev: book.draftRev + 1,
         draft: { ...snapshot, scheduleAt: null },
         scheduled: [...book.scheduled, scheduled],
         publications: [
@@ -540,6 +541,7 @@ export function publishConfig(
       approverId: null,
       status: "draft",
       rev: nextRev,
+      draftRev: book.draftRev + 1,
       draft: cloneDraft(live),
       published: cloneDraft(live),
       history: [...book.history, cloneDraft(live)],
@@ -576,6 +578,7 @@ export function rollbackConfig(
     approverId: null,
     status: "draft",
     rev: nextRev,
+    draftRev: book.draftRev + 1,
     published: cloneDraft(previous),
     draft: cloneDraft(previous),
     history: [...book.history, cloneDraft(previous)],
@@ -609,6 +612,7 @@ export function advanceConfigClock(book: ConfigBook, nowIso: string): ConfigBook
     snapshot.scheduleAt = null;
     next = {
       ...next,
+      draftRev: next.draftRev + 1,
       published: cloneDraft(snapshot),
       draft: cloneDraft(snapshot),
       history: [...next.history, cloneDraft(snapshot)],
