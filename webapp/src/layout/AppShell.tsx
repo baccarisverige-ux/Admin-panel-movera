@@ -72,6 +72,7 @@ export function AppShell({ page, children }: AppShellProps) {
                 <strong>{agent?.name ?? "Admin User"}</strong>
                 <span>{agent?.role ?? "signed out"}</span>
               </div>
+              {agent && can(agent.role, "riders.read") ? <Link to="/riders">Riders</Link> : null}
               {agent && can(agent.role, "team.read") ? (
                 <Link to="/team">Team</Link>
               ) : null}

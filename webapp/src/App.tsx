@@ -10,6 +10,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { GenericPage } from "./pages/GenericPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PricingPage } from "./pages/PricingPage";
+import { RidersPage } from "./pages/RidersPage";
 import { TeamPage } from "./pages/TeamPage";
 import { ZonesPage } from "./pages/ZonesPage";
 
@@ -20,6 +21,7 @@ function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "dashboard") return <DashboardPage />;
   if (pageId === "zones") return <ZonesPage />;
   if (pageId === "pricing") return <PricingPage />;
+  if (pageId === "riders") return <RidersPage />;
   if (pageId === "team") return <TeamPage />;
   return <GenericPage pageId={pageId} />;
 }
@@ -59,12 +61,15 @@ function ShellRoute() {
   const location = useLocation();
   const { agent } = useSession();
   const team = location.pathname === "/team";
-  const known = team || ADMIN_PAGES.some((page) => page.path === location.pathname);
+  const riders = location.pathname === "/riders";
+  const known = team || riders || ADMIN_PAGES.some((page) => page.path === location.pathname);
   const page: AdminPage = team
     ? { id: "team", path: "/team", label: "Team and roles", crumb: "Team", icon: "·" }
-    : known
-      ? pageForPath(location.pathname)
-      : { id: "not-found", path: location.pathname, label: "Page not found", crumb: "404", icon: "!" };
+    : riders
+      ? { id: "riders", path: "/riders", label: "Riders", crumb: "Riders", icon: "·" }
+      : known
+        ? pageForPath(location.pathname)
+        : { id: "not-found", path: location.pathname, label: "Page not found", crumb: "404", icon: "!" };
   const allowed = !agent || !known || can(agent.role, permissionForPage(page.id));
 
   return (
