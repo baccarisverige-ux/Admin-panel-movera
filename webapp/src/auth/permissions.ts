@@ -26,10 +26,10 @@ const ALL = ["*"] as const;
 
 export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
   super: ALL,
-  ops: ["overview.read", "trips.read", "drivers.read", "zones.read", "settings.read", "settings.edit", "team.read"],
+  ops: ["overview.read", "trips.read", "drivers.read", "zones.read", "settings.read", "settings.edit", "team.read", "audit.read", "approval.decide"],
   support: ["overview.read", "trips.read", "riders.read", "support.reply"],
   safety: ["overview.read", "trips.read", "safety.edit", "incidents.read"],
-  finance: ["overview.read", "finance.read", "payments.refund"],
+  finance: ["overview.read", "finance.read", "payments.refund", "audit.read", "approval.decide"],
 };
 
 export const PAGE_PERMISSION: Record<string, string> = {
