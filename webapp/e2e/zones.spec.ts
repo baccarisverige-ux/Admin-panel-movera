@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 test("zones map lists nine types and terra draw", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await page.getByLabel("Email").fill("nora@movera.se");
   await page.getByLabel("Password").fill("movera");
@@ -21,4 +23,6 @@ test("zones map lists nine types and terra draw", async ({ page }) => {
   expect(options.some((text) => text.includes("Fleet territory"))).toBe(true);
   expect(options.some((text) => text.includes("Pickup point"))).toBe(true);
   await expect(page.getByText("Inside:")).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(errors, errors.join("\n")).toEqual([]);
 });
