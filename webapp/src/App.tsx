@@ -23,6 +23,7 @@ import { LivePage } from "./pages/LivePage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
+import { PaymentPage } from "./pages/PaymentPage";
 import { PayoutsPage } from "./pages/PayoutsPage";
 import { PricingPage } from "./pages/PricingPage";
 import { RecordPage } from "./pages/RecordPage";
@@ -145,6 +146,7 @@ function Authed() {
         <Route path="vehicles" element={<Screen id="vehicles" />} />
         <Route path="vehicles/:id" element={<RecordPage label="Vehicle" list="/vehicles" />} />
         <Route path="payments" element={<Screen id="payments" />} />
+        <Route path="payments/:id" element={<PaymentPage />} />
         <Route path="payouts" element={<Screen id="payouts" />} />
         <Route path="payouts/:id" element={<RecordPage label="Payout" list="/payouts" />} />
         <Route path="zones" element={<Screen id="zones" />} />
