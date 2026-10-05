@@ -9,6 +9,7 @@ import { DriversPage } from "./pages/DriversPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GenericPage } from "./pages/GenericPage";
 import { LoginPage } from "./pages/LoginPage";
+import { PaymentsPage } from "./pages/PaymentsPage";
 import { PricingPage } from "./pages/PricingPage";
 import { RidersPage } from "./pages/RidersPage";
 import { TeamPage } from "./pages/TeamPage";
@@ -21,6 +22,7 @@ function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "users") return <DriversPage />;
   if (pageId === "dashboard") return <DashboardPage />;
   if (pageId === "zones") return <ZonesPage />;
+  if (pageId === "payments") return <PaymentsPage />;
   if (pageId === "pricing") return <PricingPage />;
   if (pageId === "riders") return <RidersPage />;
   if (pageId === "trips") return <TripsPage />;
