@@ -1,10 +1,14 @@
 import { chapter16, gateB } from "../gates/scenarios";
+import { frontendGateC, gateC } from "../gates/frontendC";
 import { APPS } from "../gates/apps";
 
 export function GatesPage() {
   const rows = chapter16();
   const gate = gateB(undefined, rows);
   const passed = rows.filter((row) => row.pass).length;
+  const frontend = frontendGateC();
+  const frontendPassed = frontend.filter((row) => row.pass).length;
+  const gateCResult = gateC();
 
   return (
     <>
@@ -41,6 +45,32 @@ export function GatesPage() {
               <td>{row.id}</td>
               <td>{row.pass ? "pass" : "not passed"}</td>
               <td>{row.staging ? "yes" : "no"}</td>
+              <td>{row.note}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="page-heading">
+        <div>
+          <h2>Gate C, frontend only</h2>
+          <p>
+            {frontendPassed} of {frontend.length} pass on one shared record inside this admin. {gateCResult.reason}
+          </p>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Id</th>
+            <th>Frontend</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {frontend.map((row) => (
+            <tr key={row.id}>
+              <td>{row.id}</td>
+              <td>{row.pass ? "pass" : "not passed"}</td>
               <td>{row.note}</td>
             </tr>
           ))}
