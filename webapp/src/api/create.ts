@@ -283,7 +283,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         const currentSlice = db.slices[raw.sliceKey] as { draftRev?: unknown } | undefined;
         const currentDraftRev = typeof currentSlice?.draftRev === "number" ? currentSlice.draftRev : 1;
         if (currentDraftRev !== raw.expectedSliceRev) {
-          reject(409, "Another agent changed this configuration draft. Reload and review the newest draft.");
+          reject(409, "Someone else changed this configuration draft. Reload and review the newest draft.");
         }
       }
       if (actionSpec.allowedStates && resolvedState && !actionSpec.allowedStates.includes(resolvedState)) {
