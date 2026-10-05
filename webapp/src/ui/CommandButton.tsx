@@ -24,7 +24,7 @@ type CommandButtonProps = {
   sliceKey?: string;
   value?: unknown;
   storeReason?: boolean;
-  onDone?: (result: CommandResult) => void;
+  onDone?: (result?: CommandResult) => void;
   children: ReactNode;
   "aria-label"?: string;
 };
