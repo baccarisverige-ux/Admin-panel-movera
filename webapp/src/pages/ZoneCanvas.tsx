@@ -192,7 +192,7 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: {
           "fill-color": ["get", "color"],
-          "fill-opacity": ["case", ["==", ["get", "kind"], "service"], 0.16, 0.58],
+          "fill-opacity": ["case", ["==", ["get", "kind"], "service"], 0.22, 0.78],
         },
       });
       map.addLayer({
@@ -202,7 +202,7 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: {
           "line-color": ["get", "color"],
-          "line-width": ["case", ["==", ["get", "selected"], 1], 4, 2.5],
+          "line-width": ["case", ["==", ["get", "selected"], 1], 5, 3.5],
         },
       });
       map.addLayer({
@@ -377,7 +377,7 @@ function GoogleDraw({ zones, selectedId, mode, layers, focus, selectionNonce, on
       map.data.setStyle((feature) => ({
         fillColor: String(feature.getProperty("color") ?? "#1FA463"),
         strokeColor: String(feature.getProperty("color") ?? "#111614"),
-        fillOpacity: feature.getProperty("kind") === "service" ? 0.16 : 0.58,
+        fillOpacity: feature.getProperty("kind") === "service" ? 0.22 : 0.78,
         strokeWeight: feature.getProperty("selected") === 1 ? 4 : 2,
       }));
     };

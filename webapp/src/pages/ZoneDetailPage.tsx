@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useSession } from "../auth/SessionContext";
 import { zoneStore, useZoneUi } from "../zones/bookStore";
-import { RIDE_CATEGORIES, zoneAreaKm, zoneTypeLabel, type ZoneShape } from "../zones/releases";
+import { RIDE_CATEGORIES, zoneAreaKm, zoneStatus, zoneTypeLabel, type ZoneShape } from "../zones/releases";
 import { PageHeading } from "../ui/PageHeading";
 import { CommandButton } from "../ui/CommandButton";
 import { TabPanel, Tabs } from "../ui/Tabs";
@@ -44,11 +44,14 @@ export function ZoneDetailPage() {
     );
   }
 
+  const status = zoneStatus(zone, ui.book);
+
   return (
     <>
-      <PageHeading title={zone.name} subtitle={`${zone.code} · ${zoneTypeLabel(zone.kind)} · ${zone.archived ? "Archived" : ui.book.status === "in_review" ? "In review" : "Draft"}`}>
+      <PageHeading title={zone.name} subtitle={`${zone.code} · ${zoneTypeLabel(zone.kind)}`}>
         <Link to="/zones">Back to zones</Link>
       </PageHeading>
+      <p className="state-line" data-zone-status={status}>Status: {status}</p>
       <Tabs tabs={TABS} activeId={tab} onChange={setTab} />
       <article className="panel">
         <TabPanel id="shape" activeId={tab}>

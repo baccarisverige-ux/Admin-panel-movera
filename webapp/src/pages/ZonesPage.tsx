@@ -1,21 +1,12 @@
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { catalogFor } from "../api/read";
 import { useSession } from "../auth/SessionContext";
 import { zoneStore, useZoneUi } from "../zones/bookStore";
-import { coreZones, zoneTypeLabel, type ZoneBook, type ZoneShape } from "../zones/releases";
+import { coreZones, zoneStatus, zoneTypeLabel } from "../zones/releases";
 import { DataTable } from "../ui/DataTable";
 import { PageHeading } from "../ui/PageHeading";
 import { ZoneMap } from "./ZoneMap";
 import { CommandButton } from "../ui/CommandButton";
-
-function zoneStatus(zone: ZoneShape, book: ZoneBook): string {
-  if (zone.archived) return "Archived";
-  if (book.status === "in_review") return "In review";
-  const published = book.published.find((item) => item.id === zone.id);
-  if (!published) return "Draft";
-  const sameShape = JSON.stringify(published.points) === JSON.stringify(zone.points) && JSON.stringify(published.holes) === JSON.stringify(zone.holes);
-  return sameShape && published.zoneFeeOre === zone.zoneFeeOre ? "Published" : "Draft";
-}
 
 export function ZonesPage() {
   const page = catalogFor("zones");
@@ -32,6 +23,8 @@ export function ZonesPage() {
         </CommandButton>
       </PageHeading>
 
+      <ZoneMap />
+
       <article className="panel">
         <div className="panel-title-row">
           <h3>Existing zones</h3>
@@ -40,11 +33,11 @@ export function ZonesPage() {
           head={["Code", "Name", "Type", "Status", "Version", "Archive"]}
           rows={rows.map((zone) => [
             zone.code,
-            zone.name,
+            <Link key={zone.id} to={`/zones/${zone.id}`}>{zone.name}</Link>,
             zoneTypeLabel(zone.kind),
             zoneStatus(zone, ui.book),
             `v${ui.book.versions.length}`,
-            <span key={zone.id} onClick={(event) => event.stopPropagation()}>
+            <span key={`${zone.id}-archive`} onClick={(event) => event.stopPropagation()}>
               <CommandButton
                 command="admin.zone.archive"
                 className="link-action"
@@ -62,8 +55,6 @@ export function ZonesPage() {
           }}
         />
       </article>
-
-      <ZoneMap />
     </>
   );
 }
