@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useRecords } from "../api/hooks";
-import { DataTable } from "../ui/DataTable";\nimport { SensitiveValue } from "../ui/SensitiveValue";
+import { DataTable } from "../ui/DataTable";
+import { SensitiveValue } from "../ui/SensitiveValue";
 
 const VIEWS = [
   { id: "all", label: "All" },
