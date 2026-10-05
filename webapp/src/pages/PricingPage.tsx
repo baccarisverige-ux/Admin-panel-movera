@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PRICE_ROWS, catalogFor } from "../data/catalog";
+import { PRICE_ROWS, catalogFor } from "../api/read";
 import { Modal } from "../ui/Modal";
 import { PageHeading } from "../ui/PageHeading";
 import { TabPanel, Tabs } from "../ui/Tabs";
@@ -312,13 +312,13 @@ export function PricingPage() {
         <fieldset>
           <legend>Applicable Zones</legend>
           <label>
-            <input type="checkbox" /> Downtown
+            <input type="checkbox" /> Norrmalm
           </label>
           <label>
-            <input type="checkbox" /> Uptown
+            <input type="checkbox" /> Södermalm
           </label>
           <label>
-            <input type="checkbox" /> Midtown
+            <input type="checkbox" /> Östermalm
           </label>
         </fieldset>
         <div className="modal-actions">

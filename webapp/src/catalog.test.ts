@@ -2,10 +2,11 @@ import {
   DEDICATED_PAGE_IDS,
   PAGE_CATALOG,
   calculateFare,
-  formatUsd,
+  formatSek,
   isDedicatedPage,
 } from "./data/catalog.ts";
 import { ADMIN_PAGES } from "./nav.ts";
+import { readFileSync } from "node:fs";
 
 const assert = (ok: unknown, message: string) => {
   if (!ok) throw new Error(message);
@@ -35,10 +36,14 @@ for (const id of DEDICATED_PAGE_IDS) {
   assert(PAGE_CATALOG[id], `dedicated page ${id} missing catalog content`);
 }
 
-assert(formatUsd(calculateFare("economy", 0, 0)) === "$8.00", "economy min fare");
-assert(formatUsd(calculateFare("economy", 10, 20)) === "$25.00", "economy 10km 20min");
-assert(formatUsd(calculateFare("comfort", 5, 10)) === "$20.70", "comfort rate");
-assert(formatUsd(calculateFare("premium", 2, 5)) === "$20.00", "premium min fare");
-assert(formatUsd(calculateFare("xl", 8, 15)) === "$37.10", "xl rate");
+assert(formatSek(calculateFare("economy", 0, 0)) === "49,00 kr", "economy min fare");
+assert(formatSek(calculateFare("economy", 10, 20)) === "229,00 kr", "economy 10km 20min");
+assert(formatSek(calculateFare("comfort", 5, 10)) === "164,00 kr", "comfort rate");
+assert(formatSek(calculateFare("premium", 2, 5)) === "138,00 kr", "premium min fare");
+assert(formatSek(calculateFare("xl", 8, 15)) === "283,00 kr", "xl rate");
+
+const catalogSrc = readFileSync(new URL("./data/catalog.ts", import.meta.url), "utf8");
+assert(!/RideShare|New York|USD|Downtown|Uptown|Midtown/.test(catalogSrc), "no US prototype copy");
+assert(!/\$\d/.test(catalogSrc), "no dollar amounts");
 
 console.log("admin catalog ok");

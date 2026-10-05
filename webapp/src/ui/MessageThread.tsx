@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChatThread } from "../data/catalog";
+import type { ChatThread } from "../api/read";
 
 type MessageThreadProps = {
   thread: ChatThread;

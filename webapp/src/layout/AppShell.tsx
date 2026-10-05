@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router";
+import { Menu } from "lucide-react";
+import { formatInTimeZone } from "date-fns-tz";
 import { ADMIN_PAGES, type AdminPage } from "../nav";
 import { ZoneSelect } from "../ui/ZoneSelect";
 
@@ -48,7 +50,7 @@ export function AppShell({ page, children }: AppShellProps) {
             aria-label="Open menu"
             onClick={() => setMenuOpen((open) => !open)}
           >
-            ☰
+            <Menu size={18} aria-hidden="true" />
           </button>
           <div>
             <h1>{heading}</h1>
@@ -72,6 +74,7 @@ export function AppShell({ page, children }: AppShellProps) {
         <main className="content">{children}</main>
         <footer className="build-footer">
           <span>Demo data</span>
+          <span>{formatInTimeZone(new Date(), "Europe/Stockholm", "yyyy-MM-dd HH:mm")}</span>
           <span>{buildLabel()}</span>
         </footer>
       </section>

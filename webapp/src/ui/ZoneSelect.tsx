@@ -1,4 +1,4 @@
-import { FARE_ZONE_OPTIONS, ZONE_OPTIONS } from "../data/catalog";
+import { FARE_ZONE_OPTIONS, ZONE_OPTIONS } from "../api/read";
 
 type ZoneSelectProps = {
   includeAll?: boolean;

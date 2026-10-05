@@ -1,4 +1,4 @@
-import type { CardTuple } from "../data/catalog";
+import type { CardTuple } from "../api/read";
 
 type EntityCardsProps = {
   title?: string;
