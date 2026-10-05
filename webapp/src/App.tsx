@@ -6,6 +6,7 @@ import { AppShell } from "./layout/AppShell";
 import { menuItem, pageForPath, type MenuItem } from "./nav";
 import { AuditPage } from "./pages/AuditPage";
 import { ComingPage } from "./pages/ComingPage";
+import { ChatPage } from "./pages/ChatPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { ConfirmPage } from "./pages/ConfirmPage";
 import { ContentPage } from "./pages/ContentPage";
@@ -61,6 +62,7 @@ function Screen({ id }: { id: string }) {
   if (id === "design") return <DesignPage />;
   if (id === "vehicles") return <FleetPage />;
   if (id === "support") return <SupportPage />;
+  if (id === "chat") return <ChatPage />;
   if (id === "incidents") return <SafetyPage />;
   if (id === "risk") return <RiskPage />;
   if (id === "riders") return <RidersPage />;

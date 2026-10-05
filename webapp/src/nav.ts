@@ -71,7 +71,7 @@ export const MENU: MenuItem[] = [
   { id: "zones", path: "/zones", label: "Zones", group: "Places & pricing", permission: "zones.read", icon: "MapPinned" },
   { id: "pricing", path: "/pricing", label: "Pricing", group: "Places & pricing", permission: "settings.read", icon: "Tags" },
   { id: "support", path: "/support", label: "Support", group: "Support", permission: "support.reply", icon: "LifeBuoy" },
-  { id: "chat", path: "/chat", label: "Chat", group: "Support", permission: "support.reply", icon: "MessagesSquare", coming: "G13" },
+  { id: "chat", path: "/chat", label: "Chat", group: "Support", permission: "support.reply", icon: "MessagesSquare" },
   { id: "messages", path: "/messages", label: "Messages", group: "Growth & content", permission: "settings.read", icon: "MessageSquare" },
   { id: "content", path: "/content", label: "Content", group: "Growth & content", permission: "settings.read", icon: "Images" },
   { id: "promotions", path: "/promotions", label: "Promotions", group: "Growth & content", permission: "settings.read", icon: "Ticket" },
