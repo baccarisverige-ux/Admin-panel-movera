@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AGENTS, IDLE_MS, isIdle, signIn, type Agent } from "./permissions";
 
 type SessionValue = {
@@ -43,6 +44,7 @@ function readAgents(): Agent[] {
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [agents, setAgentsState] = useState<Agent[]>(() => readAgents());
   const [agent, setAgent] = useState<Agent | null>(() => {
     const id = localStorage.getItem(SESSION_KEY);
@@ -62,6 +64,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const last = Number(localStorage.getItem(ACTIVITY_KEY) || "0");
       if (isIdle(last, Date.now(), IDLE_MS)) {
         localStorage.removeItem(SESSION_KEY);
+        queryClient.clear();
         setAgent(null);
       }
     }, 30_000);
@@ -90,6 +93,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       signOut() {
         localStorage.removeItem(SESSION_KEY);
+        queryClient.clear();
         setAgent(null);
       },
       setAgents(next) {
@@ -97,7 +101,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setAgentsState(next);
       },
     }),
-    [agent, agents, error],
+    [agent, agents, error, queryClient],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
