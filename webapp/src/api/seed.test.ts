@@ -31,11 +31,11 @@ assert(r1?.phone === PHONE, "R0001 keeps the known demo phone");
 
 const api = createFixtureAdminApi(0);
 await api.reset();
-const plate = await api.search(PLATE);
+const plate = await api.search(PLATE, null);
 assert(plate.some((hit) => hit.path.startsWith("/vehicles/")), "plate search");
-const trip = await api.search(TRIP_ID);
+const trip = await api.search(TRIP_ID, null);
 assert(trip.some((hit) => hit.id === TRIP_ID), "trip search");
-const phone = await api.search(PHONE);
+const phone = await api.search(PHONE, null);
 assert(phone.some((hit) => hit.kind === "rider"), "phone search");
 await api.setFault("409");
 await api.command({ action: "admin.rider.block", targetId: "R0001", reason: "Safety review", actorId: "nora", before: "active", after: "blocked" }).then(
@@ -50,5 +50,9 @@ await api.setFault("none");
 await api.reset();
 const fresh = await api.list("drivers", null);
 assert(fresh.length === 60, "reset restores drivers");
+const scoped = await api.list("drivers", ["Z001", "Z002"]);
+assert(scoped.length > 0 && scoped.every((row) => row.zoneId === "Z001" || row.zoneId === "Z002"), "list respects multi-zone scope");
+const hiddenPlate = await api.search(PLATE, ["Z009"]);
+assert(hiddenPlate.length === 0, "search cannot escape its allowed zones");
 
 console.log("seed ok");
