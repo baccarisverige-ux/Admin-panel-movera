@@ -1,65 +1,113 @@
-import { useState } from "react";
-import { useSession } from "../auth/SessionContext";
-import { COMMAND_STORE_KEY, readCommandDb, runCommand, type CommandDb } from "../commands/run";
+import { useMemo, useState } from "react";
+import { useApprovals, useAudit } from "../api/hooks";
 import { DataTable } from "../ui/DataTable";
 import { CommandButton } from "../ui/CommandButton";
 
-const STORE_KEY = COMMAND_STORE_KEY;
-
-function loadDb(): CommandDb {
-  return readCommandDb(localStorage.getItem(STORE_KEY));
-}
-
 export function AuditPage() {
-  const { agent } = useSession();
-  const [db, setDb] = useState<CommandDb>(() => loadDb());
-  const [message, setMessage] = useState("No command yet.");
+  const audit = useAudit();
+  const approvals = useApprovals();
+  const [actor, setActor] = useState("");
+  const [action, setAction] = useState("");
+  const [target, setTarget] = useState("");
 
-  function commit(next: CommandDb, text: string) {
-    localStorage.setItem(STORE_KEY, JSON.stringify(next));
-    setDb(next);
-    setMessage(text);
-  }
-
-  function request(amountOre: number) {
-    if (!agent) return;
-    const ran = runCommand(
-      db,
-      {
-        action: "admin.refund.decide",
-        idempotencyKey: `ui-${db.audits.length}-${amountOre}-${agent.id}`,
-        expectedRev: db.rev,
-        actorId: agent.id,
-        targetId: amountOre >= 20_000 ? "RF-LARGE" : "RF-SMALL",
-        reason: "Demo refund from the audit screen",
-        amountOre,
-      },
-      new Date().toISOString(),
-    );
-    commit(ran.db, `${ran.outcome.status} · ${ran.outcome.message}`);
-  }
+  const rows = useMemo(() => {
+    const actorNeedle = actor.trim().toLowerCase();
+    const actionNeedle = action.trim().toLowerCase();
+    const targetNeedle = target.trim().toLowerCase();
+    return (audit.data ?? []).filter((entry) => {
+      if (actorNeedle && !entry.actorId.toLowerCase().includes(actorNeedle)) return false;
+      if (actionNeedle && !entry.action.toLowerCase().includes(actionNeedle)) return false;
+      if (targetNeedle && !entry.targetId.toLowerCase().includes(targetNeedle)) return false;
+      return true;
+    });
+  }, [action, actor, audit.data, target]);
 
   return (
     <>
       <div className="page-heading">
         <div>
           <h2>Audit and approvals</h2>
-          <p>Commands record who, what, when, before, after and the reason. Version {db.rev}.</p>
+          <p>Every simulated mutation records operation, actor, scope, target, before, after, reason and result.</p>
         </div>
         <div className="actions">
-          <CommandButton command="admin.audit.refund50" className="secondary-btn" type="button" onDone={() => request(5_000)}>
+          <CommandButton
+            command="admin.audit.refund50"
+            className="secondary-btn"
+            type="button"
+            targetId="RF-SMALL"
+            before="open"
+            after="refunded"
+            amountOre={5_000}
+          >
             Refund 50 kr
           </CommandButton>
-          <CommandButton command="admin.audit.refund250" className="primary-btn" type="button" onDone={() => request(25_000)}>
+          <CommandButton
+            command="admin.audit.refund250"
+            className="primary-btn"
+            type="button"
+            targetId="RF-LARGE"
+            before="open"
+            after="refunded"
+            amountOre={25_000}
+          >
             Refund 250 kr
           </CommandButton>
         </div>
       </div>
-      <p className="state-line">{message}</p>
+
       <article className="panel">
+        <h3>Approval queue</h3>
+        <p className="state-line">Actions at or above their ActionSpec threshold stop before the mutation and enter this queue.</p>
         <DataTable
-          head={["When", "Agent", "Action", "Target", "Before", "After", "Reason", "Result"]}
-          rows={db.audits.map((entry) => [entry.at, entry.actorId, entry.action, entry.targetId, entry.before, entry.after, entry.reason, entry.result])}
+          head={["Approval", "Action", "Target", "Requested by", "Amount", "Reason", "Status"]}
+          rowIds={(approvals.data ?? []).map((item) => item.id)}
+          rows={(approvals.data ?? []).map((item) => [
+            item.id,
+            item.action,
+            item.targetId,
+            item.requestedBy,
+            `${(item.amountOre / 100).toFixed(2)} kr`,
+            item.reason,
+            item.status,
+          ])}
+          state={approvals.isLoading ? "loading" : approvals.isError ? "error" : "ready"}
+          onRetry={() => void approvals.refetch()}
+        />
+      </article>
+
+      <article className="panel">
+        <h3>Immutable activity</h3>
+        <div className="field-grid">
+          <label>
+            Agent
+            <input value={actor} onChange={(event) => setActor(event.target.value)} />
+          </label>
+          <label>
+            Action
+            <input value={action} onChange={(event) => setAction(event.target.value)} />
+          </label>
+          <label>
+            Target
+            <input value={target} onChange={(event) => setTarget(event.target.value)} />
+          </label>
+        </div>
+        <DataTable
+          head={["Operation", "When", "Agent", "Scope", "Action", "Target", "Before", "After", "Reason", "Result"]}
+          rowIds={rows.map((entry) => entry.id)}
+          rows={rows.map((entry) => [
+            entry.operationId,
+            entry.at,
+            entry.actorId,
+            entry.scope,
+            entry.action,
+            entry.targetId,
+            entry.before,
+            entry.after,
+            entry.reason,
+            entry.result,
+          ])}
+          state={audit.isLoading ? "loading" : audit.isError ? "error" : "ready"}
+          onRetry={() => void audit.refetch()}
         />
       </article>
     </>
