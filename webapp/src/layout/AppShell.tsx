@@ -164,6 +164,7 @@ export function AppShell({ page, children }: AppShellProps) {
               aria-label="Scope"
               value={scope}
               onChange={(event) => {
+                client.clear();
                 const next = new URLSearchParams(params);
                 if (event.target.value) next.set("scope", event.target.value);
                 else next.delete("scope");
