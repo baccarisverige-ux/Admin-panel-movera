@@ -40,6 +40,14 @@ export function reviewDocument(driver: Driver, id: DocId, status: DocStatus): Dr
   return { ...driver, documents: { ...driver.documents, [id]: status } };
 }
 
+export function approveRemaining(driver: Driver): Driver {
+  const documents = { ...driver.documents };
+  for (const id of requiredDocuments(driver)) {
+    if (documents[id] !== "approved" && documents[id] !== "expiring") documents[id] = "approved";
+  }
+  return { ...driver, documents };
+}
+
 export function requiredDocuments(driver: Driver): DocId[] {
   return DRIVER_DOCUMENTS.filter((id) => !(driver.fleet && id === "company_registration"));
 }

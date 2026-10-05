@@ -1,4 +1,4 @@
-import { activate, blankDocuments, reviewDocument, setAccount, vehicleBlock, type Driver } from "./gate.ts";
+import { activate, approveRemaining, blankDocuments, reviewDocument, setAccount, vehicleBlock, type Driver } from "./gate.ts";
 
 const assert = (ok: unknown, message: string) => {
   if (!ok) throw new Error(message);
@@ -35,5 +35,8 @@ assert(
 assert(vehicleBlock({ year: 2022, seats: 4, fuel: "petrol", category: "xl" })?.includes("6 seats"), "xl seats");
 assert(setAccount(ready, "suspended", "").error === "A reason is required.", "suspension needs a reason");
 assert(setAccount(ready, "suspended", "Documents expired").driver.status === "suspended", "suspension with reason");
+const batch = approveRemaining(driver);
+assert(activate(batch).driver.status === "active", "approve remaining then activate");
+assert(batch.documents.company_registration === "approved", "individual still needs company registration");
 
 console.log("drivers ok");

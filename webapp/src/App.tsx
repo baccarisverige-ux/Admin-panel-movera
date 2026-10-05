@@ -11,6 +11,7 @@ import { ConfirmPage } from "./pages/ConfirmPage";
 import { ContentPage } from "./pages/ContentPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DesignPage } from "./pages/DesignPage";
+import { DriverDetailPage } from "./pages/DriverDetailPage";
 import { DriversPage } from "./pages/DriversPage";
 import { FleetPage } from "./pages/FleetPage";
 import { GatesPage } from "./pages/GatesPage";
@@ -18,6 +19,7 @@ import { GrowthPage } from "./pages/GrowthPage";
 import { HandoverPage } from "./pages/HandoverPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MessagesPage } from "./pages/MessagesPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { PricingPage } from "./pages/PricingPage";
 import { RecordPage } from "./pages/RecordPage";
@@ -39,6 +41,7 @@ function Screen({ id }: { id: string }) {
   if (id === "settings") return <ConfigPage />;
   if (id === "confirm") return <ConfirmPage />;
   if (id === "drivers") return <DriversPage />;
+  if (id === "onboarding") return <OnboardingPage />;
   if (id === "dashboard") return <DashboardPage />;
   if (id === "zones") return <ZonesPage />;
   if (id === "payments") return <PaymentsPage />;
@@ -123,7 +126,7 @@ function Authed() {
         <Route path="reservations/:id" element={<RecordPage label="Reservation" list="/reservations" />} />
         <Route path="live" element={<Screen id="live" />} />
         <Route path="drivers" element={<Screen id="drivers" />} />
-        <Route path="drivers/:driverId" element={<RecordPage label="Driver" list="/drivers" />} />
+        <Route path="drivers/:driverId" element={<DriverDetailPage />} />
         <Route path="onboarding" element={<Screen id="onboarding" />} />
         <Route path="riders" element={<Screen id="riders" />} />
         <Route path="riders/:riderId" element={<RecordPage kind="riders" label="Rider" list="/riders" />} />

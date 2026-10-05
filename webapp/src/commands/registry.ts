@@ -31,6 +31,7 @@ export const COMMANDS: CommandSpec[] = [
   { id: "admin.design.error", label: "Show error", reason: false, permission: "system.read" },
   { id: "admin.driver.activate", label: "Activate driver", reason: true, permission: "drivers.activate" },
   { id: "admin.driver.review", label: "Review document", reason: true, permission: "documents.approve" },
+  { id: "admin.driver.approveAll", label: "Approve remaining documents", reason: true, permission: "documents.approve" },
   { id: "admin.growth.redeem", label: "Redeem referral", reason: false, permission: "settings.read" },
   { id: "admin.growth.hide", label: "Hide review", reason: true, permission: "settings.read" },
   { id: "admin.handover.drills", label: "Run drills", reason: false, permission: "overview.read" },

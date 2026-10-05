@@ -1,64 +1,47 @@
 import { useState } from "react";
-import { activate, blankDocuments, reviewDocument, type DocStatus, type Driver } from "../drivers/gate";
+import { useNavigate } from "react-router";
+import { useRecords } from "../api/hooks";
 import { DataTable } from "../ui/DataTable";
-import { CommandButton } from "../ui/CommandButton";
 
-const starter: Driver = {
-  id: "D2847",
-  name: "Erik Lind",
-  fleet: false,
-  status: "pending",
-  documents: blankDocuments(),
-  vehicle: { year: 2022, seats: 4, fuel: "electric", category: "economy" },
-};
+const VIEWS = [
+  { id: "all", label: "All" },
+  { id: "pending", label: "Pending" },
+  { id: "active", label: "Active" },
+  { id: "on_hold", label: "On hold" },
+  { id: "suspended", label: "Suspended" },
+] as const;
 
 export function DriversPage() {
-  const [driver, setDriver] = useState<Driver>(starter);
-  const [notice, setNotice] = useState("Application is pending. Approve every document, then activate.");
+  const navigate = useNavigate();
+  const drivers = useRecords("drivers", null);
+  const [view, setView] = useState<(typeof VIEWS)[number]["id"]>("all");
+  const rows = (drivers.data ?? []).filter((driver) => view === "all" || driver.status === view);
 
   return (
     <>
       <div className="page-heading">
         <div>
-          <h2>{driver.name}</h2>
-          <p>
-            {driver.id} · {driver.status} · {driver.vehicle.category} · {driver.vehicle.fuel}
-          </p>
+          <h2>Drivers</h2>
+          <p>{drivers.isLoading ? "Loading drivers." : `${rows.length} in ${VIEWS.find((item) => item.id === view)?.label}.`} Saved views filter this list. Open a row for the driver.</p>
         </div>
-        <CommandButton command="admin.driver.activate" className="primary-btn"
-          type="button" onDone={() => {
-            const result = activate(driver);
-            if (result.error) setNotice(result.error);
-            else {
-              setDriver(result.driver);
-              setNotice("Driver is active. New offers can be sent.");
-            }
-          }}>
-          Activate
-        </CommandButton>
       </div>
-      <p className="state-line">{notice}</p>
-      <article className="panel">
-        <DataTable
-          head={["Document", "Status", "Actions"]}
-          rows={Object.entries(driver.documents).map(([id, status]) => [
-            id,
-            status,
-            <span key={id}>
-              {(["approved", "rejected", "in_review"] as DocStatus[]).map((next) => (
-                <CommandButton command="admin.driver.review" key={next}
-                  className="link-action"
-                  type="button" onDone={() => {
-                    setDriver(reviewDocument(driver, id as keyof Driver["documents"], next));
-                    setNotice(next === "rejected" ? "Rejected. The driver will see the reason on the app." : "Document updated.");
-                  }}>
-                  {next}
-                </CommandButton>
-              ))}
-            </span>,
-          ])}
-        />
-      </article>
+      <div className="actions">
+        {VIEWS.map((item) => (
+          <button key={item.id} type="button" data-command="admin.table.filter" className={view === item.id ? "primary-btn" : "secondary-btn"} onClick={() => setView(item.id)}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <DataTable
+        head={["Driver", "Name", "Phone", "Status", "Zone", "Documents"]}
+        rows={rows.map((driver) => [driver.id, driver.name, driver.phone, driver.status, driver.zoneId, driver.kind ?? "needed"])}
+        state={drivers.isLoading ? "loading" : drivers.isError ? "error" : "ready"}
+        onRetry={() => void drivers.refetch()}
+        onRow={(index) => {
+          const id = rows[index]?.id;
+          if (id) navigate(`/drivers/${id}`);
+        }}
+      />
     </>
   );
 }
