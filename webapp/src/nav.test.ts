@@ -1,19 +1,21 @@
-import { ADMIN_PAGES, pageForPath } from "./nav.ts";
+import { can } from "./auth/permissions.ts";
+import { MENU, MENU_GROUPS, pageForPath } from "./nav.ts";
 
 const assert = (ok: unknown, message: string) => {
   if (!ok) throw new Error(message);
 };
 
-assert(ADMIN_PAGES.length === 22, "expected 22 admin screens");
-assert(pageForPath("/trips").id === "trips", "trips route");
-assert(pageForPath("/unknown").id === "dashboard", "unknown path falls back");
-assert(
-  ADMIN_PAGES.some((page) => page.id === "users" && page.label === "User Management"),
-  "users label matches static title",
-);
-assert(
-  new Set(ADMIN_PAGES.map((page) => page.id)).size === 22,
-  "page ids are unique",
-);
+assert(MENU_GROUPS.length === 8, "eight groups");
+assert(new Set(MENU.map((item) => item.id)).size === MENU.length, "ids are unique");
+assert(pageForPath("/trips")?.id === "trips", "trips route");
+assert(pageForPath("/drivers/D2847")?.id === "drivers", "driver record");
+assert(pageForPath("/tickets/S1")?.id === "support", "ticket record");
+assert(pageForPath("/no-such") === undefined, "unknown path is not a page");
+assert(MENU.some((item) => item.id === "drivers" && item.path === "/drivers"), "drivers address");
+assert(!MENU.some((item) => item.path === "/franchise" || item.path === "/database" || item.path === "/api"), "old pages are gone");
+
+const support = MENU.filter((item) => can("support", item.permission));
+assert(support.some((item) => item.id === "support") && support.some((item) => item.id === "riders"), "support sees its work");
+assert(!support.some((item) => item.group === "Finance" || item.group === "Platform"), "support does not see finance or platform");
 
 console.log("admin nav ok");

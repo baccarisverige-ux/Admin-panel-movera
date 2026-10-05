@@ -231,7 +231,7 @@ export const ZONE_MAP_LABELS = ["Norrmalm", "Södermalm", "Östermalm"] as const
 const ADMIN_CHAT: ChatThread = {
   heading: "Chat with Erik Lind (Driver) - Zone: Norrmalm",
   messages: [
-    { role: "admin", text: "Hello John, how can I help you today?" },
+    { role: "admin", text: "Hello Erik, how can I help you today?" },
     {
       role: "user",
       text: "Hi, I'm having issues with the payment system. It's not accepting my card.",
@@ -250,7 +250,7 @@ const ADMIN_CHAT: ChatThread = {
 const DRIVER_CHAT: ChatThread = {
   heading: "Erik Lind (D2847) • Zone: Norrmalm • Active",
   messages: [
-    { role: "admin", text: "Hello John, how can I help you today?" },
+    { role: "admin", text: "Hello Erik, how can I help you today?" },
     {
       role: "user",
       text: "Hi, I'm having issues with the payment system. It's not accepting my card.",
@@ -325,8 +325,8 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     table: {
       head: ["Driver ID", "Name", "Document Type", "Expiry Date", "Status", "Actions"],
       rows: [
-        ["D2847", "Michael Johnson", "Driver's License", "2023-12-15", "Expired", "Suspend · Notify"],
-        ["D3921", "Sarah Williams", "Insurance", "2023-12-20", "Expiring Soon", "Notify"],
+        ["D2847", "Erik Lind", "Driver's License", "2026-12-15", "Expired", "Suspend · Notify"],
+        ["D3921", "Maja Holm", "Insurance", "2026-12-20", "Expiring Soon", "Notify"],
       ],
     },
   },
@@ -405,24 +405,24 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     title: "Franchise Management",
     subtitle: "Manage franchise partners and zone performance.",
     stats: [
-      ["NYC Drivers", "247"],
-      ["NYC Riders", "1,582"],
+      ["Stockholm drivers", "247"],
+      ["Stockholm riders", "1,582"],
       ["Stockholm revenue", "24,5K kr"],
-      ["NYC Rating", "4.7"],
+      ["Stockholm rating", "4.7"],
     ],
     cards: [
       [
-        "NYC Metro",
-        "Owner: John Smith • Zones: Norrmalm, Södermalm, Östermalm • Commission: 15%",
+        "Stockholm",
+        "Owner: Nora Lind • Zones: Norrmalm, Södermalm, Östermalm • Commission: 15%",
         "Edit|Reports|Remove",
       ],
       [
-        "Chicago Central",
+        "Solna",
         "Owner: Sarah Johnson • Zones: Loop, North Side, South Side • Commission: 18%",
         "Edit|Reports|Remove",
       ],
       [
-        "LA Metro",
+        "Bromma",
         "Owner: Michael Brown • Zones: Solna, Norrmalm, Bromma • Commission: 20%",
         "Edit|Reports|Activate",
       ],
@@ -442,8 +442,8 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
       rows: [
         [
           "APP-8472",
-          "Michael Johnson",
-          "2023-11-20",
+          "Erik Lind",
+          "2026-11-20",
           "Norrmalm",
           "Document Review",
           "Review · Approve · Reject",
@@ -451,12 +451,12 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
         [
           "APP-8471",
           "Sara Berg",
-          "2023-11-19",
+          "2026-11-19",
           "Södermalm",
           "Background Check",
           "View · Request Info",
         ],
-        ["APP-8470", "David Brown", "2023-11-18", "Östermalm", "Approved", "Details · Activate"],
+        ["APP-8470", "Lena Berg", "2026-11-18", "Östermalm", "Approved", "Details · Activate"],
       ],
     },
   },
@@ -603,16 +603,16 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     title: "Audit & Compliance",
     subtitle: "Review system activity and compliance reports.",
     cards: [
-      ["2023-11-21 14:32:15", "Admin login from IP 192.168.1.105 • User: admin@movera.se", ""],
-      ["2023-11-21 13:45:22", "Driver document approved • Driver: D2847 (Erik Lind)", ""],
-      ["2023-11-21 12:15:08", "Pricing updated for Zone Norrmalm • User: admin@movera.se", ""],
+      ["2026-11-21 14:32:15", "Admin login from IP 192.168.1.105 • User: admin@movera.se", ""],
+      ["2026-11-21 13:45:22", "Driver document approved • Driver: D2847 (Erik Lind)", ""],
+      ["2026-11-21 12:15:08", "Pricing updated for Zone Norrmalm • User: admin@movera.se", ""],
     ],
     table: {
       head: ["Report Type", "Period", "Generated", "Status", "Actions"],
       rows: [
-        ["Driver Compliance", "Q4 2023", "2023-11-20", "Complete", "View · Download"],
-        ["Financial Audit", "October 2023", "2023-11-15", "Complete", "View · Download"],
-        ["Safety Compliance", "Q4 2023", "2023-11-10", "In Progress", "View · Generate"],
+        ["Driver Compliance", "Q4 2026", "2026-11-20", "Complete", "View · Download"],
+        ["Financial Audit", "October 2026", "2026-11-15", "Complete", "View · Download"],
+        ["Safety Compliance", "Q4 2026", "2026-11-10", "In Progress", "View · Generate"],
       ],
     },
   },
@@ -650,8 +650,8 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
           "Mobile App",
           "rs_mob_8472abc...",
           "Read/Write",
-          "2023-10-15",
-          "2023-11-21 14:25",
+          "2026-10-15",
+          "2026-11-21 14:25",
           "Active",
           "Regenerate · Revoke",
         ],
@@ -659,8 +659,8 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
           "Partner Integration",
           "rs_part_3921xyz...",
           "Read Only",
-          "2023-09-20",
-          "2023-11-20 09:15",
+          "2026-09-20",
+          "2026-11-20 09:15",
           "Active",
           "Regenerate · Revoke",
         ],
@@ -688,9 +688,9 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     table: {
       head: ["Table Name", "Records", "Size", "Last Updated", "Actions"],
       rows: [
-        ["drivers", "1,247", "2.4 GB", "2023-11-21 14:32", "View · Export"],
-        ["riders", "3,582", "1.8 GB", "2023-11-21 13:45", "View · Export"],
-        ["trips", "42,847", "8.2 GB", "2023-11-21 14:15", "View · Export"],
+        ["drivers", "1,247", "2.4 GB", "2026-11-21 14:32", "View · Export"],
+        ["riders", "3,582", "1.8 GB", "2026-11-21 13:45", "View · Export"],
+        ["trips", "42,847", "8.2 GB", "2026-11-21 14:15", "View · Export"],
       ],
     },
   },
@@ -706,7 +706,7 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     cards: [
       [
         "Erik Lind",
-        "Driver ID: D2847 • Zone: Norrmalm • Joined: 2023-01-15 • john.driver@example.com • +46 70 123 45 67",
+        "Driver ID: D2847 • Zone: Norrmalm • Joined: 2026-01-15 • john.driver@example.com • +46 70 123 45 67",
         "Suspend|Edit|Delete",
       ],
     ],

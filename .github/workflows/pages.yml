@@ -41,13 +41,13 @@ jobs:
           npx tsc -b
           npx vite build --base=/Admin-panel-movera/
 
-      - name: Assemble the site (old root + new admin at /app/)
+      - name: Assemble the site
         run: |
           mkdir -p _site/legacy _site/app
           cp index.html app.js styles.css _site/legacy/
           cp -r webapp/dist/. _site/
-          cp -r webapp/dist/. _site/app/
           cp _site/index.html _site/404.html
+          printf '%s\n' '<!doctype html><meta http-equiv="refresh" content="0;url=/Admin-panel-movera/"><link rel="canonical" href="/Admin-panel-movera/"><script>location.replace("/Admin-panel-movera/")</script>' > _site/app/index.html
           echo "${GITHUB_SHA}" > _site/version.txt
           echo "${GITHUB_SHA}" > _site/app/version.txt
 

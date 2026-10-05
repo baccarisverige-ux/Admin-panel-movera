@@ -1,37 +1,107 @@
-export type AdminPage = {
+export const MENU_GROUPS = [
+  "Overview",
+  "Operations",
+  "People & fleet",
+  "Finance",
+  "Places & pricing",
+  "Support",
+  "Growth & content",
+  "Platform",
+] as const;
+
+export type MenuGroup = (typeof MENU_GROUPS)[number];
+
+export const NAV_ICONS = [
+  "LayoutDashboard",
+  "BarChart3",
+  "ClipboardList",
+  "Route",
+  "CalendarClock",
+  "Map",
+  "Users",
+  "UserPlus",
+  "UserRound",
+  "Car",
+  "Wallet",
+  "Banknote",
+  "MapPinned",
+  "Tags",
+  "LifeBuoy",
+  "MessagesSquare",
+  "Siren",
+  "ShieldAlert",
+  "MessageSquare",
+  "Images",
+  "Ticket",
+  "Star",
+  "ScrollText",
+  "Settings",
+  "Server",
+  "Shield",
+] as const;
+
+export type NavIcon = (typeof NAV_ICONS)[number];
+
+export type MenuItem = {
   id: string;
   path: string;
   label: string;
-  crumb: string;
-  icon: string;
+  group: MenuGroup;
+  permission: string;
+  icon: NavIcon;
+  coming?: string;
 };
 
-export const ADMIN_PAGES: AdminPage[] = [
-  { id: "dashboard", path: "/", label: "Dashboard", crumb: "Dashboard Overview", icon: "▦" },
-  { id: "zones", path: "/zones", label: "Zone Management", crumb: "Zone Management", icon: "⌖" },
-  { id: "pricing", path: "/pricing", label: "Pricing & Categories", crumb: "Pricing & Categories", icon: "＄" },
-  { id: "security", path: "/security", label: "Security & Alerts", crumb: "Security & Alerts", icon: "⚠" },
-  { id: "communications", path: "/communications", label: "Communications", crumb: "Communications", icon: "✉" },
-  { id: "trips", path: "/trips", label: "Trips & Live Map", crumb: "Trips & Live Map", icon: "⌁" },
-  { id: "reports", path: "/reports", label: "Reports & Analytics", crumb: "Reports & Analytics", icon: "▥" },
-  { id: "franchise", path: "/franchise", label: "Franchise Management", crumb: "Franchise Management", icon: "⌂" },
-  { id: "onboarding", path: "/onboarding", label: "Driver Onboarding", crumb: "Driver Onboarding", icon: "✓" },
-  { id: "payments", path: "/payments", label: "Payment Management", crumb: "Payment Management", icon: "▣" },
-  { id: "support", path: "/support", label: "Support System", crumb: "Support System", icon: "?" },
-  { id: "promotions", path: "/promotions", label: "Promotions", crumb: "Promotions", icon: "％" },
-  { id: "vehicles", path: "/vehicles", label: "Vehicle Management", crumb: "Vehicle Management", icon: "▰" },
-  { id: "reviews", path: "/reviews", label: "Reviews & Ratings", crumb: "Reviews & Ratings", icon: "★" },
-  { id: "incidents", path: "/incidents", label: "Emergency & Incidents", crumb: "Emergency & Incidents", icon: "!" },
-  { id: "audit", path: "/audit", label: "Audit & Compliance", crumb: "Audit & Compliance", icon: "☷" },
-  { id: "notifications", path: "/notifications", label: "Notification System", crumb: "Notification System", icon: "◉" },
-  { id: "api", path: "/api", label: "API & Integration", crumb: "API & Integration", icon: "⌘" },
-  { id: "chat", path: "/chat", label: "Chat Management", crumb: "Chat Management", icon: "◌" },
-  { id: "database", path: "/database", label: "Database", crumb: "Database", icon: "▤" },
-  { id: "users", path: "/users", label: "User Management", crumb: "User Management", icon: "♙" },
-  { id: "settings", path: "/settings", label: "Settings", crumb: "Settings", icon: "⚙" },
+export const MENU: MenuItem[] = [
+  { id: "dashboard", path: "/", label: "Dashboard", group: "Overview", permission: "overview.read", icon: "LayoutDashboard" },
+  { id: "reports", path: "/reports", label: "Reports", group: "Overview", permission: "overview.read", icon: "BarChart3" },
+  { id: "handover", path: "/handover", label: "Handover", group: "Overview", permission: "overview.read", icon: "ClipboardList" },
+  { id: "trips", path: "/trips", label: "Trips", group: "Operations", permission: "trips.read", icon: "Route" },
+  { id: "reservations", path: "/reservations", label: "Reservations", group: "Operations", permission: "trips.read", icon: "CalendarClock" },
+  { id: "live", path: "/live", label: "Live map", group: "Operations", permission: "trips.read", icon: "Map", coming: "G8" },
+  { id: "drivers", path: "/drivers", label: "Drivers", group: "People & fleet", permission: "drivers.read", icon: "Users" },
+  { id: "onboarding", path: "/onboarding", label: "Onboarding", group: "People & fleet", permission: "drivers.read", icon: "UserPlus", coming: "G6" },
+  { id: "riders", path: "/riders", label: "Riders", group: "People & fleet", permission: "riders.read", icon: "UserRound" },
+  { id: "vehicles", path: "/vehicles", label: "Vehicles", group: "People & fleet", permission: "drivers.read", icon: "Car" },
+  { id: "payments", path: "/payments", label: "Payments", group: "Finance", permission: "finance.read", icon: "Wallet" },
+  { id: "payouts", path: "/payouts", label: "Payouts", group: "Finance", permission: "finance.read", icon: "Banknote", coming: "G10" },
+  { id: "zones", path: "/zones", label: "Zones", group: "Places & pricing", permission: "zones.read", icon: "MapPinned" },
+  { id: "pricing", path: "/pricing", label: "Pricing", group: "Places & pricing", permission: "settings.read", icon: "Tags" },
+  { id: "support", path: "/support", label: "Support", group: "Support", permission: "support.reply", icon: "LifeBuoy" },
+  { id: "chat", path: "/chat", label: "Chat", group: "Support", permission: "support.reply", icon: "MessagesSquare", coming: "G13" },
+  { id: "incidents", path: "/incidents", label: "Incidents", group: "Support", permission: "incidents.read", icon: "Siren" },
+  { id: "risk", path: "/risk", label: "Risk", group: "Support", permission: "safety.edit", icon: "ShieldAlert", coming: "G12" },
+  { id: "messages", path: "/messages", label: "Messages", group: "Growth & content", permission: "settings.read", icon: "MessageSquare" },
+  { id: "content", path: "/content", label: "Content", group: "Growth & content", permission: "settings.read", icon: "Images" },
+  { id: "promotions", path: "/promotions", label: "Promotions", group: "Growth & content", permission: "settings.read", icon: "Ticket" },
+  { id: "reviews", path: "/reviews", label: "Reviews", group: "Growth & content", permission: "settings.read", icon: "Star" },
+  { id: "team", path: "/team", label: "Team", group: "Platform", permission: "team.read", icon: "Users" },
+  { id: "audit", path: "/audit", label: "Audit", group: "Platform", permission: "audit.read", icon: "ScrollText" },
+  { id: "settings", path: "/settings", label: "Settings", group: "Platform", permission: "settings.read", icon: "Settings" },
+  { id: "system", path: "/system", label: "System", group: "Platform", permission: "system.read", icon: "Server", coming: "G17" },
+  { id: "gates", path: "/gates", label: "Release gates", group: "Platform", permission: "system.read", icon: "Shield" },
 ];
 
-export function pageForPath(pathname: string): AdminPage {
-  const exact = ADMIN_PAGES.find((page) => page.path === pathname);
-  return exact ?? ADMIN_PAGES[0];
+const DETAILS: { pattern: RegExp; id: string }[] = [
+  { pattern: /^\/drivers\/[^/]+$/, id: "drivers" },
+  { pattern: /^\/riders\/[^/]+$/, id: "riders" },
+  { pattern: /^\/trips\/[^/]+$/, id: "trips" },
+  { pattern: /^\/reservations\/[^/]+$/, id: "reservations" },
+  { pattern: /^\/tickets\/[^/]+$/, id: "support" },
+  { pattern: /^\/incidents\/[^/]+$/, id: "incidents" },
+  { pattern: /^\/zones\/[^/]+$/, id: "zones" },
+  { pattern: /^\/vehicles\/[^/]+$/, id: "vehicles" },
+  { pattern: /^\/payouts\/[^/]+$/, id: "payouts" },
+];
+
+export function menuItem(id: string): MenuItem | undefined {
+  return MENU.find((item) => item.id === id);
+}
+
+export function pageForPath(pathname: string): MenuItem | undefined {
+  const path = pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
+  const exact = MENU.find((item) => item.path === path);
+  if (exact) return exact;
+  const detail = DETAILS.find((item) => item.pattern.test(path));
+  return detail ? menuItem(detail.id) : undefined;
 }

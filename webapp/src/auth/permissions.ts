@@ -1,3 +1,5 @@
+import { MENU } from "../nav.ts";
+
 export type Role = "super" | "ops" | "support" | "safety" | "finance";
 
 export type Agent = {
@@ -32,30 +34,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
   finance: ["overview.read", "finance.read", "payments.refund", "audit.read", "approval.decide"],
 };
 
-export const PAGE_PERMISSION: Record<string, string> = {
-  dashboard: "overview.read",
-  zones: "zones.read",
-  pricing: "settings.read",
-  settings: "settings.read",
-  payments: "finance.read",
-  database: "system.read",
-  api: "system.read",
-  audit: "audit.read",
-  users: "team.read",
-  support: "support.reply",
-  chat: "support.reply",
-  incidents: "incidents.read",
-  security: "safety.edit",
-  team: "team.read",
-  riders: "riders.read",
-  reservations: "trips.read",
-  content: "settings.read",
-  gates: "system.read",
-  handover: "overview.read",
-};
-
 export function permissionForPage(pageId: string): string {
-  return PAGE_PERMISSION[pageId] ?? "overview.read";
+  return MENU.find((item) => item.id === pageId)?.permission ?? "overview.read";
 }
 
 export function can(role: Role, permission: string): boolean {

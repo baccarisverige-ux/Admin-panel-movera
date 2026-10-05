@@ -111,6 +111,14 @@ textarea {
   box-shadow:0 5px 16px rgba(45,93,245,.28)
 }
 
+.nav-group-label {
+  margin: 14px 12px 4px;
+  color: #8A9390;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .nav a {
   border: 0;
   background: transparent;
