@@ -14,6 +14,8 @@ type CommandButtonProps = {
   targetId?: string;
   before?: string;
   after?: string;
+  entityState?: string;
+  amountOre?: number;
   collection?: string;
   patch?: Record<string, string | number | boolean | null>;
   storeReason?: boolean;
@@ -31,6 +33,8 @@ export function CommandButton({
   targetId,
   before,
   after,
+  entityState,
+  amountOre,
   collection,
   patch,
   storeReason,
@@ -55,6 +59,8 @@ export function CommandButton({
       targetId,
       before,
       after,
+      entityState,
+      amountOre,
       collection,
       patch: patch ? { ...patch, ...(storeReason ? { notes: chosen } : {}) } : undefined,
     }).then((result) => {
