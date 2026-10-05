@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useRiders } from "../api/hooks";
-import { DataTable } from "../ui/DataTable";
+import { DataTable } from "../ui/DataTable";\nimport { SensitiveValue } from "../ui/SensitiveValue";
 
 export function RidersPage() {
   const [params] = useSearchParams();
@@ -29,7 +29,7 @@ export function RidersPage() {
       </label>
       <DataTable
         head={["Rider", "Name", "Phone", "Trip", "Status", "Zone"]}
-        rows={rows.map((rider) => [rider.id, rider.name, rider.phone, rider.tripId ?? "", rider.status, rider.zoneId])}
+        rows={rows.map((rider) => [rider.id, rider.name, <SensitiveValue key={`${rider.id}-phone`} value={rider.phone} permission="riders.viewSensitive" command="admin.rider.revealSensitive" targetId={rider.id} label="Phone" />, rider.tripId ?? "", rider.status, rider.zoneId])}
         state={riders.isLoading ? "loading" : riders.isError ? "error" : "ready"}
         onRetry={() => void riders.refetch()}
         onRow={(index) => {
