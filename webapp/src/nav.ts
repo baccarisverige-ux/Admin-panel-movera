@@ -59,7 +59,7 @@ export const MENU: MenuItem[] = [
   { id: "handover", path: "/handover", label: "Handover", group: "Overview", permission: "overview.read", icon: "ClipboardList" },
   { id: "trips", path: "/trips", label: "Trips", group: "Operations", permission: "trips.read", icon: "Route" },
   { id: "reservations", path: "/reservations", label: "Reservations", group: "Operations", permission: "trips.read", icon: "CalendarClock" },
-  { id: "live", path: "/live", label: "Live map", group: "Operations", permission: "trips.read", icon: "Map", coming: "G8" },
+  { id: "live", path: "/live", label: "Live map", group: "Operations", permission: "trips.read", icon: "Map" },
   { id: "incidents", path: "/incidents", label: "Incidents", group: "Operations", permission: "incidents.read", icon: "Siren" },
   { id: "risk", path: "/risk", label: "Risk", group: "Operations", permission: "safety.edit", icon: "ShieldAlert", coming: "G12" },
   { id: "drivers", path: "/drivers", label: "Drivers", group: "People & fleet", permission: "drivers.read", icon: "Users" },

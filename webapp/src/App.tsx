@@ -18,6 +18,7 @@ import { GatesPage } from "./pages/GatesPage";
 import { GrowthPage } from "./pages/GrowthPage";
 import { HandoverPage } from "./pages/HandoverPage";
 import { LoginPage } from "./pages/LoginPage";
+import { LivePage } from "./pages/LivePage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
@@ -60,6 +61,7 @@ function Screen({ id }: { id: string }) {
   if (id === "incidents") return <SafetyPage />;
   if (id === "riders") return <RidersPage />;
   if (id === "trips") return <TripsPage />;
+  if (id === "live") return <LivePage />;
   if (id === "team") return <TeamPage />;
   return <ComingPage title={item.label} order="a later work order" />;
 }
