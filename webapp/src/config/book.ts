@@ -3,6 +3,29 @@ export type AppId = "rider" | "driver";
 export type PlatformId = "ios" | "android";
 export type ConfigStatus = "draft" | "in_review" | "approved";
 export type ReasonGroup = "driver_before" | "driver_during" | "rider_finding" | "rider_support";
+export type FeatureKey = "reservations" | "wallet";
+export type OverrideLevel = "market" | "zone" | "category" | "app" | "platform" | "appVersion" | "cohort";
+
+export type OverrideRule = {
+  id: string;
+  key: FeatureKey;
+  level: OverrideLevel;
+  target: string;
+  value: boolean;
+  startsAt?: string | null;
+  expiresAt?: string | null;
+};
+
+export type EffectiveContext = {
+  market?: string;
+  zoneId?: string;
+  category?: string;
+  app?: AppId;
+  platform?: PlatformId;
+  appVersion?: string;
+  cohort?: string;
+  nowIso?: string;
+};
 
 export type ReasonText = { id: string; group: ReasonGroup; sv: string; en: string };
 
@@ -29,12 +52,31 @@ export type ConfigDraft = {
   updates: AppUpdate[];
   reasons: ReasonText[];
   scheduleAt: string | null;
+  expiresAt: string | null;
   booking: { maxStops: number };
   environment: { simulatedArrival: boolean; skipActivation: boolean; demoPopup: boolean; demoHint: boolean };
   zoneOverrides: Record<string, { reservations?: boolean; wallet?: boolean }>;
+  overrides: OverrideRule[];
 };
 
-export type Publication = { rev: number; at: string; actorId: string; diff: string[] };
+export type Publication = {
+  rev: number;
+  at: string;
+  actorId: string;
+  diff: string[];
+  kind?: "publish" | "rollback" | "expired" | "scheduled";
+  effectiveAt?: string | null;
+  expiresAt?: string | null;
+};
+
+export type ScheduledConfig = {
+  rev: number;
+  actorId: string;
+  effectiveAt: string;
+  expiresAt: string | null;
+  snapshot: ConfigDraft;
+  diff: string[];
+};
 
 export type ConfigBook = {
   authorId: string;
@@ -45,6 +87,7 @@ export type ConfigBook = {
   published: ConfigDraft;
   history: ConfigDraft[];
   publications: Publication[];
+  scheduled: ScheduledConfig[];
 };
 
 export const RIDER_SWITCHES: FeatureSwitch[] = [
@@ -135,9 +178,11 @@ function blankDraft(): ConfigDraft {
     ],
     reasons: REASONS.map((reason) => ({ ...reason })),
     scheduleAt: null,
+    expiresAt: null,
     booking: { maxStops: 3 },
     environment: { simulatedArrival: false, skipActivation: false, demoPopup: false, demoHint: false },
     zoneOverrides: {},
+    overrides: [],
   };
 }
 
@@ -153,6 +198,7 @@ export function emptyConfig(authorId = "nora"): ConfigBook {
     published,
     history: [JSON.parse(JSON.stringify(draft)) as ConfigDraft],
     publications: [],
+    scheduled: [],
   };
 }
 
@@ -170,6 +216,8 @@ export function normalizeConfig(raw: Partial<ConfigBook> | null | undefined): Co
     environment: { ...base.draft.environment, ...incoming?.environment },
     versions: { ...base.draft.versions, ...incoming?.versions },
     zoneOverrides: incoming?.zoneOverrides ?? {},
+    overrides: incoming?.overrides ?? [],
+    expiresAt: incoming?.expiresAt ?? null,
   });
   const status: ConfigStatus = raw.status === "in_review" || raw.status === "approved" ? raw.status : "draft";
   return {
@@ -180,8 +228,9 @@ export function normalizeConfig(raw: Partial<ConfigBook> | null | undefined): Co
     rev: raw.rev || 1,
     draft: mergeDraft(raw.draft),
     published: mergeDraft(raw.published),
-    history: raw.history?.length ? raw.history : base.history,
+    history: raw.history?.length ? raw.history.map((item) => mergeDraft(item)) : base.history,
     publications: raw.publications ?? [],
+    scheduled: raw.scheduled ?? [],
   };
 }
 
