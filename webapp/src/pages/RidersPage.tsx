@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useRiders } from "../api/hooks";
-import { DataTable } from "../ui/DataTable";\nimport { SensitiveValue } from "../ui/SensitiveValue";
+import { DataTable } from "../ui/DataTable";
+import { SensitiveValue } from "../ui/SensitiveValue";
 
 export function RidersPage() {
   const [params] = useSearchParams();
