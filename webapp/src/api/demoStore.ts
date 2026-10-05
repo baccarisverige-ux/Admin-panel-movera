@@ -88,12 +88,23 @@ export function findHit(db: DemoDb, query: string, scope: ZoneScope = null) {
   return searchDb(db, query, scope);
 }
 
-export function addAudit(db: DemoDb, entry: Omit<DemoDb["audits"][number], "id" | "at">): DemoDb {
+export function addAudit(
+  db: DemoDb,
+  entry: Omit<DemoDb["audits"][number], "id" | "at" | "operationId" | "scope"> &
+    Partial<Pick<DemoDb["audits"][number], "operationId" | "scope">>,
+  bumpRevision = true,
+): DemoDb {
   const next: DemoDb = {
     ...db,
-    rev: db.rev + 1,
+    rev: bumpRevision ? db.rev + 1 : db.rev,
     audits: [
-      { ...entry, id: `aud-${db.audits.length + 1}`, at: new Date().toISOString() },
+      {
+        ...entry,
+        operationId: entry.operationId ?? `op-audit-${db.audits.length + 1}`,
+        scope: entry.scope ?? "all",
+        id: `aud-${db.audits.length + 1}`,
+        at: new Date().toISOString(),
+      },
       ...db.audits,
     ],
   };
