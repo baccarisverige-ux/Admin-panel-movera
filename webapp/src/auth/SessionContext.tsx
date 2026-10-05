@@ -19,8 +19,24 @@ function readAgents(): Agent[] {
   const raw = localStorage.getItem(AGENTS_KEY);
   if (!raw) return AGENTS;
   try {
-    const parsed = JSON.parse(raw) as Agent[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : AGENTS;
+    const parsed = JSON.parse(raw) as Partial<Agent>[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return AGENTS;
+    return parsed
+      .filter((item): item is Partial<Agent> & Pick<Agent, "id" | "email" | "name" | "role"> =>
+        typeof item.id === "string" && typeof item.email === "string" && typeof item.name === "string" && typeof item.role === "string",
+      )
+      .map((item) => {
+        const fallback = AGENTS.find((agent) => agent.id === item.id || agent.email === item.email);
+        return {
+          ...(fallback ?? AGENTS[0]!),
+          ...item,
+          password: item.password ?? fallback?.password ?? "movera",
+          code: item.code ?? fallback?.code ?? "123456",
+          active: item.active ?? true,
+          presence: item.presence ?? "away",
+          scope: item.scope ?? fallback?.scope ?? { zones: "all", market: "SE-STO" as const },
+        } as Agent;
+      });
   } catch {
     return AGENTS;
   }
