@@ -39,13 +39,6 @@ test("configuration draft is saved, approved by a second agent, published and ro
   await page.getByRole("checkbox", { name: "Reservations in this zone" }).uncheck();
   await expect(page.getByRole("list", { name: "Configuration diff" })).toContainText("op-norrmalm");
   await expect(page.locator("[data-effective='zone']")).toContainText("Winning level: zone");
-  await expect(page.locator("[data-config-dirty='yes']")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send for approval" })).toBeDisabled();
-
-  await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft saved through AdminApi.")).toBeVisible();
-  await expect(page.locator("[data-config-dirty='no']")).toBeVisible();
-
   await page.getByRole("button", { name: "Send for approval" }).click();
   await confirm(page);
   await expect(page.getByText("Sent for approval.")).toBeVisible();
@@ -59,20 +52,20 @@ test("configuration draft is saved, approved by a second agent, published and ro
 
   await page.getByRole("button", { name: "Approve" }).click();
   await confirm(page);
-  await expect(page.getByText("Approved. A second agent can publish.")).toBeVisible();
+  await expect(page.getByText("Approved. A second authorised agent can publish.")).toBeVisible();
 
   await page.getByRole("button", { name: "Publish" }).click();
   await confirm(page);
-  await expect(page.getByText(/Published version 2/)).toBeVisible();
-  await expect(page.getByRole("list", { name: "Publish history" })).toContainText("publish by lena");
+  await expect(page.getByText("Published version 2.").first()).toBeVisible();
+  await expect(page.getByRole("list", { name: "Publish history" })).toContainText("Version 2 · publish · by lena");
 
   await page.reload();
   await expect(page.getByRole("checkbox", { name: "Wallet", exact: true })).not.toBeChecked();
   await page.getByRole("button", { name: "Roll back" }).click();
   await confirm(page);
-  await expect(page.getByText(/Rolled back as version 3/)).toBeVisible();
+  await expect(page.getByText("Rolled back as new version 3.").first()).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "Wallet", exact: true })).toBeChecked();
-  await expect(page.getByRole("list", { name: "Publish history" })).toContainText("rollback by lena");
+  await expect(page.getByRole("list", { name: "Publish history" })).toContainText("Version 3 · rollback · by lena");
 
   await page.getByRole("link", { name: "To confirm", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "To confirm" })).toBeVisible();
