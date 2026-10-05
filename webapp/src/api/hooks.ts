@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { canUseZone } from "../auth/permissions.ts";
 import { useSession } from "../auth/SessionContext.tsx";
@@ -93,39 +93,83 @@ export function useFreshness() {
   return useQuery({ queryKey: ["freshness"], queryFn: () => api.freshness() });
 }
 
-let commandLock = false;
+export function useAudit() {
+  const api = useAdminApi();
+  return useQuery({ queryKey: ["audit"], queryFn: () => api.audit() });
+}
+
+export function useApprovals() {
+  const api = useAdminApi();
+  return useQuery({ queryKey: ["approvals"], queryFn: () => api.approvals() });
+}
+
+type Attempt = {
+  fingerprint: string;
+  idempotencyKey: string;
+  expectedRev: number;
+};
+
+function newIdempotencyKey(action: string): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `${action}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 export function useCommands() {
   const api = useAdminApi();
   const client = useQueryClient();
   const session = useSession();
-  const [phase, setPhase] = useState<"idle" | "submitting" | "unknown" | "committed" | "rejected">("idle");
+  const [params] = useSearchParams();
+  const lock = useRef(false);
+  const lastAttempt = useRef<Attempt | null>(null);
+  const [phase, setPhase] = useState<"idle" | "submitting" | "unknown" | "committed" | "rejected" | "pending_approval">("idle");
   const [message, setMessage] = useState("");
 
   async function run(id: string, extra: Partial<CommandInput> = {}) {
     const spec = commandById(id);
     if (!spec) throw new Error(`Unknown command ${id}`);
-    if (commandLock) return undefined;
+    if (lock.current) return undefined;
+    if (!session.agent) {
+      setPhase("rejected");
+      setMessage("Sign in again.");
+      return undefined;
+    }
     if (spec.reason && !extra.reason) {
       setPhase("rejected");
       setMessage("A reason is required.");
       return undefined;
     }
-    commandLock = true;
+
+    lock.current = true;
     setPhase("submitting");
     setMessage("");
+
+    const targetId = extra.targetId ?? id;
+    const fingerprint = `${id}:${targetId}`;
+    const retry = phase === "unknown" && lastAttempt.current?.fingerprint === fingerprint;
+    const idempotencyKey = extra.idempotencyKey ?? (retry ? lastAttempt.current!.idempotencyKey : newIdempotencyKey(id));
+    const expectedRev = extra.expectedRev ?? (retry ? lastAttempt.current!.expectedRev : await api.revision());
+    lastAttempt.current = { fingerprint, idempotencyKey, expectedRev };
+
     let unknown = false;
     const timer = setTimeout(() => {
       unknown = true;
       setPhase("unknown");
-      setMessage("Unknown. Check the audit before trying again.");
+      setMessage("Unknown. Check the audit before trying again. A retry will reuse the same operation key.");
     }, 900);
+
     try {
       const result = await api.command({
         action: id,
-        targetId: extra.targetId ?? id,
+        targetId,
         reason: extra.reason ?? "No person affected",
-        actorId: extra.actorId ?? session.agent?.id ?? "signed-out",
+        actorId: extra.actorId ?? session.agent.id,
+        actorRole: extra.actorRole ?? session.agent.role,
+        actorScope: extra.actorScope ?? session.agent.scope,
+        scope: extra.scope ?? params.get("scope") ?? "all",
+        idempotencyKey,
+        expectedRev,
+        entityState: extra.entityState,
+        amountOre: extra.amountOre,
         before: extra.before ?? "",
         after: extra.after ?? spec.label,
         sliceKey: extra.sliceKey,
@@ -135,8 +179,9 @@ export function useCommands() {
       });
       clearTimeout(timer);
       if (!unknown) {
-        setPhase("committed");
+        setPhase(result.status);
         setMessage(result.message);
+        if (result.status === "committed") lastAttempt.current = null;
       }
       await client.invalidateQueries();
       return result;
@@ -145,10 +190,12 @@ export function useCommands() {
       if (!unknown) {
         setPhase("rejected");
         setMessage(error instanceof Error ? error.message : "Rejected");
+        lastAttempt.current = null;
       }
+      await client.invalidateQueries();
       return undefined;
     } finally {
-      commandLock = false;
+      lock.current = false;
     }
   }
 
@@ -160,7 +207,7 @@ export function useCommand(action: string) {
   return {
     phase: commands.phase,
     message: commands.message,
-    run(input: Omit<CommandInput, "action">) {
+    run(input: Partial<CommandInput>) {
       return commands.run(action, input);
     },
   };
