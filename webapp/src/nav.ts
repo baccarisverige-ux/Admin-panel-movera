@@ -95,6 +95,7 @@ const DETAILS: { pattern: RegExp; id: string }[] = [
   { pattern: /^\/zones\/[^/]+$/, id: "zones" },
   { pattern: /^\/vehicles\/[^/]+$/, id: "vehicles" },
   { pattern: /^\/payouts\/[^/]+$/, id: "payouts" },
+  { pattern: /^\/payments\/[^/]+$/, id: "payments" },
 ];
 
 export function menuItem(id: string): MenuItem | undefined {
