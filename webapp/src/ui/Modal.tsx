@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
+import { CommandButton } from "./CommandButton";
 
 type ModalProps = {
   open: boolean;
@@ -19,9 +20,9 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
       role="presentation"
     >
       <div className="modal-card" role="dialog" aria-modal="true" aria-label={title}>
-        <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+        <CommandButton command="admin.modal.close" type="button" className="modal-close"  aria-label="Close" onDone={onClose}>
           ×
-        </button>
+        </CommandButton>
         <h3>{title}</h3>
         {children}
       </div>

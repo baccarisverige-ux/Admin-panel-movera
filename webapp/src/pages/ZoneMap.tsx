@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import { useSession } from "../auth/SessionContext";
 import { emptyBook, publishZones, rollbackZones, updateDraft, type ZoneBook, type ZoneShape } from "../zones/releases";
+import { CommandButton } from "../ui/CommandButton";
 
 const STORE_KEY = "movera-admin-zones";
 
@@ -64,21 +65,18 @@ export function ZoneMap() {
       <div className="panel-title-row">
         <h3>Stockholm zones</h3>
         <div className="actions">
-          <button
-            className="primary-btn"
-            type="button"
-            onClick={() => {
+          <CommandButton command="admin.zone.publish" className="primary-btn"
+            type="button" onDone={() => {
               if (!agent) return;
               const result = publishZones(book, agent.id);
               if (result.error) setNotice(result.error);
               else save(result.book, `Published version ${result.book.versions.length}.`);
-            }}
-          >
+            }}>
             Publish
-          </button>
-          <button className="secondary-btn" type="button" onClick={() => save(rollbackZones(book), "Rolled back to the previous published zones.")}>
+          </CommandButton>
+          <CommandButton command="admin.zone.rollback" className="secondary-btn" type="button" onDone={() => save(rollbackZones(book), "Rolled back to the previous published zones.")}>
             Roll back
-          </button>
+          </CommandButton>
         </div>
       </div>
       <p className="state-line">{notice} Published versions: {book.versions.length}. Selected: {selectedZone?.name} ({selectedZone?.kind}).</p>

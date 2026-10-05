@@ -1,6 +1,7 @@
 import { deactivateAgent } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { DataTable } from "../ui/DataTable";
+import { CommandButton } from "../ui/CommandButton";
 
 export function TeamPage() {
   const session = useSession();
@@ -23,19 +24,16 @@ export function TeamPage() {
             agent.email,
             agent.role,
             agent.active ? "Active" : "Deactivated",
-            <button
-              key={agent.id}
+            <CommandButton command="admin.team.deactivate" key={agent.id}
               type="button"
               className="link-action danger-text"
-              disabled={!agent.active || agent.id === actor.id || actor.role !== "super"}
-              onClick={() => {
+              disabled={!agent.active || agent.id === actor.id || actor.role !== "super"} onDone={() => {
                 const next = deactivateAgent(session.agents, agent.id, actor);
                 if (!Array.isArray(next)) return;
                 session.setAgents(next);
-              }}
-            >
+              }}>
               Deactivate
-            </button>,
+            </CommandButton>,
           ])}
         />
       </article>

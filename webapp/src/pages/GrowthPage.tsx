@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { averageStars, BONUSES, hideReview, useRecords, type Review } from "../api/hooks";
 import { redeemReferral, type Referral } from "../growth/referral";
+import { CommandButton } from "../ui/CommandButton";
 
 const SEED: Review[] = [
   { id: "V1", stars: 5, text: "Smooth ride", hidden: false, hideReason: null },
@@ -32,40 +33,34 @@ export function GrowthPage() {
           Rider
           <input value={rider} onChange={(event) => setRider(event.target.value)} />
         </label>
-        <button
-          className="secondary-btn"
-          type="button"
-          onClick={() => {
+        <CommandButton command="admin.growth.redeem" className="secondary-btn"
+          type="button" onDone={() => {
             const result = redeemReferral(code, rider);
             if (result.error) setNotice(result.error);
             else {
               setCode(result.referral);
               setNotice(`${rider} used ${code.code}.`);
             }
-          }}
-        >
+          }}>
           Redeem
-        </button>
+        </CommandButton>
       </article>
       {reviews.map((review) => (
         <article className="panel" key={review.id}>
           <p>
             {review.stars} · {review.text} {review.hidden ? `(hidden: ${review.hideReason})` : ""}
           </p>
-          <button
-            className="secondary-btn"
-            type="button"
-            onClick={() => {
+          <CommandButton command="admin.growth.hide" className="secondary-btn"
+            type="button" onDone={() => {
               const result = hideReview(review, "Not about the trip");
               if (result.error) setNotice(result.error);
               else {
                 setReviews(reviews.map((item) => (item.id === review.id ? result.review : item)));
                 setNotice("Hidden. The original text is kept and the average is recomputed.");
               }
-            }}
-          >
+            }}>
             Hide
-          </button>
+          </CommandButton>
         </article>
       ))}
     </>

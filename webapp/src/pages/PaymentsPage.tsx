@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { markPaid, PAYMENT_METHODS, setMethod, useRecords, type PaymentMethod } from "../api/hooks";
+import { CommandButton } from "../ui/CommandButton";
 
 const ON = Object.fromEntries(PAYMENT_METHODS.map((id) => [id, true])) as Record<PaymentMethod, boolean>;
 
@@ -35,10 +36,8 @@ export function PaymentsPage() {
       </article>
       <article className="panel">
         <h3>Payout D1</h3>
-        <button
-          className="primary-btn"
-          type="button"
-          onClick={() => {
+        <CommandButton command="admin.payment.markPaid" className="primary-btn"
+          type="button" onDone={() => {
             const result = markPaid(
               { id: "P1", driverId: "D1", amountOre: 125000, status: paid ? "paid" : "pending" },
               { driverId: "D1", status: "approved" },
@@ -48,10 +47,9 @@ export function PaymentsPage() {
               setPaid(true);
               setNotice("Marked paid.");
             }
-          }}
-        >
+          }}>
           Mark paid
-        </button>
+        </CommandButton>
       </article>
     </>
   );

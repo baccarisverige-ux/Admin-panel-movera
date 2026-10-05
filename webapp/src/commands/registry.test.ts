@@ -1,0 +1,59 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { COMMANDS } from "./registry.ts";
+
+const assert = (ok: unknown, message: string) => {
+  if (!ok) throw new Error(message);
+};
+
+const ids = new Set(COMMANDS.map((command) => command.id));
+assert(ids.size === COMMANDS.length, "command ids are unique");
+
+function buttonTags(text: string): string[] {
+  const tags: string[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const start = text.indexOf("<button", index);
+    if (start < 0) break;
+    let end = start + 7;
+    while (end < text.length) {
+      if (text[end] === ">" && text[end - 1] !== "=") break;
+      end += 1;
+    }
+    tags.push(text.slice(start, end + 1));
+    index = end + 1;
+  }
+  return tags;
+}
+
+function walk(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return walk(path);
+    return entry.name.endsWith(".tsx") ? [path] : [];
+  });
+}
+
+const root = new URL("../", import.meta.url).pathname;
+for (const path of walk(root)) {
+  const text = readFileSync(path, "utf8");
+  for (const tag of buttonTags(text)) {
+    const literal = /data-command="([^"]+)"/.exec(tag);
+    if (literal) {
+      assert(ids.has(literal[1]), `${path} uses unknown command ${literal[1]}`);
+      continue;
+    }
+    assert(path.endsWith("/CommandButton.tsx") && tag.includes("data-command={command}"), `${path} has a button that is not in the registry`);
+  }
+  for (const match of text.matchAll(/command="([^"]+)"/g)) {
+    assert(ids.has(match[1]), `${path} references unknown command ${match[1]}`);
+  }
+}
+
+const trips = readFileSync(new URL("../pages/TripsPage.tsx", import.meta.url), "utf8");
+const riders = readFileSync(new URL("../pages/RidersPage.tsx", import.meta.url), "utf8");
+assert(trips.includes("useTrips"), "trips come from the demo hook");
+assert(!trips.includes("T1001"), "the 3-trip sample is gone");
+assert(riders.includes("useRiders"), "riders come from the demo hook");
+assert(!riders.includes("RIDERS"), "the sample rider cards are gone");
+
+console.log("registry ok");

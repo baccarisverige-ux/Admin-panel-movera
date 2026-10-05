@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { assignReservation, cancelReservation, needsDriverSoon, useRecords, type Reservation } from "../api/hooks";
+import { CommandButton } from "../ui/CommandButton";
 
 const NOW = "2026-10-05T10:40:00Z";
 const SEED: Reservation[] = [
@@ -28,12 +29,12 @@ export function ReservationsPage() {
             {needsDriverSoon(row, NOW) ? " · needs a driver" : ""}
           </h3>
           <div className="actions">
-            <button className="secondary-btn" type="button" onClick={() => { setRows(rows.map((item) => item.id === row.id ? assignReservation(item, "D3") : item)); setNotice("Assigned D3."); }}>
+            <CommandButton command="admin.reservation.assign" className="secondary-btn" type="button" onDone={() => { setRows(rows.map((item) => item.id === row.id ? assignReservation(item, "D3") : item)); setNotice("Assigned D3."); }}>
               Assign
-            </button>
-            <button className="secondary-btn" type="button" onClick={() => { setRows(rows.map((item) => item.id === row.id ? cancelReservation(item) : item)); setNotice("Cancelled. Policy version unchanged."); }}>
+            </CommandButton>
+            <CommandButton command="admin.reservation.cancel" className="secondary-btn" type="button" onDone={() => { setRows(rows.map((item) => item.id === row.id ? cancelReservation(item) : item)); setNotice("Cancelled. Policy version unchanged."); }}>
               Cancel
-            </button>
+            </CommandButton>
           </div>
         </article>
       ))}

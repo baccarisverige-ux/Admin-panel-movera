@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { healthAlerts, roleMatrix, runDrills, type DrillResult } from "../handover/drills";
 import { DataTable } from "../ui/DataTable";
+import { CommandButton } from "../ui/CommandButton";
 
 const NAMES: Record<string, string> = {
   "payment-failure": "Payment failure",
@@ -35,9 +36,9 @@ export function HandoverPage() {
       </article>
       <article className="panel">
         <h3>Drills</h3>
-        <button className="primary-btn" type="button" onClick={() => setDrills(runDrills())}>
+        <CommandButton command="admin.handover.drills" className="primary-btn" type="button" onDone={() => setDrills(runDrills())}>
           Run drills
-        </button>
+        </CommandButton>
         {drills?.map((drill) => (
           <section key={drill.id}>
             <h3>

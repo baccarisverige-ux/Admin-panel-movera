@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CommandButton } from "./CommandButton";
 
 export type TabItem = {
   id: string;
@@ -26,15 +27,12 @@ export function Tabs({ tabs, activeId, onChange }: TabsProps) {
   return (
     <div className="tabs">
       {items.map((tab) => (
-        <button
-          key={tab.id}
+        <CommandButton command="admin.tabs.select" key={tab.id}
           type="button"
           className={tab.id === activeId ? "active" : undefined}
-          data-tab={tab.id}
-          onClick={() => onChange(tab.id)}
-        >
+          data-tab={tab.id} onDone={() => onChange(tab.id)}>
           {tab.label}
-        </button>
+        </CommandButton>
       ))}
     </div>
   );

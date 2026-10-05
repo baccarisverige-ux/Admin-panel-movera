@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DEMO_CODE, DEMO_PASSWORD } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
+import { CommandButton } from "../ui/CommandButton";
 
 export function LoginPage() {
   const session = useSession();
@@ -33,23 +34,20 @@ export function LoginPage() {
           <input inputMode="numeric" value={code} onChange={(event) => setCode(event.target.value)} />
         </label>
         {session.error ? <p className="state-line">{session.error}</p> : null}
-        <button className="primary-btn" type="submit">
+        <CommandButton command="admin.auth.signIn" className="primary-btn" type="submit">
           Sign in
-        </button>
+        </CommandButton>
         <ul className="demo-agents">
           {session.agents.filter((agent) => agent.active).map((agent) => (
             <li key={agent.id}>
-              <button
-                type="button"
-                className="link-action"
-                onClick={() => {
+              <CommandButton command="admin.auth.pickAgent" type="button"
+                className="link-action" onDone={() => {
                   setEmail(agent.email);
                   setPassword(DEMO_PASSWORD);
                   setCode(DEMO_CODE);
-                }}
-              >
+                }}>
                 {agent.name} · {agent.role}
-              </button>
+              </CommandButton>
             </li>
           ))}
         </ul>

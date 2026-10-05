@@ -115,7 +115,7 @@ function Authed() {
         <Route path="reports" element={<Screen id="reports" />} />
         <Route path="handover" element={<Screen id="handover" />} />
         <Route path="trips" element={<Screen id="trips" />} />
-        <Route path="trips/:tripId" element={<RecordPage label="Trip" list="/trips" />} />
+        <Route path="trips/:tripId" element={<RecordPage kind="trips" label="Trip" list="/trips" />} />
         <Route path="reservations" element={<Screen id="reservations" />} />
         <Route path="reservations/:id" element={<RecordPage label="Reservation" list="/reservations" />} />
         <Route path="live" element={<Screen id="live" />} />
@@ -123,7 +123,7 @@ function Authed() {
         <Route path="drivers/:driverId" element={<RecordPage label="Driver" list="/drivers" />} />
         <Route path="onboarding" element={<Screen id="onboarding" />} />
         <Route path="riders" element={<Screen id="riders" />} />
-        <Route path="riders/:riderId" element={<RecordPage label="Rider" list="/riders" />} />
+        <Route path="riders/:riderId" element={<RecordPage kind="riders" label="Rider" list="/riders" />} />
         <Route path="vehicles" element={<Screen id="vehicles" />} />
         <Route path="vehicles/:id" element={<RecordPage label="Vehicle" list="/vehicles" />} />
         <Route path="payments" element={<Screen id="payments" />} />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ChatThread } from "../api/read";
+import { CommandButton } from "./CommandButton";
 
 type MessageThreadProps = {
   thread: ChatThread;
@@ -35,9 +36,9 @@ export function MessageThread({ thread }: MessageThreadProps) {
             if (event.key === "Enter") send();
           }}
         />
-        <button className="primary-btn" type="button" onClick={send}>
+        <CommandButton command="admin.thread.send" className="primary-btn" type="button" onDone={send}>
           Send
-        </button>
+        </CommandButton>
       </div>
     </div>
   );

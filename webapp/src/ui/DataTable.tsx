@@ -3,6 +3,7 @@ import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type
 import { statusLabel } from "../domain/labels";
 import { toCsv } from "../reports/csv";
 import { StatusDot } from "./kit";
+import { CommandButton } from "./CommandButton";
 
 const STATUS_WORDS = /Active|Complete|Pending|CRITICAL|HIGH|Expired|Operational|In Progress/;
 
@@ -71,7 +72,7 @@ export function DataTable({ head, rows, className, state = "ready", onRetry, onR
   if (state === "error") {
     return (
       <p className="state-line">
-        Could not load. <button className="link-action" type="button" onClick={onRetry}>Retry</button>
+        Could not load. <CommandButton command="admin.table.retry" className="link-action" type="button" onDone={onRetry}>Retry</CommandButton>
       </p>
     );
   }
@@ -89,12 +90,12 @@ export function DataTable({ head, rows, className, state = "ready", onRetry, onR
             setPage(0);
           }}
         />
-        <button className="secondary-btn" type="button" onClick={() => { if (query.trim()) { setChips((current) => [...current, query.trim()]); setQuery(""); } }}>Add filter</button>
+        <CommandButton command="admin.table.filter" className="secondary-btn" type="button" onDone={() => { if (query.trim()) { setChips((current) => [...current, query.trim()]); setQuery(""); } }}>Add filter</CommandButton>
         <a className="secondary-btn" href={`data:text/csv,${encodeURIComponent(csv)}`} download="movera.csv">Export CSV</a>
       </div>
       <div className="actions">
         {chips.map((chip) => (
-          <button key={chip} className="secondary-btn" type="button" onClick={() => setChips((current) => current.filter((item) => item !== chip))}>{chip} ×</button>
+          <CommandButton command="admin.table.clearFilter" key={chip} className="secondary-btn" type="button" onDone={() => setChips((current) => current.filter((item) => item !== chip))}>{chip} ×</CommandButton>
         ))}
       </div>
       {visible.length === 0 ? <p className="state-line">Nothing to show.</p> : (
@@ -104,7 +105,7 @@ export function DataTable({ head, rows, className, state = "ready", onRetry, onR
               <tr key={group.id}>
                 {group.headers.map((header) => (
                   <th key={header.id}>
-                    <button className="link-action" type="button" onClick={header.column.getToggleSortingHandler()}>{String(header.column.columnDef.header)}</button>
+                    <CommandButton command="admin.table.sort" className="link-action" type="button" onDone={() => header.column.getToggleSortingHandler()?.(new MouseEvent("click") as never)}>{String(header.column.columnDef.header)}</CommandButton>
                   </th>
                 ))}
                 <th>Row</th>
@@ -113,14 +114,14 @@ export function DataTable({ head, rows, className, state = "ready", onRetry, onR
           </thead>
           <tbody>
             {visible.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.id} onClick={() => onRow?.(Number(row.id))}>
                 {row.original.cells.map((cell, index) => (
                   <td key={`${row.id}-${index}`}>{renderCell(cell)}</td>
                 ))}
                 <td>
-                  <button className="link-action" type="button" onClick={() => setMenu(menu === Number(row.id) ? null : Number(row.id))}>Menu</button>
+                  <CommandButton command="admin.table.menu" className="link-action" type="button" onDone={() => setMenu(menu === Number(row.id) ? null : Number(row.id))}>Menu</CommandButton>
                   {menu === Number(row.id) ? (
-                    <button className="link-action" type="button" onClick={() => onRow?.(Number(row.id))}>Open</button>
+                    <CommandButton command="admin.table.open" className="link-action" type="button" onDone={() => onRow?.(Number(row.id))}>Open</CommandButton>
                   ) : null}
                 </td>
               </tr>
@@ -130,8 +131,8 @@ export function DataTable({ head, rows, className, state = "ready", onRetry, onR
       )}
       <p className="state-line">
         {sorted.length} rows · page {safePage + 1} of {pageCount}
-        <button className="link-action" type="button" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>Previous</button>
-        <button className="link-action" type="button" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>Next</button>
+        <CommandButton command="admin.table.previous" className="link-action" type="button" disabled={safePage === 0} onDone={() => setPage(safePage - 1)}>Previous</CommandButton>
+        <CommandButton command="admin.table.next" className="link-action" type="button" disabled={safePage >= pageCount - 1} onDone={() => setPage(safePage + 1)}>Next</CommandButton>
       </p>
     </div>
   );

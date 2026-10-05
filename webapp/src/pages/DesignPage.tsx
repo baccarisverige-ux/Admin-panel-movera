@@ -3,6 +3,7 @@ import { ACTION_REASONS } from "../domain/labels";
 import { useSession } from "../auth/SessionContext";
 import { DataTable } from "../ui/DataTable";
 import { Can, ConfirmDialog, DateTime, DetailLayout, DiffView, DocumentViewer, Drawer, Duration, EmptyState, ErrorState, Money, PhonePreview, StatusDot, Timeline, Toast, useDirty } from "../ui/kit";
+import { CommandButton } from "../ui/CommandButton";
 
 export function DesignPage() {
   const session = useSession();
@@ -40,15 +41,15 @@ export function DesignPage() {
           <input value={form.value} onChange={(event) => form.setValue(event.target.value)} />
         </label>
         <p>{form.dirty ? "Unsaved change." : "No unsaved change."}</p>
-        <button className="secondary-btn" type="button" onClick={() => setDrawer(true)}>Open drawer</button>
-        <button className="primary-btn" type="button" onClick={() => setOpen(true)}>Open confirm</button>
+        <CommandButton command="admin.design.drawer" className="secondary-btn" type="button" onDone={() => setDrawer(true)}>Open drawer</CommandButton>
+        <CommandButton command="admin.design.confirm" className="primary-btn" type="button" onDone={() => setOpen(true)}>Open confirm</CommandButton>
         <Drawer open={drawer} title="Quick view" onClose={() => setDrawer(false)}><p>Drawer content.</p></Drawer>
         <ConfirmDialog open={open} record="Erik Lind (D0001)" typed="D0001" reasons={[...ACTION_REASONS]} onConfirm={() => setOpen(false)} onClose={() => setOpen(false)} />
       </article>
-      <DetailLayout title="Sample record" status={<StatusDot tone="green">Active</StatusDot>} actions={<button className="secondary-btn" type="button">Action</button>} tabs={<p>Tab</p>}>
+      <DetailLayout title="Sample record" status={<StatusDot tone="green">Active</StatusDot>} actions={<CommandButton command="admin.design.action" className="secondary-btn" type="button">Action</CommandButton>} tabs={<p>Tab</p>}>
         <DataTable head={["Name", "Status"]} rows={[["Erik Lind", "Active"]]} state={tableState} onRetry={() => setTableState("ready")} />
-        <button className="link-action" type="button" onClick={() => setTableState("loading")}>Show loading</button>
-        <button className="link-action" type="button" onClick={() => setTableState("error")}>Show error</button>
+        <CommandButton command="admin.design.loading" className="link-action" type="button" onDone={() => setTableState("loading")}>Show loading</CommandButton>
+        <CommandButton command="admin.design.error" className="link-action" type="button" onDone={() => setTableState("error")}>Show error</CommandButton>
         <DataTable head={["Name"]} rows={[]} />
       </DetailLayout>
     </>

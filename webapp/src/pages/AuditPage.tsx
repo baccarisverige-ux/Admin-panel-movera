@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSession } from "../auth/SessionContext";
 import { emptyDb, runCommand, type CommandDb } from "../commands/run";
 import { DataTable } from "../ui/DataTable";
+import { CommandButton } from "../ui/CommandButton";
 
 const STORE_KEY = "movera-admin-commands";
 
@@ -54,12 +55,12 @@ export function AuditPage() {
           <p>Commands record who, what, when, before, after and the reason. Version {db.rev}.</p>
         </div>
         <div className="actions">
-          <button className="secondary-btn" type="button" onClick={() => request(5_000)}>
+          <CommandButton command="admin.audit.refund50" className="secondary-btn" type="button" onDone={() => request(5_000)}>
             Refund 50 kr
-          </button>
-          <button className="primary-btn" type="button" onClick={() => request(25_000)}>
+          </CommandButton>
+          <CommandButton command="admin.audit.refund250" className="primary-btn" type="button" onDone={() => request(25_000)}>
             Refund 250 kr
-          </button>
+          </CommandButton>
         </div>
       </div>
       <p className="state-line">{message}</p>

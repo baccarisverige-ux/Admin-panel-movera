@@ -1,5 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSession } from "../auth/SessionContext.tsx";
+import { commandById } from "../commands/registry.ts";
 import { useAdminApi } from "./AdminApiContext.tsx";
 import type { CommandInput } from "./create.ts";
 
@@ -63,35 +65,75 @@ export function useFreshness() {
   return useQuery({ queryKey: ["freshness"], queryFn: () => api.freshness() });
 }
 
-export function useCommand(action: string) {
+let commandLock = false;
+
+export function useCommands() {
   const api = useAdminApi();
   const client = useQueryClient();
-  const [phase, setPhase] = useState<"idle" | "submitting" | "pending" | "committed" | "rejected">("idle");
+  const session = useSession();
+  const [phase, setPhase] = useState<"idle" | "submitting" | "unknown" | "committed" | "rejected">("idle");
   const [message, setMessage] = useState("");
-  const mutation = useMutation({
-    mutationFn: (input: Omit<CommandInput, "action">) => api.command({ ...input, action }),
-    onSuccess: async (result) => {
-      setPhase("committed");
-      setMessage(result.message);
-      await client.invalidateQueries();
-    },
-    onError: (error: Error) => {
-      setPhase("rejected");
-      setMessage(error.message);
-    },
-  });
 
-  return {
-    phase,
-    message,
-    run(input: Omit<CommandInput, "action">) {
-      if (phase === "submitting" || mutation.isPending) return Promise.resolve(undefined);
-      setPhase("submitting");
-      return mutation.mutateAsync(input).catch((error: Error) => {
-        setPhase("rejected");
-        setMessage(error.message);
-        return undefined;
+  async function run(id: string, extra: Partial<CommandInput> = {}) {
+    const spec = commandById(id);
+    if (!spec) throw new Error(`Unknown command ${id}`);
+    if (commandLock) return undefined;
+    if (spec.reason && !extra.reason) {
+      setPhase("rejected");
+      setMessage("A reason is required.");
+      return undefined;
+    }
+    commandLock = true;
+    setPhase("submitting");
+    setMessage("");
+    let unknown = false;
+    const timer = setTimeout(() => {
+      unknown = true;
+      setPhase("unknown");
+      setMessage("Unknown. Check the audit before trying again.");
+    }, 900);
+    try {
+      const result = await api.command({
+        action: id,
+        targetId: extra.targetId ?? id,
+        reason: extra.reason ?? "No person affected",
+        actorId: extra.actorId ?? session.agent?.id ?? "signed-out",
+        before: extra.before ?? "",
+        after: extra.after ?? spec.label,
+        sliceKey: extra.sliceKey,
+        value: extra.value,
+        collection: extra.collection,
+        patch: extra.patch,
       });
+      clearTimeout(timer);
+      if (!unknown) {
+        setPhase("committed");
+        setMessage(result.message);
+      }
+      await client.invalidateQueries();
+      return result;
+    } catch (error) {
+      clearTimeout(timer);
+      if (!unknown) {
+        setPhase("rejected");
+        setMessage(error instanceof Error ? error.message : "Rejected");
+      }
+      return undefined;
+    } finally {
+      commandLock = false;
+    }
+  }
+
+  return { run, phase, message };
+}
+
+export function useCommand(action: string) {
+  const commands = useCommands();
+  return {
+    phase: commands.phase,
+    message: commands.message,
+    run(input: Omit<CommandInput, "action">) {
+      return commands.run(action, input);
     },
   };
 }

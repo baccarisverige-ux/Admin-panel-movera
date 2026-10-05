@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSession } from "../auth/SessionContext";
 import { emptyConfig, missingTranslations, publishConfig, rollbackConfig, setFeature, useRecords, type ConfigBook } from "../api/hooks";
+import { CommandButton } from "../ui/CommandButton";
 
 const STORE_KEY = "movera-admin-config";
 
@@ -54,21 +55,18 @@ export function ConfigPage() {
           Wallet
         </label>
         <div className="actions">
-          <button
-            className="primary-btn"
-            type="button"
-            onClick={() => {
+          <CommandButton command="admin.config.publish" className="primary-btn"
+            type="button" onDone={() => {
               if (!agent) return;
               const result = publishConfig(book, agent.id, new Date().toISOString());
               if (result.error) setNotice(result.error);
               else save(result.book, "Published.");
-            }}
-          >
+            }}>
             Publish
-          </button>
-          <button className="secondary-btn" type="button" onClick={() => save(rollbackConfig(book), "Rolled back.")}>
+          </CommandButton>
+          <CommandButton command="admin.config.rollback" className="secondary-btn" type="button" onDone={() => save(rollbackConfig(book), "Rolled back.")}>
             Roll back
-          </button>
+          </CommandButton>
         </div>
         <ul>
           {book.draft.reasons.map((reason) => (
