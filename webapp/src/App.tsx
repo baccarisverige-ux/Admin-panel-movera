@@ -4,6 +4,7 @@ import { SessionProvider, useSession } from "./auth/SessionContext";
 import { AppShell } from "./layout/AppShell";
 import { ADMIN_PAGES, pageForPath, type AdminPage } from "./nav";
 import { AuditPage } from "./pages/AuditPage";
+import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GenericPage } from "./pages/GenericPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -13,6 +14,7 @@ import { ZonesPage } from "./pages/ZonesPage";
 
 function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "audit") return <AuditPage />;
+  if (pageId === "settings") return <ConfigPage />;
   if (pageId === "dashboard") return <DashboardPage />;
   if (pageId === "zones") return <ZonesPage />;
   if (pageId === "pricing") return <PricingPage />;
