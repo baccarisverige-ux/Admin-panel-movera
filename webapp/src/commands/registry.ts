@@ -14,7 +14,7 @@ export type ActionSpec = CommandSpec & {
   destructive: boolean;
   idempotent: boolean;
   versioned: boolean;
-  audit: "always";
+  audit: "always" | "none";
   allowedStates?: readonly string[];
   approvalThresholdOre?: number;
 };
@@ -226,7 +226,7 @@ function enrich(command: CommandSpec): ActionSpec {
     destructive: DESTRUCTIVE.has(command.id),
     idempotent: true,
     versioned: !GLOBAL_DOMAINS.has(domain),
-    audit: "always",
+    audit: GLOBAL_DOMAINS.has(domain) ? "none" : "always",
     allowedStates: ALLOWED_STATES[command.id],
     approvalThresholdOre:
       command.id === "admin.payment.refund" || command.id === "admin.audit.refund250"
