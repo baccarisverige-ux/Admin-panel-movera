@@ -40,6 +40,7 @@ export const COMMANDS: CommandSpec[] = [
   { id: "admin.message.mark", label: "Mark delivery", reason: false, permission: "settings.read" },
   { id: "admin.payment.markPaid", label: "Mark payout paid", reason: true, permission: "finance.read" },
   { id: "admin.payment.approveBank", label: "Approve bank details", reason: true, permission: "finance.read" },
+  { id: "admin.pricing.saveAll", label: "Save all pricing", reason: true, permission: "settings.publish" },
   { id: "admin.pricing.saveZone", label: "Save price set", reason: true, permission: "settings.publish" },
   { id: "admin.pricing.addCategory", label: "Add category", reason: false, permission: "settings.read" },
   { id: "admin.pricing.export", label: "Export rates", reason: false, permission: "settings.read" },
