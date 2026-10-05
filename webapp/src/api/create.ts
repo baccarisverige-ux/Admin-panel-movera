@@ -266,6 +266,17 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       if (!can(actorRole, actionSpec.permission)) reject(403, "Your role cannot do that.");
       if (!scopeAllowed(actorScope, resolvedScope)) reject(403, "That record is outside your active scope.");
       if (actionSpec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
+
+      if (!actionSpec.versioned && actionSpec.audit === "none") {
+        return {
+          message: "Done.",
+          db,
+          operationId,
+          status: "committed",
+          rev: db.rev,
+        };
+      }
+
       if (expectedRev !== db.rev) reject(409, "Someone else changed this. Reload and review the newest version.");
       if (actionSpec.allowedStates && resolvedState && !actionSpec.allowedStates.includes(resolvedState)) {
         reject(422, `${actionSpec.label} is not allowed while the record is ${resolvedState}.`);
