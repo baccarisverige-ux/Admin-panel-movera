@@ -37,6 +37,7 @@ export type CommandInput = {
   scope?: string;
   idempotencyKey?: string;
   expectedRev?: number;
+  expectedSliceRev?: number;
   entityState?: string;
   amountOre?: number;
   sliceKey?: string;
@@ -278,6 +279,13 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       }
 
       if (expectedRev !== db.rev) reject(409, "Someone else changed this. Reload and review the newest version.");
+      if (raw.sliceKey && raw.expectedSliceRev !== undefined) {
+        const currentSlice = db.slices[raw.sliceKey] as { draftRev?: unknown } | undefined;
+        const currentDraftRev = typeof currentSlice?.draftRev === "number" ? currentSlice.draftRev : 1;
+        if (currentDraftRev !== raw.expectedSliceRev) {
+          reject(409, "Another agent changed this configuration draft. Reload and review the newest draft.");
+        }
+      }
       if (actionSpec.allowedStates && resolvedState && !actionSpec.allowedStates.includes(resolvedState)) {
         reject(422, `${actionSpec.label} is not allowed while the record is ${resolvedState}.`);
       }
