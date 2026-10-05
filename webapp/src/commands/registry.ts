@@ -5,10 +5,16 @@ export type CommandSpec = {
   permission: string;
 };
 
+export type ActionScope = "global" | "zone" | "record";
+
 export type ActionSpec = CommandSpec & {
   owner: string;
   entity: string;
+  scope: ActionScope;
   destructive: boolean;
+  idempotent: boolean;
+  versioned: boolean;
+  audit: "always";
   allowedStates?: readonly string[];
   approvalThresholdOre?: number;
 };
@@ -201,15 +207,31 @@ const DESTRUCTIVE = new Set([
   "admin.zone.archive",
 ]);
 
+const GLOBAL_DOMAINS = new Set(["shell", "auth", "design", "handover", "table", "card", "modal", "tabs", "ui", "doc", "confirm"]);
+const ZONE_DOMAINS = new Set(["zone", "config", "pricing", "dispatch", "live"]);
+
+function scopeFor(domain: string): ActionScope {
+  if (GLOBAL_DOMAINS.has(domain)) return "global";
+  if (ZONE_DOMAINS.has(domain)) return "zone";
+  return "record";
+}
+
 function enrich(command: CommandSpec): ActionSpec {
   const domain = command.id.split(".")[1] ?? "platform";
   return {
     ...command,
     owner: OWNER_BY_DOMAIN[domain] ?? "Platform",
     entity: domain,
+    scope: scopeFor(domain),
     destructive: DESTRUCTIVE.has(command.id),
+    idempotent: true,
+    versioned: !GLOBAL_DOMAINS.has(domain),
+    audit: "always",
     allowedStates: ALLOWED_STATES[command.id],
-    approvalThresholdOre: command.id === "admin.payment.refund" || command.id === "admin.audit.refund250" ? 20_000 : undefined,
+    approvalThresholdOre:
+      command.id === "admin.payment.refund" || command.id === "admin.audit.refund250"
+        ? 20_000
+        : undefined,
   };
 }
 
