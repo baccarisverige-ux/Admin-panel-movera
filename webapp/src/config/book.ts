@@ -467,43 +467,156 @@ export function approveConfig(book: ConfigBook, actorId: string): { book: Config
   return { book: { ...book, approverId: actorId, status: "approved" } };
 }
 
-export function publishConfig(book: ConfigBook, actorId: string, nowIso: string): { book: ConfigBook; error?: string } {
+function cloneDraft(draft: ConfigDraft): ConfigDraft {
+  return JSON.parse(JSON.stringify(draft)) as ConfigDraft;
+}
+
+export function publishConfig(
+  book: ConfigBook,
+  actorId: string,
+  nowIso: string,
+): { book: ConfigBook; error?: string; scheduled?: boolean } {
   const missing = missingTranslations(book.draft.reasons);
   if (missing.length > 0) return { book, error: `Missing translation: ${missing.join(", ")}` };
   if (book.draft.features.luxury !== false) return { book, error: "luxury is not a feature." };
   if (actorId === book.authorId) return { book, error: "A second agent must publish." };
   if (book.status !== "approved") return { book, error: "Approve the draft before publishing." };
-  if (book.draft.scheduleAt && book.draft.scheduleAt > nowIso) {
-    return { book, error: `Scheduled for ${book.draft.scheduleAt}. Not live yet.` };
-  }
-  const snapshot = JSON.parse(JSON.stringify(book.draft)) as ConfigDraft;
+
+  const snapshot = cloneDraft(book.draft);
   const diff = configDiff(book.published, snapshot);
+  const nextRev = book.rev + 1;
+
+  if (snapshot.scheduleAt && snapshot.scheduleAt > nowIso) {
+    const scheduled: ScheduledConfig = {
+      rev: nextRev,
+      actorId,
+      effectiveAt: snapshot.scheduleAt,
+      expiresAt: snapshot.expiresAt,
+      snapshot,
+      diff,
+    };
+    return {
+      scheduled: true,
+      book: {
+        ...book,
+        authorId: actorId,
+        approverId: null,
+        status: "draft",
+        rev: nextRev,
+        draft: { ...snapshot, scheduleAt: null },
+        scheduled: [...book.scheduled, scheduled],
+        publications: [
+          ...book.publications,
+          {
+            rev: nextRev,
+            at: nowIso,
+            actorId,
+            diff,
+            kind: "scheduled",
+            effectiveAt: scheduled.effectiveAt,
+            expiresAt: scheduled.expiresAt,
+          },
+        ],
+      },
+    };
+  }
+
+  const live = { ...snapshot, scheduleAt: null };
   return {
     book: {
       ...book,
       authorId: actorId,
       approverId: null,
       status: "draft",
-      rev: book.rev + 1,
-      published: snapshot,
-      history: [...book.history, snapshot],
-      publications: [...book.publications, { rev: book.rev + 1, at: nowIso, actorId, diff }],
+      rev: nextRev,
+      draft: cloneDraft(live),
+      published: cloneDraft(live),
+      history: [...book.history, cloneDraft(live)],
+      publications: [
+        ...book.publications,
+        {
+          rev: nextRev,
+          at: nowIso,
+          actorId,
+          diff,
+          kind: "publish",
+          effectiveAt: nowIso,
+          expiresAt: live.expiresAt,
+        },
+      ],
     },
   };
 }
 
-export function rollbackConfig(book: ConfigBook): ConfigBook {
+export function rollbackConfig(
+  book: ConfigBook,
+  actorId = "system",
+  nowIso = new Date().toISOString(),
+  kind: "rollback" | "expired" = "rollback",
+): ConfigBook {
   if (book.history.length < 2) return book;
-  const history = book.history.slice(0, -1);
-  const published = history[history.length - 1]!;
+  const previous = cloneDraft(book.history[book.history.length - 2]!);
+  previous.scheduleAt = null;
+  const nextRev = book.rev + 1;
+  const diff = configDiff(book.published, previous);
   return {
     ...book,
-    history,
-    published,
-    draft: JSON.parse(JSON.stringify(published)) as ConfigDraft,
-    rev: book.rev + 1,
-    status: "draft",
+    authorId: actorId,
     approverId: null,
-    publications: book.publications.slice(0, -1),
+    status: "draft",
+    rev: nextRev,
+    published: cloneDraft(previous),
+    draft: cloneDraft(previous),
+    history: [...book.history, cloneDraft(previous)],
+    publications: [
+      ...book.publications,
+      {
+        rev: nextRev,
+        at: nowIso,
+        actorId,
+        diff,
+        kind,
+        effectiveAt: nowIso,
+        expiresAt: previous.expiresAt,
+      },
+    ],
   };
 }
+
+export function advanceConfigClock(book: ConfigBook, nowIso: string): ConfigBook {
+  let next = book;
+  const due = [...next.scheduled]
+    .filter((item) => item.effectiveAt <= nowIso)
+    .sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt));
+
+  for (const scheduled of due) {
+    const snapshot = cloneDraft(scheduled.snapshot);
+    snapshot.scheduleAt = null;
+    next = {
+      ...next,
+      published: cloneDraft(snapshot),
+      draft: cloneDraft(snapshot),
+      history: [...next.history, cloneDraft(snapshot)],
+      scheduled: next.scheduled.filter((item) => item.rev !== scheduled.rev),
+      publications: [
+        ...next.publications,
+        {
+          rev: scheduled.rev,
+          at: nowIso,
+          actorId: scheduled.actorId,
+          diff: scheduled.diff,
+          kind: "publish",
+          effectiveAt: scheduled.effectiveAt,
+          expiresAt: scheduled.expiresAt,
+        },
+      ],
+    };
+  }
+
+  if (next.published.expiresAt && next.published.expiresAt <= nowIso && next.history.length >= 2) {
+    next = rollbackConfig(next, "system-expiry", nowIso, "expired");
+  }
+
+  return next;
+}
+
