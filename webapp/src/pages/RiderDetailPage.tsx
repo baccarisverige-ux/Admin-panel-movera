@@ -4,7 +4,7 @@ import { useRecords } from "../api/hooks";
 import { formatOre } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
 import { CommandButton } from "../ui/CommandButton";
-import { TabPanel, Tabs } from "../ui/Tabs";
+import { TabPanel, Tabs } from "../ui/Tabs";\nimport { SensitiveValue } from "../ui/SensitiveValue";
 
 const TABS = ["Trips", "Reservations", "Payments", "Promotions", "Support", "Safety", "Saved places", "Notes", "Activity"];
 
@@ -43,7 +43,7 @@ export function RiderDetailPage() {
       <div className="page-heading">
         <div>
           <h2>{rider.name}</h2>
-          <p>{rider.id} · {statusLabel(rider.status)} · {rider.phone} · {rider.zoneId}</p>
+          <p>{rider.id} · {statusLabel(rider.status)} · <SensitiveValue value={rider.phone} permission="riders.viewSensitive" command="admin.rider.revealSensitive" targetId={rider.id} label="Phone" /> · {rider.zoneId}</p>
         </div>
         <Link to="/riders">Back to riders</Link>
       </div>
