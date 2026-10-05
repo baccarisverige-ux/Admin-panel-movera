@@ -4,6 +4,7 @@ import { Modal } from "../ui/Modal";
 import { PageHeading } from "../ui/PageHeading";
 import { TabPanel, Tabs } from "../ui/Tabs";
 import { ZoneSelect } from "../ui/ZoneSelect";
+import { QuotePreview } from "./QuotePreview";
 
 const PRICING_TABS = [
   { id: "categories", label: "Vehicle Categories" },
@@ -72,6 +73,8 @@ export function PricingPage() {
           </button>
         </div>
       </PageHeading>
+
+      <QuotePreview />
 
       <Tabs
         tabs={PRICING_TABS}
