@@ -50,6 +50,7 @@ export const PAGE_PERMISSION: Record<string, string> = {
   riders: "riders.read",
   reservations: "trips.read",
   content: "settings.read",
+  gates: "system.read",
 };
 
 export function permissionForPage(pageId: string): string {
