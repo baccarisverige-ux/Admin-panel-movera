@@ -17,7 +17,7 @@ import { mapProviderLabel, ZoneCanvas } from "./ZoneCanvas";
 function formatImpact(impact: ReturnType<typeof zoneImpact>): string {
   const delta = `${impact.deltaKm >= 0 ? "+" : ""}${impact.deltaKm.toFixed(1)}`;
   const fees = impact.feeChanges.length > 0 ? impact.feeChanges.join(", ") : "No price changes.";
-  return `Impact: ${impact.areaKm.toFixed(1)} km² (change ${delta}). Online drivers inside: ${impact.drivers}. Active trips: ${impact.trips}. Future reservations: ${impact.reservations}. ${fees}`;
+  return `Greater Stockholm: ${impact.areaKm.toFixed(0)} km² (change ${delta}). Online drivers inside: ${impact.drivers}. Active trips: ${impact.trips}. Future reservations: ${impact.reservations}. ${fees}`;
 }
 
 export function ZoneMap() {

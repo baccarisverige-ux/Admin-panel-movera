@@ -7,6 +7,7 @@ import { menuItem, pageForPath, type MenuItem } from "./nav";
 import { AuditPage } from "./pages/AuditPage";
 import { ComingPage } from "./pages/ComingPage";
 import { ConfigPage } from "./pages/ConfigPage";
+import { ConfirmPage } from "./pages/ConfirmPage";
 import { ContentPage } from "./pages/ContentPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DesignPage } from "./pages/DesignPage";
@@ -36,6 +37,7 @@ function Screen({ id }: { id: string }) {
   if (item.coming) return <ComingPage title={item.label} order={item.coming} />;
   if (id === "audit") return <AuditPage />;
   if (id === "settings") return <ConfigPage />;
+  if (id === "confirm") return <ConfirmPage />;
   if (id === "drivers") return <DriversPage />;
   if (id === "dashboard") return <DashboardPage />;
   if (id === "zones") return <ZonesPage />;
@@ -146,6 +148,7 @@ function Authed() {
         <Route path="team" element={<Screen id="team" />} />
         <Route path="audit" element={<Screen id="audit" />} />
         <Route path="settings" element={<Screen id="settings" />} />
+        <Route path="confirm" element={<Screen id="confirm" />} />
         <Route path="system" element={<Screen id="system" />} />
         <Route path="gates" element={<Screen id="gates" />} />
         <Route path="design" element={<Screen id="design" />} />

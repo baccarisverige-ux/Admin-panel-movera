@@ -165,3 +165,23 @@ test("A05 draw Östermalm, cut a hole, add Arlanda pickups, review, publish, rel
   await expect(page.locator("[data-pickups='0']")).toBeVisible();
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+test("norrmalm row opens the zone with one Greater Stockholm area", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("link", { name: "Zones" }).click();
+  const impact = page.locator("[data-impact='zones']");
+  await expect(impact).toContainText(/Greater Stockholm: \d+ km²/);
+  const text = await impact.innerText();
+  expect(text.match(/km²/g)?.length).toBe(1);
+  const row = page.getByRole("row", { name: /Norrmalm/ });
+  await expect(row).toContainText("Published");
+  await page.getByRole("link", { name: "Norrmalm", exact: true }).click();
+  await expect(page).toHaveURL(/\/zones\/op-norrmalm$/);
+  await expect(page.locator("[data-zone-status]")).toContainText("Status: Published");
+  await page.getByRole("button", { name: "Dispatch" }).click();
+  await expect(page.getByLabel("Offer seconds")).toBeVisible();
+  await page.getByRole("button", { name: "Pricing" }).click();
+  await expect(page.getByLabel("Zone fee öre")).toBeVisible();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Norrmalm");
+});

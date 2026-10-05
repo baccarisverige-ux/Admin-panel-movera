@@ -143,6 +143,15 @@ function zone(input: Pick<ZoneShape, "id" | "code" | "name" | "kind" | "points">
   };
 }
 
+export function zoneStatus(zone: ZoneShape, book: ZoneBook): "Archived" | "In review" | "Draft" | "Published" {
+  if (zone.archived) return "Archived";
+  if (book.status === "in_review") return "In review";
+  const published = book.published.find((item) => item.id === zone.id);
+  if (!published) return "Draft";
+  const sameShape = JSON.stringify(published.points) === JSON.stringify(zone.points) && JSON.stringify(published.holes) === JSON.stringify(zone.holes);
+  return sameShape && published.zoneFeeOre === zone.zoneFeeOre ? "Published" : "Draft";
+}
+
 export function zoneTypeLabel(kind: ZoneKind): string {
   return ZONE_TYPES.find((item) => item.id === kind)?.label ?? kind;
 }
@@ -309,7 +318,11 @@ export function validateZones(zones: ZoneShape[]): ZoneIssue[] {
       }
     }
     const squareKm = zoneAreaKm(item);
-    if (squareKm > 500) issues.push({ level: "warn", zoneId: item.id, message: `${item.name} is ${squareKm.toFixed(0)} km². Check it is not larger than intended.` });
+    if (item.kind === "service" && squareKm > 500) {
+      issues.push({ level: "warn", zoneId: item.id, message: `${item.name} is the service area.` });
+    } else if (squareKm > 500) {
+      issues.push({ level: "warn", zoneId: item.id, message: `${item.name} is ${squareKm.toFixed(0)} km². Check it is not larger than intended.` });
+    }
     if (squareKm < 0.01) issues.push({ level: "warn", zoneId: item.id, message: `${item.name} is under 0.01 km².` });
     if (item.points.length > 1000) issues.push({ level: "warn", zoneId: item.id, message: `${item.name} has more than 1,000 points.` });
     if (item.kind === "operating") {
@@ -405,10 +418,14 @@ function countInside(zones: ZoneShape[], kind: ActivityPoint["kind"]): number {
   return activityPoints().filter((item) => item.kind === kind && zonesAt(zones, item.lat, item.lng).length > 0).length;
 }
 
+function serviceKm(zones: ZoneShape[]): number {
+  const service = zones.find((item) => item.kind === "service" && !item.archived);
+  return service ? zoneAreaKm(service) : 0;
+}
+
 export function zoneImpact(published: ZoneShape[], draft: ZoneShape[]): ZoneImpact {
-  const live = (zones: ZoneShape[]) => zones.filter((item) => !item.archived);
-  const before = live(published).reduce((sum, item) => sum + zoneAreaKm(item), 0);
-  const after = live(draft).reduce((sum, item) => sum + zoneAreaKm(item), 0);
+  const before = serviceKm(published);
+  const after = serviceKm(draft);
   const feeChanges = draft.flatMap((item) => {
     const previous = published.find((zone) => zone.id === item.id);
     if (!previous || previous.zoneFeeOre === item.zoneFeeOre) return [];

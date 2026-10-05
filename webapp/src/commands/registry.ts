@@ -18,6 +18,8 @@ export const COMMANDS: CommandSpec[] = [
   { id: "admin.audit.refund50", label: "Refund 50 kr", reason: true, permission: "finance.refund" },
   { id: "admin.audit.refund250", label: "Refund 250 kr", reason: true, permission: "finance.refund" },
   { id: "admin.config.publish", label: "Publish configuration", reason: true, permission: "settings.publish" },
+  { id: "admin.config.approve", label: "Approve configuration", reason: true, permission: "settings.publish" },
+  { id: "admin.config.review", label: "Send configuration for approval", reason: true, permission: "settings.edit" },
   { id: "admin.config.rollback", label: "Roll back configuration", reason: true, permission: "settings.publish" },
   { id: "admin.content.slot", label: "Choose content slot", reason: false, permission: "settings.read" },
   { id: "admin.content.publish", label: "Publish content", reason: true, permission: "settings.publish" },
