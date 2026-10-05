@@ -2,6 +2,7 @@ import {
   advanceConfigClock,
   approveConfig,
   configDiff,
+  draftRevisionMatches,
   effectiveValue,
   emptyConfig,
   impactPreview,
@@ -26,6 +27,9 @@ let book = setFeature(emptyConfig("nora"), "wallet", false, "nora");
 assert(book.draft.features.luxury === false, "luxury stays off");
 assert(book.draft.features.wallet === false, "wallet can be turned off");
 assert(book.status === "draft", "edit returns to draft");
+assert(book.draftRev === 2, "draft edit advances conflict token");
+assert(draftRevisionMatches(book, 2), "matching draft revision is accepted");
+assert(!draftRevisionMatches(book, 1), "stale draft revision is rejected");
 const blocked = publishConfig(book, "nora", "2026-10-05T10:00:00Z");
 assert(blocked.error === "A second agent must publish.", "second person");
 const sent = submitConfigApproval(book, "nora");
