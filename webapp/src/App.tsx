@@ -3,6 +3,7 @@ import { can, permissionForPage } from "./auth/permissions";
 import { SessionProvider, useSession } from "./auth/SessionContext";
 import { AppShell } from "./layout/AppShell";
 import { ADMIN_PAGES, pageForPath, type AdminPage } from "./nav";
+import { AuditPage } from "./pages/AuditPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GenericPage } from "./pages/GenericPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -11,6 +12,7 @@ import { TeamPage } from "./pages/TeamPage";
 import { ZonesPage } from "./pages/ZonesPage";
 
 function PageBody({ pageId }: { pageId: string }) {
+  if (pageId === "audit") return <AuditPage />;
   if (pageId === "dashboard") return <DashboardPage />;
   if (pageId === "zones") return <ZonesPage />;
   if (pageId === "pricing") return <PricingPage />;
