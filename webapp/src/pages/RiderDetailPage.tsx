@@ -4,7 +4,8 @@ import { useRecords } from "../api/hooks";
 import { formatOre } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
 import { CommandButton } from "../ui/CommandButton";
-import { TabPanel, Tabs } from "../ui/Tabs";\nimport { SensitiveValue } from "../ui/SensitiveValue";
+import { TabPanel, Tabs } from "../ui/Tabs";
+import { SensitiveValue } from "../ui/SensitiveValue";
 
 const TABS = ["Trips", "Reservations", "Payments", "Promotions", "Support", "Safety", "Saved places", "Notes", "Activity"];
 
