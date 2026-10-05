@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { advance, testSend, type Delivery, type Outbound } from "../messages/book";
+import { fillTemplate } from "../messages/template";
 
 const PEOPLE = [
   { id: "R1", app: "rider" as const, zone: "Norrmalm" },
@@ -7,9 +8,14 @@ const PEOPLE = [
   { id: "D1", app: "driver" as const, zone: "Norrmalm" },
 ];
 
+const LATE = { id: "late", name: "Late trip", body: "Hi {{name}}, trip {{trip}} is late." };
+
 export function MessagesPage() {
   const [message, setMessage] = useState<Outbound>({ id: "M1", audience: { app: "rider", zone: "Norrmalm" }, body: "Reservations are open.", status: "accepted" });
   const [hits, setHits] = useState<string[]>([]);
+  const [name, setName] = useState("Sara");
+  const [trip, setTrip] = useState("");
+  const filled = fillTemplate(LATE, { name, trip });
 
   return (
     <>
@@ -20,6 +26,28 @@ export function MessagesPage() {
         </div>
       </div>
       <article className="panel">
+        <h3>Template · {LATE.name}</h3>
+        <label>
+          Name
+          <input value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label>
+          Trip
+          <input value={trip} onChange={(event) => setTrip(event.target.value)} />
+        </label>
+        <p>{filled.error ?? filled.body}</p>
+        <button
+          className="secondary-btn"
+          type="button"
+          onClick={() => {
+            if (!filled.error) setMessage({ ...message, body: filled.body, status: "accepted" });
+          }}
+        >
+          Use this text
+        </button>
+      </article>
+      <article className="panel">
+        <p>{message.body}</p>
         <div className="actions">
           <button className="secondary-btn" type="button" onClick={() => setHits(testSend(message.audience, PEOPLE))}>
             Test send
