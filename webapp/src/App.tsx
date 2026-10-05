@@ -25,6 +25,7 @@ import { PricingPage } from "./pages/PricingPage";
 import { RecordPage } from "./pages/RecordPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
+import { RiderDetailPage } from "./pages/RiderDetailPage";
 import { RidersPage } from "./pages/RidersPage";
 import { SafetyPage } from "./pages/SafetyPage";
 import { SupportPage } from "./pages/SupportPage";
@@ -129,7 +130,7 @@ function Authed() {
         <Route path="drivers/:driverId" element={<DriverDetailPage />} />
         <Route path="onboarding" element={<Screen id="onboarding" />} />
         <Route path="riders" element={<Screen id="riders" />} />
-        <Route path="riders/:riderId" element={<RecordPage kind="riders" label="Rider" list="/riders" />} />
+        <Route path="riders/:riderId" element={<RiderDetailPage />} />
         <Route path="vehicles" element={<Screen id="vehicles" />} />
         <Route path="vehicles/:id" element={<RecordPage label="Vehicle" list="/vehicles" />} />
         <Route path="payments" element={<Screen id="payments" />} />
