@@ -110,3 +110,31 @@ function audit(db: CommandDb, input: CommandInput, nowIso: string, result: Audit
     result,
   };
 }
+
+export const COMMAND_STORE_KEY = "movera-admin-commands";
+
+export function withSignIn(db: CommandDb, actorId: string, email: string, nowIso: string): CommandDb {
+  const entry: AuditEntry = {
+    id: `aud-${db.audits.length + 1}`,
+    at: nowIso,
+    actorId,
+    action: "admin.auth.signIn",
+    targetId: email,
+    before: "signed out",
+    after: "signed in",
+    reason: "Demo sign-in",
+    result: "committed",
+  };
+  return { ...db, audits: [entry, ...db.audits] };
+}
+
+export function readCommandDb(raw: string | null): CommandDb {
+  if (!raw) return emptyDb();
+  try {
+    const parsed = JSON.parse(raw) as CommandDb;
+    if (!parsed || !Array.isArray(parsed.audits) || typeof parsed.rev !== "number") return emptyDb();
+    return parsed;
+  } catch {
+    return emptyDb();
+  }
+}

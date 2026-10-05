@@ -88,7 +88,7 @@ function person(index: number): string {
 
 function phone(index: number): string {
   if (index === 0) return PHONE;
-  const body = String(1000000 + index).padStart(7, "0");
+  const body = String(1000001 + index).padStart(7, "0");
   return `+46 70 ${body.slice(0, 3)} ${body.slice(3, 5)} ${body.slice(5)}`;
 }
 

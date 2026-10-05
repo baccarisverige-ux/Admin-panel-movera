@@ -1,21 +1,13 @@
 import { useState } from "react";
 import { useSession } from "../auth/SessionContext";
-import { emptyDb, runCommand, type CommandDb } from "../commands/run";
+import { COMMAND_STORE_KEY, readCommandDb, runCommand, type CommandDb } from "../commands/run";
 import { DataTable } from "../ui/DataTable";
 import { CommandButton } from "../ui/CommandButton";
 
-const STORE_KEY = "movera-admin-commands";
+const STORE_KEY = COMMAND_STORE_KEY;
 
 function loadDb(): CommandDb {
-  const raw = localStorage.getItem(STORE_KEY);
-  if (!raw) return emptyDb();
-  try {
-    const parsed = JSON.parse(raw) as CommandDb;
-    if (!parsed || !Array.isArray(parsed.audits)) return emptyDb();
-    return parsed;
-  } catch {
-    return emptyDb();
-  }
+  return readCommandDb(localStorage.getItem(STORE_KEY));
 }
 
 export function AuditPage() {

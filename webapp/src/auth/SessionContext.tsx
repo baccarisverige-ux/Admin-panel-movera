@@ -5,7 +5,7 @@ type SessionValue = {
   agent: Agent | null;
   agents: Agent[];
   error: string | null;
-  signInWith: (email: string, password: string, code: string) => void;
+  signInWith: (email: string, password: string, code: string) => Agent | null;
   signOut: () => void;
   setAgents: (next: Agent[]) => void;
 };
@@ -64,12 +64,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const result = signIn(agents, { email, password, code });
         if (!result.ok) {
           setError(result.error);
-          return;
+          return null;
         }
         localStorage.setItem(SESSION_KEY, result.agent.id);
         localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
         setError(null);
         setAgent(result.agent);
+        return result.agent;
       },
       signOut() {
         localStorage.removeItem(SESSION_KEY);

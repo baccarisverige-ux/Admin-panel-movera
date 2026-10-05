@@ -24,6 +24,10 @@ assert(seed.bonuses.length === 3, "3 bonuses");
 assert(seed.staff.length === 12, "12 staff");
 assert(statusLabel("in_trip") === "On a trip", "status label");
 assert(!statusLabel("in_trip").includes("_"), "no raw status");
+const r1 = seed.riders.find((rider) => rider.id === "R0001");
+const r2 = seed.riders.find((rider) => rider.id === "R0002");
+assert(r1 && r2 && r1.phone !== r2.phone, "R0001 and R0002 must not share a phone");
+assert(r1?.phone === PHONE, "R0001 keeps the known demo phone");
 
 const api = createFixtureAdminApi(0);
 await api.reset();
