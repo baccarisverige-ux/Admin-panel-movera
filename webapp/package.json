@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint src",
-    "test": "node --experimental-strip-types --test src/nav.test.ts src/catalog.test.ts src/domain.test.ts src/api.test.ts src/auth/session.test.ts src/commands/run.test.ts"
+    "test": "node --experimental-strip-types --test src/nav.test.ts src/catalog.test.ts src/domain.test.ts src/api.test.ts src/auth/session.test.ts src/commands/run.test.ts src/zones/releases.test.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.1",
@@ -16,6 +16,7 @@
     "@tanstack/react-virtual": "^3.14.13",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.52.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^26.6.4",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
