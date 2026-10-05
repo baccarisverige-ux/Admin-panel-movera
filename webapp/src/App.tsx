@@ -27,6 +27,7 @@ import { SafetyPage } from "./pages/SafetyPage";
 import { SupportPage } from "./pages/SupportPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TripsPage } from "./pages/TripsPage";
+import { ZoneDetailPage } from "./pages/ZoneDetailPage";
 import { ZonesPage } from "./pages/ZonesPage";
 
 function Screen({ id }: { id: string }) {
@@ -130,7 +131,7 @@ function Authed() {
         <Route path="payouts" element={<Screen id="payouts" />} />
         <Route path="payouts/:id" element={<RecordPage label="Payout" list="/payouts" />} />
         <Route path="zones" element={<Screen id="zones" />} />
-        <Route path="zones/:zoneId" element={<RecordPage label="Zone" list="/zones" />} />
+        <Route path="zones/:zoneId" element={<ZoneDetailPage />} />
         <Route path="pricing" element={<Screen id="pricing" />} />
         <Route path="support" element={<Screen id="support" />} />
         <Route path="tickets/:id" element={<RecordPage label="Ticket" list="/support" />} />

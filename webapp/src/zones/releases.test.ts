@@ -1,4 +1,4 @@
-import { emptyBook, publishZones, rollbackZones, stockholmZones, submitReview, updateDraft, validateZones, ZONE_TYPES, zonesAt } from "./releases.ts";
+import { addHole, coreZones, emptyBook, publishZones, rollbackZones, stockholmZones, submitReview, updateDraft, validateZones, zoneImpact, ZONE_TYPES, zonesAt } from "./releases.ts";
 import { zoneDrawModes } from "./drawModes.ts";
 
 const assert = (ok: unknown, message: string) => {
@@ -6,12 +6,15 @@ const assert = (ok: unknown, message: string) => {
 };
 
 const seed = stockholmZones();
-assert(zoneDrawModes().some((mode) => mode.mode === "render"), "terra draw render mode is named");
+const modes = zoneDrawModes().map((mode) => mode.mode);
+assert(modes.includes("render"), "terra draw render mode is named");
+assert(modes.includes("circle") && modes.includes("select") && modes.includes("polygon"), "circle, select and polygon tools exist");
 for (const type of ZONE_TYPES) assert(seed.some((zone) => zone.kind === type.id), `seed has ${type.id}`);
 assert(seed.filter((zone) => zone.kind === "operating").length === 9, "9 operating zones");
+assert(coreZones(seed).length === 12, "12 core zones");
 assert(seed.some((zone) => zone.name === "Arlanda"), "Arlanda");
 assert(seed.some((zone) => zone.name === "Bromma airport"), "Bromma");
-assert(validateZones(seed).every((issue) => issue.level !== "error"), "seed has no blocking errors");
+assert(validateZones(seed).every((issue) => issue.level !== "error"), `seed has no blocking errors: ${validateZones(seed).map((issue) => issue.message).join("; ")}`);
 assert(validateZones(seed).some((issue) => issue.level === "warn"), "large service area warns");
 
 const bowtie = updateDraft(emptyBook("nora"), "op-norrmalm", [[59.33, 18.05], [59.34, 18.07], [59.33, 18.07], [59.34, 18.05]], "nora");
@@ -19,6 +22,14 @@ assert(validateZones(bowtie.draft).some((issue) => issue.message.includes("cross
 
 const outside = updateDraft(emptyBook("nora"), "op-norrmalm", [[60.5, 18], [60.5, 18.1], [60.6, 18.1], [60.6, 18]], "nora");
 assert(validateZones(outside.draft).some((issue) => issue.message.includes("outside")), "operating zone must sit in the service area");
+
+const holed = addHole(emptyBook("nora"), "op-norrmalm", [[59.332, 18.07], [59.332, 18.09], [59.342, 18.09], [59.342, 18.07]], "nora");
+assert(!holed.error && holed.book.draft.find((zone) => zone.id === "op-norrmalm")?.holes.length === 1, "a hole inside the zone is kept");
+const badHole = addHole(emptyBook("nora"), "op-norrmalm", [[59.1, 17.5], [59.1, 17.6], [59.12, 17.6]], "nora");
+assert(badHole.error, "a hole outside the zone is rejected");
+
+const impact = zoneImpact(seed, seed);
+assert(impact.deltaKm === 0 && impact.drivers > 0 && impact.trips > 0, "impact counts drivers and trips inside the draft");
 
 let book = emptyBook("nora");
 book = updateDraft(book, "op-norrmalm", [[59.33, 18.06], [59.331, 18.07], [59.332, 18.06]], "nora");
