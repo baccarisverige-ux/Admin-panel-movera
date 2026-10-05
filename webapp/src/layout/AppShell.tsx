@@ -1,22 +1,23 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { ADMIN_PAGES, type AdminPage } from "../nav";
 import { ZoneSelect } from "../ui/ZoneSelect";
 
 type AppShellProps = {
   page: AdminPage;
-  onNavigate: (path: string) => void;
   children: ReactNode;
 };
 
-export function AppShell({ page, onNavigate, children }: AppShellProps) {
+function buildLabel(): string {
+  const sha = import.meta.env.VITE_BUILD_SHA;
+  if (!sha) return "local";
+  return sha.slice(0, 7);
+}
+
+export function AppShell({ page, children }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const heading = page.id === "dashboard" ? "Movera Admin Dashboard" : page.label;
-
-  function go(path: string) {
-    onNavigate(path);
-    setMenuOpen(false);
-  }
 
   return (
     <div className="app-shell">
@@ -27,18 +28,15 @@ export function AppShell({ page, onNavigate, children }: AppShellProps) {
         </div>
         <nav className="nav">
           {ADMIN_PAGES.map((item) => (
-            <a
+            <Link
               key={item.id}
-              href={item.path}
+              to={item.path}
               className={item.id === page.id ? "active" : undefined}
-              onClick={(event) => {
-                event.preventDefault();
-                go(item.path);
-              }}
+              onClick={() => setMenuOpen(false)}
             >
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
-            </a>
+            </Link>
           ))}
         </nav>
       </aside>
@@ -72,6 +70,10 @@ export function AppShell({ page, onNavigate, children }: AppShellProps) {
           </div>
         </header>
         <main className="content">{children}</main>
+        <footer className="build-footer">
+          <span>Demo data</span>
+          <span>{buildLabel()}</span>
+        </footer>
       </section>
     </div>
   );

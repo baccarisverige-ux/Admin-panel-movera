@@ -272,6 +272,15 @@ textarea:focus {
   padding:24px 26px 42px
 }
 
+.build-footer {
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  margin:0 26px 18px;
+  color:var(--muted);
+  font-size:12px
+}
+
 .page {
   display:none
 }

@@ -2,3 +2,8 @@ webapp/node_modules/
 webapp/dist/
 webapp/tsconfig.tsbuildinfo
 .DS_Store
+_site/
+.env
+webapp/.env
+webapp/.env.local
+webapp/.env.*.local

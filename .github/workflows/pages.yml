@@ -21,18 +21,40 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Test and build the new admin
+        working-directory: webapp
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
+        run: |
+          npm ci
+          npm test
+          npx tsc -b
+          npx vite build --base=/Admin-panel-movera/app/
+
+      - name: Assemble the site (old root + new admin at /app/)
+        run: |
+          mkdir -p _site
+          cp index.html app.js styles.css _site/
+          cp -r webapp/dist _site/app
+          cp webapp/dist/index.html _site/404.html
+          echo "${GITHUB_SHA}" > _site/app/version.txt
+
+      - uses: actions/configure-pages@v5
         with:
           enablement: true
 
-      - name: Upload site
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
-          path: "."
+          path: "_site"
 
       - name: Deploy to GitHub Pages
         id: deployment
