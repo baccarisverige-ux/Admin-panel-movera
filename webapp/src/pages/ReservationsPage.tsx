@@ -22,6 +22,17 @@ export function ReservationsPage() {
         </div>
       </div>
       <p className="state-line">{notice}</p>
+      <article className="panel">
+        <h3>Reservation rules</h3>
+        <div className="field-grid">
+          <label>Booking horizon<input readOnly value="7 days" /></label>
+          <label>Assignment lead<input readOnly value="30 min" /></label>
+          <label>Give-up time<input readOnly value="5 min" /></label>
+          <label>Included waiting<input readOnly value="5 minutes" /></label>
+          <label>Free-cancel window<input readOnly value="2 minutes after accept" /></label>
+        </div>
+        <p className="state-line">A booking keeps policy {rows[0]?.policyVersion ?? "res-2"} after cancel. These defaults are not a second policy.</p>
+      </article>
       {rows.map((row) => (
         <article className="panel" key={row.id}>
           <h3>
