@@ -85,6 +85,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     "safety.edit",
     "settings.read",
     "settings.edit",
+    "settings.publish",
     "audit.read",
     "approval.decide",
   ],
