@@ -32,9 +32,15 @@ export function useRecords(name: string, scope?: string | null) {
   const [params] = useSearchParams();
   const requested = scope ?? params.get("scope");
   const scopeDenied = Boolean(requested && session.agent && !canUseZone(session.agent, requested));
-  const effectiveScope = scopeDenied ? "__scope-denied__" : requested;
+  const effectiveScope = scopeDenied
+    ? ["__scope-denied__"]
+    : requested
+      ? requested
+      : session.agent?.scope.zones === "all"
+        ? null
+        : session.agent?.scope.zones ?? null;
   const query = useQuery({
-    queryKey: ["records", name, effectiveScope ?? "all", session.agent?.id ?? "signed-out"],
+    queryKey: ["records", name, JSON.stringify(effectiveScope ?? "all"), session.agent?.id ?? "signed-out"],
     queryFn: () => api.list(name, effectiveScope),
   });
   return { ...query, scopeDenied, effectiveScope };
@@ -59,10 +65,21 @@ export function useTrips(scope: string | null) {
 
 export function useSearch(query: string) {
   const api = useAdminApi();
+  const session = useSession();
+  const [params] = useSearchParams();
+  const requested = params.get("scope");
+  const scopeDenied = Boolean(requested && session.agent && !canUseZone(session.agent, requested));
+  const effectiveScope = scopeDenied
+    ? ["__scope-denied__"]
+    : requested
+      ? requested
+      : session.agent?.scope.zones === "all"
+        ? null
+        : session.agent?.scope.zones ?? null;
   return useQuery({
-    queryKey: ["search", query],
-    queryFn: () => api.search(query),
-    enabled: query.trim().length > 1,
+    queryKey: ["search", query, JSON.stringify(effectiveScope ?? "all"), session.agent?.id ?? "signed-out"],
+    queryFn: () => api.search(query, effectiveScope),
+    enabled: query.trim().length > 1 && !scopeDenied,
   });
 }
 
