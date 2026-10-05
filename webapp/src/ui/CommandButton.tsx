@@ -21,6 +21,7 @@ type CommandButtonProps = {
   patch?: Record<string, string | number | boolean | null>;
   scope?: string;
   expectedRev?: number;
+  expectedSliceRev?: number;
   sliceKey?: string;
   value?: unknown;
   confirmTarget?: boolean;
@@ -45,6 +46,7 @@ export function CommandButton({
   patch,
   scope,
   expectedRev,
+  expectedSliceRev,
   sliceKey,
   value,
   confirmTarget = true,
@@ -80,6 +82,7 @@ export function CommandButton({
       patch: patch ? { ...patch, ...(storeReason ? { notes: chosen } : {}) } : undefined,
       scope,
       expectedRev,
+      expectedSliceRev,
       sliceKey,
       value,
     }).then((result) => {
