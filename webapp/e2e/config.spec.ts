@@ -9,8 +9,12 @@ async function signIn(page: Page, email: string) {
   await expect(page.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
 }
 
-test("configuration draft shows a diff and a second agent publishes", async ({ page }) => {
-  test.setTimeout(60_000);
+async function confirm(page: Page) {
+  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
+}
+
+test("configuration draft is saved, approved by a second agent, published and rolled back as a new version", async ({ page }) => {
+  test.setTimeout(75_000);
   await signIn(page, "nora@movera.se");
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Configuration" })).toBeVisible();
@@ -21,47 +25,105 @@ test("configuration draft shows a diff and a second agent publishes", async ({ p
   await expect(page.getByLabel("Rider iOS minimum")).toHaveValue("1.0.0");
   await expect(page.getByLabel("Rider iOS message")).toHaveValue("A new version of Movera is available.");
   await expect(page.getByRole("list", { name: "Configuration diff" })).toContainText("No unpublished changes");
+
   await page.getByRole("checkbox", { name: "Wallet", exact: true }).uncheck();
   await expect(page.getByRole("list", { name: "Configuration diff" })).toContainText("Wallet on → off");
   await page.getByLabel("Rider app").fill("1.1.0");
   await page.getByLabel("Rider app").blur();
   await expect(page.getByRole("list", { name: "Configuration diff" })).toContainText("Rider app 1.0.0 → 1.1.0");
+
   await page.getByLabel("wait_too_long Swedish").fill("");
-  await expect(page.getByText("Missing translation: wait_too_long")).toBeVisible();
+  await expect(page.getByText(/Missing translation: wait_too_long/)).toBeVisible();
   await page.getByLabel("wait_too_long Swedish").fill("Väntan var för lång");
+
   await page.getByRole("checkbox", { name: "Reservations in this zone" }).uncheck();
   await expect(page.getByRole("list", { name: "Configuration diff" })).toContainText("op-norrmalm");
   await expect(page.locator("[data-effective='zone']")).toContainText("Winning level: zone");
-  await page.getByRole("button", { name: "Publish" }).click();
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
-  await expect(page.getByText("A second agent must publish.")).toBeVisible();
+  await expect(page.locator("[data-config-dirty='yes']")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send for approval" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("Draft saved through AdminApi.")).toBeVisible();
+  await expect(page.locator("[data-config-dirty='no']")).toBeVisible();
+
   await page.getByRole("button", { name: "Send for approval" }).click();
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
+  await confirm(page);
   await expect(page.getByText("Sent for approval.")).toBeVisible();
-  await page.getByRole("button", { name: "Approve" }).click();
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
-  await expect(page.getByText("A second agent must approve.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve" })).toBeDisabled();
+
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("button", { name: "Lena Berg · ops" }).click();
   await expect(page.getByLabel("Email")).toHaveValue("lena@movera.se");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
+
   await page.getByRole("button", { name: "Approve" }).click();
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
+  await confirm(page);
   await expect(page.getByText("Approved. A second agent can publish.")).toBeVisible();
+
   await page.getByRole("button", { name: "Publish" }).click();
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
-  await expect(page.getByText(/Published version/)).toBeVisible();
-  await expect(page.getByRole("list", { name: "Publish history" })).toContainText("lena");
+  await confirm(page);
+  await expect(page.getByText(/Published version 2/)).toBeVisible();
+  await expect(page.getByRole("list", { name: "Publish history" })).toContainText("publish by lena");
+
   await page.reload();
   await expect(page.getByRole("checkbox", { name: "Wallet", exact: true })).not.toBeChecked();
   await page.getByRole("button", { name: "Roll back" }).click();
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
-  await expect(page.getByText("Rolled back.")).toBeVisible();
+  await confirm(page);
+  await expect(page.getByText(/Rolled back as version 3/)).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "Wallet", exact: true })).toBeChecked();
+  await expect(page.getByRole("list", { name: "Publish history" })).toContainText("rollback by lena");
+
   await page.getByRole("link", { name: "To confirm", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "To confirm" })).toBeVisible();
   await expect(page.getByLabel("Quote validity")).toHaveValue("2 minutes");
   await expect(page.getByLabel("Google Maps key")).toHaveValue("empty");
   await expect(page.locator(".badge-amber").first()).toHaveText("To confirm");
+});
+
+test("full precedence viewer resolves through cohort and impact preview names the scope", async ({ page }) => {
+  await signIn(page, "nora@movera.se");
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+
+  const add = async (level: string, target: string, value: "on" | "off") => {
+    await page.getByLabel("Override level").selectOption(level);
+    await page.getByLabel("Override target").fill(target);
+    await page.getByLabel("Override value").selectOption(value);
+    await page.getByRole("button", { name: "Add or replace override" }).click();
+  };
+
+  await add("market", "SE-STO", "off");
+  await add("zone", "op-norrmalm", "on");
+  await add("category", "premium", "off");
+  await add("app", "rider", "on");
+  await add("platform", "ios", "off");
+  await add("appVersion", "1.0.0", "on");
+  await add("cohort", "beta", "off");
+
+  await page.getByLabel("Preview cohort").fill("beta");
+  await expect(page.getByTestId("effective-precedence")).toContainText("Winning level: cohort");
+  await expect(page.getByTestId("effective-precedence")).toContainText("Effective wallet: off");
+  await expect(page.getByTestId("config-impact")).toContainText("cohort:beta");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("Draft saved through AdminApi.")).toBeVisible();
+});
+
+test("stale configuration editor is refused instead of overwriting a newer draft", async ({ context, page }) => {
+  test.setTimeout(60_000);
+  await signIn(page, "nora@movera.se");
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(page.locator("[data-config-dirty='no']")).toBeVisible();
+
+  const stale = await context.newPage();
+  await stale.goto("/settings");
+  await expect(stale.getByRole("heading", { name: "Configuration" })).toBeVisible();
+  await expect(stale.locator("[data-config-dirty='no']")).toBeVisible();
+
+  await page.getByRole("checkbox", { name: "Wallet", exact: true }).uncheck();
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("Draft saved through AdminApi.")).toBeVisible();
+
+  await stale.getByRole("checkbox", { name: "Reservations in this zone" }).uncheck();
+  await stale.getByRole("button", { name: "Save draft" }).click();
+  await expect(stale.getByText(/Someone else changed this/)).toBeVisible();
 });
