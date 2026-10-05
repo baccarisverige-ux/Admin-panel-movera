@@ -18,7 +18,7 @@ export function StatsGrid(props: StatsGridProps) {
       <section className="stats-grid">
         {props.stats.map((stat) => (
           <article className="stat-card" key={stat.label}>
-            <div className="stat-icon">{stat.icon}</div>
+            {stat.icon ? <div className="stat-icon">{stat.icon}</div> : null}
             <div>
               <span>{stat.label}</span>
               <strong>{stat.value}</strong>

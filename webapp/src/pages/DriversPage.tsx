@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { activate, blankDocuments, reviewDocument, type DocStatus, type Driver } from "../drivers/gate";
+import { DataTable } from "../ui/DataTable";
 
 const starter: Driver = {
   id: "D2847",
@@ -40,38 +41,28 @@ export function DriversPage() {
       </div>
       <p className="state-line">{notice}</p>
       <article className="panel">
-        <table>
-          <thead>
-            <tr>
-              <th>Document</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(driver.documents).map(([id, status]) => (
-              <tr key={id}>
-                <td>{id}</td>
-                <td>{status}</td>
-                <td>
-                  {(["approved", "rejected", "in_review"] as DocStatus[]).map((next) => (
-                    <button
-                      key={next}
-                      className="link-action"
-                      type="button"
-                      onClick={() => {
-                        setDriver(reviewDocument(driver, id as keyof Driver["documents"], next));
-                        setNotice(next === "rejected" ? "Rejected. The driver will see the reason on the app." : "Document updated.");
-                      }}
-                    >
-                      {next}
-                    </button>
-                  ))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          head={["Document", "Status", "Actions"]}
+          rows={Object.entries(driver.documents).map(([id, status]) => [
+            id,
+            status,
+            <span key={id}>
+              {(["approved", "rejected", "in_review"] as DocStatus[]).map((next) => (
+                <button
+                  key={next}
+                  className="link-action"
+                  type="button"
+                  onClick={() => {
+                    setDriver(reviewDocument(driver, id as keyof Driver["documents"], next));
+                    setNotice(next === "rejected" ? "Rejected. The driver will see the reason on the app." : "Document updated.");
+                  }}
+                >
+                  {next}
+                </button>
+              ))}
+            </span>,
+          ])}
+        />
       </article>
     </>
   );

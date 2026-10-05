@@ -38,6 +38,7 @@ export const NAV_ICONS = [
   "Settings",
   "Server",
   "Shield",
+  "Palette",
 ] as const;
 
 export type NavIcon = (typeof NAV_ICONS)[number];
@@ -59,6 +60,8 @@ export const MENU: MenuItem[] = [
   { id: "trips", path: "/trips", label: "Trips", group: "Operations", permission: "trips.read", icon: "Route" },
   { id: "reservations", path: "/reservations", label: "Reservations", group: "Operations", permission: "trips.read", icon: "CalendarClock" },
   { id: "live", path: "/live", label: "Live map", group: "Operations", permission: "trips.read", icon: "Map", coming: "G8" },
+  { id: "incidents", path: "/incidents", label: "Incidents", group: "Operations", permission: "incidents.read", icon: "Siren" },
+  { id: "risk", path: "/risk", label: "Risk", group: "Operations", permission: "safety.edit", icon: "ShieldAlert", coming: "G12" },
   { id: "drivers", path: "/drivers", label: "Drivers", group: "People & fleet", permission: "drivers.read", icon: "Users" },
   { id: "onboarding", path: "/onboarding", label: "Onboarding", group: "People & fleet", permission: "drivers.read", icon: "UserPlus", coming: "G6" },
   { id: "riders", path: "/riders", label: "Riders", group: "People & fleet", permission: "riders.read", icon: "UserRound" },
@@ -69,8 +72,6 @@ export const MENU: MenuItem[] = [
   { id: "pricing", path: "/pricing", label: "Pricing", group: "Places & pricing", permission: "settings.read", icon: "Tags" },
   { id: "support", path: "/support", label: "Support", group: "Support", permission: "support.reply", icon: "LifeBuoy" },
   { id: "chat", path: "/chat", label: "Chat", group: "Support", permission: "support.reply", icon: "MessagesSquare", coming: "G13" },
-  { id: "incidents", path: "/incidents", label: "Incidents", group: "Support", permission: "incidents.read", icon: "Siren" },
-  { id: "risk", path: "/risk", label: "Risk", group: "Support", permission: "safety.edit", icon: "ShieldAlert", coming: "G12" },
   { id: "messages", path: "/messages", label: "Messages", group: "Growth & content", permission: "settings.read", icon: "MessageSquare" },
   { id: "content", path: "/content", label: "Content", group: "Growth & content", permission: "settings.read", icon: "Images" },
   { id: "promotions", path: "/promotions", label: "Promotions", group: "Growth & content", permission: "settings.read", icon: "Ticket" },
@@ -80,6 +81,7 @@ export const MENU: MenuItem[] = [
   { id: "settings", path: "/settings", label: "Settings", group: "Platform", permission: "settings.read", icon: "Settings" },
   { id: "system", path: "/system", label: "System", group: "Platform", permission: "system.read", icon: "Server", coming: "G17" },
   { id: "gates", path: "/gates", label: "Release gates", group: "Platform", permission: "system.read", icon: "Shield" },
+  { id: "design", path: "/design", label: "Design", group: "Platform", permission: "system.read", icon: "Palette" },
 ];
 
 const DETAILS: { pattern: RegExp; id: string }[] = [

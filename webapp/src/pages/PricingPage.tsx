@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PRICE_ROWS, catalogFor } from "../api/read";
 import { Modal } from "../ui/Modal";
+import { DataTable } from "../ui/DataTable";
 import { PageHeading } from "../ui/PageHeading";
 import { TabPanel, Tabs } from "../ui/Tabs";
 import { ZoneSelect } from "../ui/ZoneSelect";
@@ -91,42 +92,20 @@ export function PricingPage() {
             </button>
           </div>
           <div className="table-wrap">
-            <table className="pricing-table">
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  {RATE_COLUMNS.map((column) => (
-                    <th key={column}>{column}</th>
-                  ))}
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, rowIndex) => (
-                  <tr key={row.category}>
-                    <td>
-                      <strong>{row.category}</strong>
-                    </td>
-                    {row.values.map((value, valueIndex) => (
-                      <td key={RATE_COLUMNS[valueIndex]}>
-                        <input
-                          value={value}
-                          onChange={(event) => updateRate(rowIndex, valueIndex, event.target.value)}
-                        />
-                      </td>
-                    ))}
-                    <td>
-                      <button className="link-action" type="button">
-                        Save
-                      </button>
-                      <button className="link-action danger-text" type="button">
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              className="pricing-table"
+              head={["Category", ...RATE_COLUMNS, "Actions"]}
+              rows={rows.map((row, rowIndex) => [
+                row.category,
+                ...row.values.map((value, valueIndex) => (
+                  <input key={RATE_COLUMNS[valueIndex]} value={value} onChange={(event) => updateRate(rowIndex, valueIndex, event.target.value)} />
+                )),
+                <span key={row.category}>
+                  <button className="link-action" type="button">Save</button>
+                  <button className="link-action danger-text" type="button">Delete</button>
+                </span>,
+              ])}
+            />
           </div>
         </article>
       </TabPanel>

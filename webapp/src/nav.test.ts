@@ -13,6 +13,8 @@ assert(pageForPath("/tickets/S1")?.id === "support", "ticket record");
 assert(pageForPath("/no-such") === undefined, "unknown path is not a page");
 assert(MENU.some((item) => item.id === "drivers" && item.path === "/drivers"), "drivers address");
 assert(!MENU.some((item) => item.path === "/franchise" || item.path === "/database" || item.path === "/api"), "old pages are gone");
+assert(pageForPath("/incidents")?.group === "Operations", "incidents sit in Operations");
+assert(pageForPath("/risk")?.group === "Operations", "risk sits in Operations");
 
 const support = MENU.filter((item) => can("support", item.permission));
 assert(support.some((item) => item.id === "support") && support.some((item) => item.id === "riders"), "support sees its work");

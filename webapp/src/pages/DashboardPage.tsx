@@ -194,7 +194,6 @@ export function DashboardPage() {
           <div className="quick-grid">
             {QUICK_ACTIONS.map((action) => (
               <button key={action.label} type="button">
-                <span>{action.icon}</span>
                 {action.label}
               </button>
             ))}

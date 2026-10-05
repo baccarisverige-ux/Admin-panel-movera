@@ -162,16 +162,16 @@ export const PRICE_ROWS: PriceRow[] = [
 ];
 
 export const DASHBOARD_STATS: DashboardStat[] = [
-  { icon: "🚕", label: "Online Drivers", value: "1,247", trend: "↗ 12% from yesterday" },
-  { icon: "👥", label: "Active Riders", value: "3,582", trend: "↗ 8% from yesterday" },
-  { icon: "↗", label: "Ongoing Trips", value: "428", trend: "↗ 3% from yesterday" },
-  { icon: "💳", label: "Today's Revenue", value: "24 587 kr", trend: "↗ 15% from yesterday" },
+  { icon: "", label: "Online Drivers", value: "1,247", trend: "12% from yesterday" },
+  { icon: "", label: "Active Riders", value: "3,582", trend: "8% from yesterday" },
+  { icon: "", label: "Ongoing Trips", value: "428", trend: "3% from yesterday" },
+  { icon: "", label: "Today's Revenue", value: "24 587 kr", trend: "15% from yesterday" },
 ];
 
 export const DASHBOARD_ALERTS: DashboardAlert[] = [
   {
     tone: "danger",
-    icon: "!",
+    icon: "",
     title: "Payment System Downtime",
     body: "Credit card processing is experiencing issues in Zone",
     time: "10 min ago",
@@ -179,7 +179,7 @@ export const DASHBOARD_ALERTS: DashboardAlert[] = [
   },
   {
     tone: "warning",
-    icon: "!",
+    icon: "",
     title: "Driver Documents Expiring",
     body: "47 drivers have documents expiring in the next 7 days",
     time: "1 hour ago",
@@ -187,7 +187,7 @@ export const DASHBOARD_ALERTS: DashboardAlert[] = [
   },
   {
     tone: "info",
-    icon: "↗",
+    icon: "",
     title: "Surge Demand Detected",
     body: "High demand detected in Norrmalm. Consider activating boost pricing.",
     time: "2 hours ago",
@@ -202,13 +202,13 @@ export const ZONE_VOLUMES: ZoneVolume[] = [
 ];
 
 export const QUICK_ACTIONS: QuickAction[] = [
-  { icon: "⏸", label: "Suspend Zone" },
-  { icon: "💳", label: "Disable Payments" },
-  { icon: "⚠", label: "Emergency Mode" },
-  { icon: "💬", label: "Send Popup" },
-  { icon: "＋", label: "Add Driver" },
-  { icon: "▤", label: "Generate Report" },
-  { icon: "⚙", label: "System Settings" },
+  { icon: "", label: "Suspend Zone" },
+  { icon: "", label: "Disable Payments" },
+  { icon: "", label: "Emergency Mode" },
+  { icon: "", label: "Send Popup" },
+  { icon: "", label: "Add Driver" },
+  { icon: "", label: "Generate Report" },
+  { icon: "", label: "System Settings" },
 ];
 
 export const DEMAND_POINTS =
@@ -562,12 +562,12 @@ export const PAGE_CATALOG: Record<string, CatalogEntry> = {
     subtitle: "Moderate reviews and monitor rating health.",
     cards: [
       [
-        "Emma Rider — ⭐⭐⭐⭐⭐",
+        "Emma Rider — 5 stars",
         "Trip: T38472 • Driver: Erik Lind • “Excellent service! Driver was punctual, car was clean, and the ride was smooth.”",
         "Approve|Reject|Flag",
       ],
       [
-        "Michael Thompson — ⭐⭐",
+        "Michael Thompson — 2 stars",
         "Trip: T38471 • Driver: Sara Berg • “Driver took a longer route and the car wasn’t very clean.”",
         "Respond|View Details",
       ],

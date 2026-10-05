@@ -9,6 +9,7 @@ import { ComingPage } from "./pages/ComingPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { ContentPage } from "./pages/ContentPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DesignPage } from "./pages/DesignPage";
 import { DriversPage } from "./pages/DriversPage";
 import { FleetPage } from "./pages/FleetPage";
 import { GatesPage } from "./pages/GatesPage";
@@ -46,6 +47,7 @@ function Screen({ id }: { id: string }) {
   if (id === "messages") return <MessagesPage />;
   if (id === "handover") return <HandoverPage />;
   if (id === "gates") return <GatesPage />;
+  if (id === "design") return <DesignPage />;
   if (id === "vehicles") return <FleetPage />;
   if (id === "support") return <SupportPage />;
   if (id === "incidents") return <SafetyPage />;
@@ -145,6 +147,7 @@ function Authed() {
         <Route path="settings" element={<Screen id="settings" />} />
         <Route path="system" element={<Screen id="system" />} />
         <Route path="gates" element={<Screen id="gates" />} />
+        <Route path="design" element={<Screen id="design" />} />
         <Route path="users" element={<Navigate to="/drivers" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
