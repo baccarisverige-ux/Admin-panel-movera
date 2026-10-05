@@ -32,6 +32,7 @@ import { RidersPage } from "./pages/RidersPage";
 import { RiskPage } from "./pages/RiskPage";
 import { SafetyPage } from "./pages/SafetyPage";
 import { SupportPage } from "./pages/SupportPage";
+import { SystemPage } from "./pages/SystemPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TripsPage } from "./pages/TripsPage";
 import { ZoneDetailPage } from "./pages/ZoneDetailPage";
@@ -67,6 +68,7 @@ function Screen({ id }: { id: string }) {
   if (id === "trips") return <TripsPage />;
   if (id === "live") return <LivePage />;
   if (id === "team") return <TeamPage />;
+  if (id === "system") return <SystemPage />;
   return <ComingPage title={item.label} order="a later work order" />;
 }
 
