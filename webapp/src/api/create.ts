@@ -76,12 +76,60 @@ export type AdminApi = {
 const DEMO_DELAY_MS = 200;
 const DEFAULT_SCOPE: AgentScope = { zones: "all", market: "SE-STO" };
 
+const TARGET_COLLECTIONS = [
+  "drivers",
+  "riders",
+  "vehicles",
+  "fleets",
+  "trips",
+  "reservations",
+  "tickets",
+  "incidents",
+  "payments",
+  "refunds",
+  "payouts",
+  "wallet",
+  "templates",
+  "banners",
+  "events",
+  "bonuses",
+  "staff",
+] as const;
+
+function targetRecord(db: DemoDb, targetId: string, collection?: string): DemoRecord | null {
+  if (collection && TARGET_COLLECTIONS.includes(collection as (typeof TARGET_COLLECTIONS)[number])) {
+    const rows = db[collection as (typeof TARGET_COLLECTIONS)[number]];
+    return rows.find((row) => row.id === targetId) ?? null;
+  }
+  for (const key of TARGET_COLLECTIONS) {
+    const row = db[key].find((item) => item.id === targetId);
+    if (row) return row;
+  }
+  return null;
+}
+
+function targetScope(db: DemoDb, targetId: string, collection: string | undefined, requested: string | undefined): string {
+  const record = targetRecord(db, targetId, collection);
+  if (record?.zoneId) return record.zoneId;
+  if (db.zones.some((zone) => zone.id === targetId)) return targetId;
+  return requested ?? "all";
+}
+
+function targetState(db: DemoDb, targetId: string, collection: string | undefined, supplied: string | undefined): string | undefined {
+  return supplied ?? targetRecord(db, targetId, collection)?.status;
+}
+
 function unsupported(): never {
   throw new ApiError(0, "Admin API is not connected.");
 }
 
 function operationKey(actorId: string, idempotencyKey: string): string {
   return `${actorId}:${idempotencyKey}`;
+}
+
+function operationId(actorId: string, idempotencyKey: string): string {
+  const compact = idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 36);
+  return `op-${actorId}-${compact || "command"}`;
 }
 
 function scopeAllowed(actorScope: AgentScope, scope: string): boolean {
@@ -115,7 +163,7 @@ function rememberRejected(
   let next = addAudit(
     db,
     {
-      operationId,
+      operationId: opId,
       actorId: input.actorId,
       action: input.action,
       targetId: input.targetId,
@@ -128,7 +176,7 @@ function rememberRejected(
     false,
   );
   const op: OperationRow = {
-    operationId,
+    operationId: opId,
     idempotencyKey: input.idempotencyKey,
     action: input.action,
     targetId: input.targetId,
@@ -147,7 +195,7 @@ function replayOperation(db: DemoDb, operation: OperationRow): CommandResult {
   return {
     message: operation.message,
     db,
-    operationId: operation.operationId,
+    operationId: operation.operationId: opId,
     status: operation.status,
     rev: operation.rev,
   };
@@ -184,10 +232,11 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       const spec = commandById(raw.action);
       const actorRole = raw.actorRole ?? "super";
       const actorScope = raw.actorScope ?? DEFAULT_SCOPE;
-      const scope = raw.scope ?? "all";
       const idempotencyKey = raw.idempotencyKey ?? `direct-${db.rev}-${raw.action}-${raw.targetId}`;
       const expectedRev = raw.expectedRev ?? db.rev;
-      const operationId = `op-${db.audits.length + 1}-${idempotencyKey.slice(0, 12)}`;
+      const resolvedScope = targetScope(db, raw.targetId, raw.collection, raw.scope);
+      const resolvedState = targetState(db, raw.targetId, raw.collection, raw.entityState);
+      const opId = operationId(raw.actorId, idempotencyKey);
       const input = {
         action: raw.action,
         targetId: raw.targetId,
@@ -196,29 +245,34 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         before: raw.before,
         after: raw.after,
         idempotencyKey,
-        scope,
+        scope: resolvedScope,
       };
 
       const cached = db.operations[operationKey(raw.actorId, idempotencyKey)];
       if (cached) return replayOperation(db, cached);
 
       const reject = (status: number, message: string): never => {
-        db = rememberRejected(db, input, operationId, status, message);
+        db = rememberRejected(db, input, operationId: opId, status, message);
         throw new ApiError(status, message);
       };
 
       if (!spec) reject(422, `Unknown action ${raw.action}.`);
       if (!can(actorRole, spec.permission)) reject(403, "Your role cannot do that.");
-      if (!scopeAllowed(actorScope, scope)) reject(403, "That record is outside your active scope.");
+      if (!scopeAllowed(actorScope, resolvedScope)) reject(403, "That record is outside your active scope.");
       if (spec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
       if (expectedRev !== db.rev) reject(409, "Someone else changed this. Reload and review the newest version.");
-      if (spec.allowedStates && raw.entityState && !spec.allowedStates.includes(raw.entityState)) {
-        reject(422, `${spec.label} is not allowed while the record is ${raw.entityState}.`);
+      if (spec.allowedStates && resolvedState && !spec.allowedStates.includes(resolvedState)) {
+        reject(422, `${spec.label} is not allowed while the record is ${resolvedState}.`);
       }
 
       const injectedStatus = faultStatus(fault);
       if (injectedStatus !== null) {
-        reject(injectedStatus, injectedStatus === 409 ? "This record changed. The newest version is still here." : classifyStatus(injectedStatus));
+        const transient = injectedStatus === 0 || injectedStatus === 429 || injectedStatus === 503;
+        reject(
+          injectedStatus,
+          injectedStatus === 409 ? "This record changed. The newest version is still here." : classifyStatus(injectedStatus),
+          !transient,
+        );
       }
 
       if (spec.approvalThresholdOre && (raw.amountOre ?? 0) >= spec.approvalThresholdOre) {
@@ -233,7 +287,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         };
         let next: DemoDb = { ...db, approvals: [approval, ...db.approvals] };
         next = addAudit(next, {
-          operationId,
+          operationId: opId,
           actorId: raw.actorId,
           action: raw.action,
           targetId: raw.targetId,
@@ -244,7 +298,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
           result: "pending_approval",
         });
         const operation: OperationRow = {
-          operationId,
+          operationId: opId,
           idempotencyKey,
           action: raw.action,
           targetId: raw.targetId,
@@ -255,7 +309,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
           at: new Date().toISOString(),
         };
         next = saveDb({ ...next, operations: { ...next.operations, [operationKey(raw.actorId, idempotencyKey)]: operation } });
-        return { message: operation.message, db: next, operationId, status: "pending_approval", rev: next.rev };
+        return { message: operation.message, db: next, operationId: opId, status: "pending_approval", rev: next.rev };
       }
 
       if (raw.collection && raw.patch) {
@@ -271,7 +325,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       if (raw.sliceKey) db = { ...db, slices: { ...db.slices, [raw.sliceKey]: raw.value } };
 
       db = addAudit(db, {
-        operationId,
+        operationId: opId,
         actorId: raw.actorId,
         action: raw.action,
         targetId: raw.targetId,
@@ -283,7 +337,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       });
 
       const operation: OperationRow = {
-        operationId,
+        operationId: opId,
         idempotencyKey,
         action: raw.action,
         targetId: raw.targetId,
@@ -294,7 +348,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         at: new Date().toISOString(),
       };
       db = saveDb({ ...db, operations: { ...db.operations, [operationKey(raw.actorId, idempotencyKey)]: operation } });
-      return { message: operation.message, db, operationId, status: "committed", rev: db.rev };
+      return { message: operation.message, db, operationId: opId, status: "committed", rev: db.rev };
     },
     async revision() {
       return loadDb().rev;
