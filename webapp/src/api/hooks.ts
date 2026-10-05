@@ -185,6 +185,7 @@ export function useCommands() {
         scope: extra.scope ?? params.get("scope") ?? "all",
         idempotencyKey,
         expectedRev,
+        expectedSliceRev: extra.expectedSliceRev,
         entityState: extra.entityState,
         amountOre: extra.amountOre,
         before: extra.before ?? "",
@@ -238,8 +239,9 @@ export function useSlice<T>(key: string, fallback: T) {
     value: query.data ?? fallback,
     loading: query.isLoading,
     message: command.message,
-    async save(value: T, meta: { targetId: string; reason: string; actorId: string; before: string; after: string }) {
-      await command.run({ ...meta, sliceKey: key, value });
+    refetch: query.refetch,
+    async save(value: T, meta: { targetId: string; reason: string; actorId: string; before: string; after: string; expectedSliceRev?: number }) {
+      return command.run({ ...meta, sliceKey: key, value });
     },
   };
 }
