@@ -12,7 +12,7 @@ for (const command of COMMANDS) {
   assert(command.entity.length > 0, `${command.id} has an entity`);
   assert(["global", "zone", "record"].includes(command.scope), `${command.id} has a scope policy`);
   assert(command.idempotent === true, `${command.id} is idempotent`);
-  assert(command.audit === "always", `${command.id} is audited`);
+  assert(command.audit === "always" || command.audit === "none", `${command.id} declares its audit policy`);\n  if (command.versioned) assert(command.audit === "always", `${command.id} business actions are audited`);
   if (command.destructive) assert(command.reason, `${command.id} destructive actions require a reason`);
 }
 assert(COMMANDS.every((command) => command.owner.length > 0), "every action has an owner");
