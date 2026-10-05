@@ -1,5 +1,5 @@
 import { ApiError, classifyStatus } from "./httpClient.ts";
-import { createSeed, inScope, searchDb, type DemoDb, type DemoRecord } from "./seed.ts";
+import { createSeed, inScope, searchDb, type DemoDb, type DemoRecord, type ZoneScope } from "./seed.ts";
 
 export type Fault = "none" | "401" | "403" | "409" | "422" | "429" | "503" | "offline" | "slow" | "empty";
 
@@ -68,15 +68,15 @@ export function assertWritable(fault: Fault): void {
   throw new ApiError(status, status === 409 ? "This record changed. The newest version is still here." : classifyStatus(status));
 }
 
-export function rowsFor(db: DemoDb, name: string, scope: string | null, fault: Fault): DemoRecord[] {
+export function rowsFor(db: DemoDb, name: string, scope: ZoneScope, fault: Fault): DemoRecord[] {
   if (fault === "empty") return [];
   const table = db[name as keyof DemoDb];
   if (!Array.isArray(table)) return [];
   return inScope(table as DemoRecord[], scope);
 }
 
-export function findHit(db: DemoDb, query: string) {
-  return searchDb(db, query);
+export function findHit(db: DemoDb, query: string, scope: ZoneScope = null) {
+  return searchDb(db, query, scope);
 }
 
 export function addAudit(db: DemoDb, entry: Omit<DemoDb["audits"][number], "id" | "at">): DemoDb {
