@@ -50,8 +50,8 @@ assert(publishConfig(book, "lena", "2026-10-05T10:00:00Z").error?.includes("Miss
 
 book = emptyConfig("nora");
 book = setSchedule(book, "2026-10-06T00:00:00Z", "nora");
-let scheduledSent = submitConfigApproval(book, "nora");
-let scheduledApproved = approveConfig(scheduledSent.book, "lena");
+const scheduledSent = submitConfigApproval(book, "nora");
+const scheduledApproved = approveConfig(scheduledSent.book, "lena");
 const scheduled = publishConfig(scheduledApproved.book, "lena", "2026-10-05T10:00:00Z");
 assert(scheduled.scheduled === true && scheduled.book.scheduled.length === 1, "future publish becomes a scheduled version");
 assert(scheduled.book.published.features.wallet === true, "scheduled version is not live early");
