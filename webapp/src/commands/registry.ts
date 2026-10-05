@@ -31,6 +31,7 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.auth.pickAgent", label: "Pick demo agent", reason: false, permission: "overview.read" },
   { id: "admin.audit.refund50", label: "Refund 50 kr", reason: true, permission: "payments.refund" },
   { id: "admin.audit.refund250", label: "Refund 250 kr", reason: true, permission: "payments.refund" },
+  { id: "admin.config.save", label: "Save configuration draft", reason: false, permission: "settings.edit" },
   { id: "admin.config.publish", label: "Publish configuration", reason: true, permission: "settings.publish" },
   { id: "admin.config.approve", label: "Approve configuration", reason: true, permission: "settings.publish" },
   { id: "admin.config.review", label: "Send configuration for approval", reason: true, permission: "settings.edit" },
