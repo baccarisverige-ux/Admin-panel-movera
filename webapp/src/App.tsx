@@ -12,6 +12,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { PricingPage } from "./pages/PricingPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
+import { ContentPage } from "./pages/ContentPage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { SupportPage } from "./pages/SupportPage";
 import { SafetyPage } from "./pages/SafetyPage";
@@ -29,6 +30,7 @@ function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "payments") return <PaymentsPage />;
   if (pageId === "pricing") return <PricingPage />;
   if (pageId === "reservations") return <ReservationsPage />;
+  if (pageId === "content") return <ContentPage />;
   if (pageId === "communications") return <MessagesPage />;
   if (pageId === "support") return <SupportPage />;
   if (pageId === "incidents") return <SafetyPage />;
@@ -76,6 +78,7 @@ function ShellRoute() {
     { id: "team", path: "/team", label: "Team and roles", crumb: "Team", icon: "·" },
     { id: "riders", path: "/riders", label: "Riders", crumb: "Riders", icon: "·" },
     { id: "reservations", path: "/reservations", label: "Reservations", crumb: "Reservations", icon: "·" },
+    { id: "content", path: "/content", label: "Content", crumb: "Content", icon: "·" },
   ].find((item) => item.path === location.pathname);
   const known = Boolean(extra) || ADMIN_PAGES.some((page) => page.path === location.pathname);
   const page: AdminPage = extra
