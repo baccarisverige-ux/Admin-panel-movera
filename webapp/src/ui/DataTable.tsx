@@ -114,14 +114,14 @@ export function DataTable({ head, rows, className, state = "ready", onRetry, onR
           </thead>
           <tbody>
             {visible.map((row) => (
-              <tr key={row.id} onClick={() => onRow?.(Number(row.id))}>
+              <tr key={row.original.id} onClick={() => onRow?.(Number(row.original.id))}>
                 {row.original.cells.map((cell, index) => (
-                  <td key={`${row.id}-${index}`}>{renderCell(cell)}</td>
+                  <td key={`${row.original.id}-${index}`}>{renderCell(cell)}</td>
                 ))}
                 <td>
-                  <CommandButton command="admin.table.menu" className="link-action" type="button" onDone={() => setMenu(menu === Number(row.id) ? null : Number(row.id))}>Menu</CommandButton>
-                  {menu === Number(row.id) ? (
-                    <CommandButton command="admin.table.open" className="link-action" type="button" onDone={() => onRow?.(Number(row.id))}>Open</CommandButton>
+                  <CommandButton command="admin.table.menu" className="link-action" type="button" onDone={() => setMenu(menu === Number(row.original.id) ? null : Number(row.original.id))}>Menu</CommandButton>
+                  {menu === Number(row.original.id) ? (
+                    <CommandButton command="admin.table.open" className="link-action" type="button" onDone={() => onRow?.(Number(row.original.id))}>Open</CommandButton>
                   ) : null}
                 </td>
               </tr>

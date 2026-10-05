@@ -117,6 +117,10 @@ export const COMMANDS: CommandSpec[] = [
   { id: "admin.doc.rotate", label: "Rotate document", reason: false, permission: "system.read" },
   { id: "admin.confirm.submit", label: "Confirm action", reason: false, permission: "overview.read" },
   { id: "admin.confirm.cancel", label: "Cancel dialog", reason: false, permission: "overview.read" },
+  { id: "admin.trip.reassign", label: "Reassign trip", reason: true, permission: "trips.intervene" },
+  { id: "admin.trip.refund", label: "Refund trip", reason: true, permission: "payments.refund" },
+  { id: "admin.dispatch.save", label: "Save dispatch rules", reason: true, permission: "trips.intervene" },
+  { id: "admin.live.focus", label: "Focus live marker", reason: false, permission: "trips.read" },
 ];
 
 const BY_ID = new Map(COMMANDS.map((command) => [command.id, command]));
