@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router";
+import { canUseZone } from "../auth/permissions.ts";
 import { useSession } from "../auth/SessionContext.tsx";
 import { commandById } from "../commands/registry.ts";
 import { useAdminApi } from "./AdminApiContext.tsx";
@@ -24,9 +26,18 @@ export type { ContentBook } from "../content/book.ts";
 export { approveConfig, configDiff, effectiveValue, emptyConfig, missingTranslations, normalizeConfig, publishConfig, rollbackConfig, REASON_GROUPS, setAppUpdate, setAppVersion, setEnvironment, setFeature, setMaxStops, setReason, setSchedule, setSwitch, setZoneOverride, submitConfigApproval } from "../config/book.ts";
 export type { ConfigBook } from "../config/book.ts";
 
-export function useRecords(name: string, scope: string | null) {
+export function useRecords(name: string, scope?: string | null) {
   const api = useAdminApi();
-  return useQuery({ queryKey: ["records", name, scope ?? "all"], queryFn: () => api.list(name, scope) });
+  const session = useSession();
+  const [params] = useSearchParams();
+  const requested = scope ?? params.get("scope");
+  const scopeDenied = Boolean(requested && session.agent && !canUseZone(session.agent, requested));
+  const effectiveScope = scopeDenied ? "__scope-denied__" : requested;
+  const query = useQuery({
+    queryKey: ["records", name, effectiveScope ?? "all", session.agent?.id ?? "signed-out"],
+    queryFn: () => api.list(name, effectiveScope),
+  });
+  return { ...query, scopeDenied, effectiveScope };
 }
 
 export function useDrivers(scope: string | null) {
