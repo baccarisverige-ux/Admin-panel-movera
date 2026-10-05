@@ -275,6 +275,19 @@ export function setSchedule(book: ConfigBook, scheduleAt: string | null, authorI
   return edited(book, { ...book.draft, scheduleAt }, authorId);
 }
 
+export function setExpiry(book: ConfigBook, expiresAt: string | null, authorId: string): ConfigBook {
+  return edited(book, { ...book.draft, expiresAt }, authorId);
+}
+
+export function setOverride(book: ConfigBook, rule: OverrideRule, authorId: string): ConfigBook {
+  const overrides = [...book.draft.overrides.filter((item) => item.id !== rule.id), { ...rule }];
+  return edited(book, { ...book.draft, overrides }, authorId);
+}
+
+export function removeOverride(book: ConfigBook, id: string, authorId: string): ConfigBook {
+  return edited(book, { ...book.draft, overrides: book.draft.overrides.filter((item) => item.id !== id) }, authorId);
+}
+
 export function setMaxStops(book: ConfigBook, maxStops: number, authorId: string): ConfigBook {
   return edited(book, { ...book.draft, booking: { maxStops } }, authorId);
 }
@@ -344,22 +357,102 @@ export function configDiff(published: ConfigDraft, draft: ConfigDraft): string[]
       lines.push(`Zone ${id} override changed`);
     }
   }
+  if (JSON.stringify(published.overrides ?? []) !== JSON.stringify(draft.overrides ?? [])) {
+    lines.push("Advanced precedence overrides changed");
+  }
+  if ((published.expiresAt ?? "") !== (draft.expiresAt ?? "")) {
+    lines.push(`Expiry ${published.expiresAt ?? "none"} → ${draft.expiresAt ?? "none"}`);
+  }
   return lines;
 }
 
-export function effectiveValue(draft: ConfigDraft, key: "wallet" | "reservations", zoneId: string): { value: string; level: string; chain: string[] } {
-  const global = draft.features[key];
-  const zone = draft.zoneOverrides[zoneId]?.[key];
-  const chain = [
-    `global ${onOff(global)}`,
-    "market not set",
-    zone === undefined ? "zone not set" : `zone ${onOff(zone)}`,
-    "category not set",
-    "app not set",
-    "platform not set",
-  ];
-  if (zone !== undefined) return { value: onOff(zone), level: "zone", chain };
-  return { value: onOff(global), level: "global", chain };
+const OVERRIDE_LEVELS: OverrideLevel[] = ["market", "zone", "category", "app", "platform", "appVersion", "cohort"];
+
+function targetFor(level: OverrideLevel, context: EffectiveContext): string | undefined {
+  if (level === "market") return context.market;
+  if (level === "zone") return context.zoneId;
+  if (level === "category") return context.category;
+  if (level === "app") return context.app;
+  if (level === "platform") return context.platform;
+  if (level === "appVersion") return context.appVersion;
+  return context.cohort;
+}
+
+function activeAt(rule: OverrideRule, nowIso: string): boolean {
+  if (rule.startsAt && rule.startsAt > nowIso) return false;
+  if (rule.expiresAt && rule.expiresAt <= nowIso) return false;
+  return true;
+}
+
+export function effectiveValue(
+  draft: ConfigDraft,
+  key: FeatureKey,
+  contextOrZone: EffectiveContext | string,
+): { value: string; level: string; chain: string[]; winnerId?: string } {
+  const context: EffectiveContext =
+    typeof contextOrZone === "string"
+      ? { market: "SE-STO", zoneId: contextOrZone }
+      : contextOrZone;
+  const nowIso = context.nowIso ?? new Date().toISOString();
+  let value = draft.features[key];
+  let level = "global";
+  let winnerId: string | undefined;
+  const chain = [`global ${onOff(value)}`];
+
+  for (const candidate of OVERRIDE_LEVELS) {
+    const target = targetFor(candidate, context);
+    const advanced = target
+      ? draft.overrides.filter(
+          (rule) => rule.key === key && rule.level === candidate && rule.target === target && activeAt(rule, nowIso),
+        )
+      : [];
+
+    let winner = advanced[advanced.length - 1];
+    if (candidate === "zone" && context.zoneId) {
+      const legacy = draft.zoneOverrides[context.zoneId]?.[key];
+      if (legacy !== undefined && !winner) {
+        winner = {
+          id: `legacy-zone-${context.zoneId}-${key}`,
+          key,
+          level: "zone",
+          target: context.zoneId,
+          value: legacy,
+        };
+      }
+    }
+
+    if (winner) {
+      value = winner.value;
+      level = candidate;
+      winnerId = winner.id;
+      chain.push(`${candidate} ${winner.target} ${onOff(winner.value)}`);
+    } else {
+      chain.push(`${candidate} not set`);
+    }
+  }
+
+  return { value: onOff(value), level, chain, winnerId };
+}
+
+export function impactPreview(book: ConfigBook): {
+  changed: number;
+  scopes: string[];
+  missingTranslations: string[];
+  scheduledFor: string | null;
+  expiresAt: string | null;
+} {
+  const diff = configDiff(book.published, book.draft);
+  const scopes = new Set<string>();
+  for (const zoneId of Object.keys(book.draft.zoneOverrides)) scopes.add(`zone:${zoneId}`);
+  for (const rule of book.draft.overrides) scopes.add(`${rule.level}:${rule.target}`);
+  if (scopes.size === 0) scopes.add("global");
+  return {
+    changed: diff.length,
+    scopes: [...scopes],
+    missingTranslations: missingTranslations(book.draft.reasons),
+    scheduledFor: book.draft.scheduleAt,
+    expiresAt: book.draft.expiresAt,
+  };
 }
 
 export function submitConfigApproval(book: ConfigBook, actorId: string): { book: ConfigBook; error?: string } {
