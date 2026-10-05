@@ -12,6 +12,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { PricingPage } from "./pages/PricingPage";
 import { RidersPage } from "./pages/RidersPage";
 import { TeamPage } from "./pages/TeamPage";
+import { TripsPage } from "./pages/TripsPage";
 import { ZonesPage } from "./pages/ZonesPage";
 
 function PageBody({ pageId }: { pageId: string }) {
@@ -22,6 +23,7 @@ function PageBody({ pageId }: { pageId: string }) {
   if (pageId === "zones") return <ZonesPage />;
   if (pageId === "pricing") return <PricingPage />;
   if (pageId === "riders") return <RidersPage />;
+  if (pageId === "trips") return <TripsPage />;
   if (pageId === "team") return <TeamPage />;
   return <GenericPage pageId={pageId} />;
 }
