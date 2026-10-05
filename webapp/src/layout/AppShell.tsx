@@ -1,15 +1,71 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router";
-import { Menu } from "lucide-react";
-import { formatInTimeZone } from "date-fns-tz";
-import { can, permissionForPage } from "../auth/permissions";
+import {
+  Banknote,
+  BarChart3,
+  CalendarClock,
+  Car,
+  ClipboardList,
+  Images,
+  LayoutDashboard,
+  LifeBuoy,
+  Map,
+  MapPinned,
+  Menu,
+  MessageSquare,
+  MessagesSquare,
+  Route,
+  ScrollText,
+  Server,
+  Settings,
+  Shield,
+  ShieldAlert,
+  Siren,
+  Star,
+  Tags,
+  Ticket,
+  UserPlus,
+  UserRound,
+  Users,
+  Wallet,
+} from "lucide-react";
+import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
-import { ADMIN_PAGES, type AdminPage } from "../nav";
+import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
 import { ZoneSelect } from "../ui/ZoneSelect";
 
+const ICONS: Record<NavIcon, typeof Menu> = {
+  LayoutDashboard,
+  BarChart3,
+  ClipboardList,
+  Route,
+  CalendarClock,
+  Map,
+  Users,
+  UserPlus,
+  UserRound,
+  Car,
+  Wallet,
+  Banknote,
+  MapPinned,
+  Tags,
+  LifeBuoy,
+  MessagesSquare,
+  Siren,
+  ShieldAlert,
+  MessageSquare,
+  Images,
+  Ticket,
+  Star,
+  ScrollText,
+  Settings,
+  Server,
+  Shield,
+};
+
 type AppShellProps = {
-  page: AdminPage;
+  page: MenuItem;
   children: ReactNode;
 };
 
@@ -22,8 +78,9 @@ function buildLabel(): string {
 export function AppShell({ page, children }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { agent, signOut } = useSession();
-  const heading = page.id === "dashboard" ? "Movera Admin Dashboard" : page.label;
-  const pages = ADMIN_PAGES.filter((item) => !agent || can(agent.role, permissionForPage(item.id)));
+  const visible = MENU.filter((item) => !agent || can(agent.role, item.permission));
+  const groups = MENU_GROUPS.filter((group) => visible.some((item) => item.group === group));
+  const env = import.meta.env.VITE_DATA || "demo";
 
   return (
     <div className="app-shell">
@@ -32,50 +89,47 @@ export function AppShell({ page, children }: AppShellProps) {
           <div className="brand-mark">M</div>
           <span>Movera Admin</span>
         </div>
-        <nav className="nav">
-          {pages.map((item) => (
-            <Link
-              key={item.id}
-              to={item.path}
-              className={item.id === page.id ? "active" : undefined}
-              onClick={() => setMenuOpen(false)}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
+        <nav className="nav" aria-label="Main">
+          {groups.map((group) => (
+            <div key={group} className="nav-group">
+              <p className="nav-group-label">{group}</p>
+              {visible
+                .filter((item) => item.group === group)
+                .map((item) => {
+                  const Icon = ICONS[item.icon];
+                  return (
+                    <Link
+                      key={item.id}
+                      to={item.path}
+                      className={item.id === page.id ? "active" : undefined}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <Icon className="nav-icon" size={16} aria-hidden="true" />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+            </div>
           ))}
         </nav>
       </aside>
       <section className="workspace">
         <header className="topbar">
-          <button
-            className="icon-btn mobile-menu"
-            type="button"
-            aria-label="Open menu"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
+          <button className="icon-btn mobile-menu" type="button" aria-label="Open menu" onClick={() => setMenuOpen((open) => !open)}>
             <Menu size={18} aria-hidden="true" />
           </button>
           <div>
-            <h1>{heading}</h1>
-            <p className="crumb">{page.crumb}</p>
+            <h1>{page.label}</h1>
+            <p className="crumb">{page.group}</p>
           </div>
           <div className="topbar-actions">
             <ZoneSelect scoped />
-            <button className="icon-btn notification-btn" type="button" aria-label="Notifications">
-              🔔
-              <span className="notification-count">3</span>
-            </button>
             <div className="admin-profile">
               <div className="avatar">{agent ? agent.name.slice(0, 2).toUpperCase() : "AD"}</div>
               <div>
-                <strong>{agent?.name ?? "Admin User"}</strong>
+                <strong>{agent?.name ?? "Signed out"}</strong>
                 <span>{agent?.role ?? "signed out"}</span>
               </div>
-              {agent && can(agent.role, "riders.read") ? <Link to="/riders">Riders</Link> : null}
-              {agent && can(agent.role, "team.read") ? (
-                <Link to="/team">Team</Link>
-              ) : null}
               <button className="link-action" type="button" onClick={signOut}>
                 Sign out
               </button>
@@ -83,11 +137,7 @@ export function AppShell({ page, children }: AppShellProps) {
           </div>
         </header>
         <main className="content">{children}</main>
-        <footer className="build-footer">
-          <span>Demo data</span>
-          <span>{formatInTimeZone(new Date(), "Europe/Stockholm", "yyyy-MM-dd HH:mm")}</span>
-          <span>{buildLabel()}</span>
-        </footer>
+        <footer className="build-footer">Demo data · {env} · {buildLabel()}</footer>
       </section>
     </div>
   );
