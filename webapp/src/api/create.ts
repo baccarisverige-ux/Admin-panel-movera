@@ -257,9 +257,10 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       };
 
       if (!spec) reject(422, `Unknown action ${raw.action}.`);
-      if (!can(actorRole, spec.permission)) reject(403, "Your role cannot do that.");
+      const actionSpec = spec!;
+      if (!can(actorRole, actionSpec.permission)) reject(403, "Your role cannot do that.");
       if (!scopeAllowed(actorScope, resolvedScope)) reject(403, "That record is outside your active scope.");
-      if (spec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
+      if (actionSpec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
       if (expectedRev !== db.rev) reject(409, "Someone else changed this. Reload and review the newest version.");
       if (spec.allowedStates && resolvedState && !spec.allowedStates.includes(resolvedState)) {
         reject(422, `${spec.label} is not allowed while the record is ${resolvedState}.`);
@@ -275,7 +276,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         );
       }
 
-      if (spec.approvalThresholdOre && (raw.amountOre ?? 0) >= spec.approvalThresholdOre) {
+      if (actionSpec.approvalThresholdOre && (raw.amountOre ?? 0) >= actionSpec.approvalThresholdOre) {
         const approval: ApprovalRow = {
           id: `approval-${db.approvals.length + 1}`,
           action: raw.action,
