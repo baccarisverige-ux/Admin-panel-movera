@@ -18,6 +18,9 @@ type CommandButtonProps = {
   amountOre?: number;
   collection?: string;
   patch?: Record<string, string | number | boolean | null>;
+  entityState?: string;
+  amountOre?: number;
+  scope?: string;
   storeReason?: boolean;
   onDone?: () => void;
   children: ReactNode;
@@ -37,6 +40,9 @@ export function CommandButton({
   amountOre,
   collection,
   patch,
+  entityState,
+  amountOre,
+  scope,
   storeReason,
   onDone,
   children,
@@ -63,6 +69,9 @@ export function CommandButton({
       amountOre,
       collection,
       patch: patch ? { ...patch, ...(storeReason ? { notes: chosen } : {}) } : undefined,
+      entityState,
+      amountOre,
+      scope,
     }).then((result) => {
       if (result) onDone?.();
     });
