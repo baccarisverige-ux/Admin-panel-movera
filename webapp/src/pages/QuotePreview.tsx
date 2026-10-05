@@ -9,7 +9,7 @@ export function QuotePreview() {
   return (
     <article className="panel">
       <h3>Quote preview</h3>
-      <p>Movera, rule {quote.ruleVersion}. Same formula as the rider app.</p>
+      <p>Movera, rule {quote.ruleVersion}. Same formula as the rider app. Adjustment range 65–180%.</p>
       <label>
         Kilometres
         <input value={km} onChange={(event) => setKm(event.target.value)} />
