@@ -78,7 +78,7 @@ function defaultTarget(level: OverrideLevel, zoneId: string, book: ConfigBook): 
   return "beta";
 }
 
-function targetOptions(level: OverrideLevel, zoneId: string, book: ConfigBook): { value: string; label: string }[] {
+function targetOptions(level: OverrideLevel, book: ConfigBook): { value: string; label: string }[] {
   if (level === "market") return [{ value: "SE-STO", label: "Stockholm market" }];
   if (level === "zone") {
     return coreZones(stockholmZones()).map((zone) => ({ value: zone.id, label: zone.name }));
@@ -135,7 +135,7 @@ export function ConfigPage() {
   const preview = useMemo(() => impactPreview(book), [book]);
   const reservations = effectiveValue(book.draft, "reservations", context);
   const wallet = effectiveValue(book.draft, "wallet", context);
-  const options = targetOptions(level, zoneId, book);
+  const options = targetOptions(level, book);
 
   function save(next: ConfigBook, text: string): boolean {
     const latest = readStored();
