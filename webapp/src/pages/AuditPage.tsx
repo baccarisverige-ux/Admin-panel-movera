@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSession } from "../auth/SessionContext";
 import { emptyDb, runCommand, type CommandDb } from "../commands/run";
+import { DataTable } from "../ui/DataTable";
 
 const STORE_KEY = "movera-admin-commands";
 
@@ -63,40 +64,10 @@ export function AuditPage() {
       </div>
       <p className="state-line">{message}</p>
       <article className="panel">
-        <table>
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Agent</th>
-              <th>Action</th>
-              <th>Target</th>
-              <th>Before</th>
-              <th>After</th>
-              <th>Reason</th>
-              <th>Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {db.audits.length === 0 ? (
-              <tr>
-                <td colSpan={8}>No audit rows yet.</td>
-              </tr>
-            ) : (
-              db.audits.map((entry) => (
-                <tr key={entry.id}>
-                  <td>{entry.at}</td>
-                  <td>{entry.actorId}</td>
-                  <td>{entry.action}</td>
-                  <td>{entry.targetId}</td>
-                  <td>{entry.before}</td>
-                  <td>{entry.after}</td>
-                  <td>{entry.reason}</td>
-                  <td>{entry.result}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        <DataTable
+          head={["When", "Agent", "Action", "Target", "Before", "After", "Reason", "Result"]}
+          rows={db.audits.map((entry) => [entry.at, entry.actorId, entry.action, entry.targetId, entry.before, entry.after, entry.reason, entry.result])}
+        />
       </article>
     </>
   );

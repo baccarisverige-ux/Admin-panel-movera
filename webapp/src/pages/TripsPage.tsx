@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router";
+import { DataTable } from "../ui/DataTable";
 import {
   DEFAULT_DISPATCH,
   adjustFare,
@@ -49,30 +50,11 @@ export function TripsPage() {
       </div>
       <p className="state-line">{notice}</p>
       <article className="panel">
-        <table>
-          <thead>
-            <tr>
-              <th>Trip</th>
-              <th>Status</th>
-              <th>Fare</th>
-              <th>Driver</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trips.map((trip) => (
-              <tr key={trip.id}>
-                <td>
-                  <button className="link-action" type="button" onClick={() => setParams({ trip: trip.id })}>
-                    {trip.id}
-                  </button>
-                </td>
-                <td>{trip.status}</td>
-                <td>{kr(trip.fareOre)}</td>
-                <td>{trip.driverId ?? "none"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          head={["Trip", "Status", "Fare", "Driver"]}
+          rows={trips.map((trip) => [trip.id, trip.status, kr(trip.fareOre), trip.driverId ?? "none"])}
+          onRow={(index) => setParams({ trip: trips[index]?.id ?? "" })}
+        />
       </article>
       {selected ? (
         <article className="panel">

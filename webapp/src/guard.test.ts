@@ -18,13 +18,13 @@ function files(dir: string): string[] {
 
 const root = new URL(".", import.meta.url).pathname;
 const banned = /NYC|New York|Chicago|LA Metro|USD|\$\d|RideShare|John Smith|2023-/;
+const emoji = /\p{Extended_Pictographic}/u;
 for (const path of files(root)) {
   const text = readFileSync(path, "utf8");
   assert(!banned.test(text), `${path} has old demo copy`);
   assert(!text.includes("GenericPage"), `${path} still names the old page`);
+  assert(!emoji.test(text), `${path} has an emoji`);
+  if (path.includes("/pages/") && path.endsWith(".tsx")) assert(!text.includes("<table"), `${path} has its own table`);
 }
-
-const nav = readFileSync(new URL("./nav.ts", import.meta.url), "utf8");
-assert(!/\p{Extended_Pictographic}/u.test(nav), "no emoji in the menu");
 
 console.log("guard ok");

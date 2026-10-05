@@ -1,23 +1,23 @@
 :root {
 
-  --bg:#f5f7fb;
+  --bg:#F6F7F7;
   --panel:#fff;
-  --text:#172033;
-  --muted:#6f7a8c;
-  --line:#e7ebf2;
+  --text:#111614;
+  --muted:#8A9390;
+  --line:#ECEEEF;
 
-  --primary:#315efb;
-  --primary-2:#244bd1;
-  --nav:#131b2c;
+  --primary:#111614;
+  --primary-2:#111614;
+  --nav:#111614;
   --nav-hover:#1d2940;
 
-  --success:#17a673;
-  --danger:#e64d5e;
-  --warning:#f2a12a;
-  --info:#3887f6;
+  --success:#1FA463;
+  --danger:#C2453A;
+  --warning:#D08A1E;
+  --info:#1FA463;
 
   --shadow:0 8px 28px rgba(25,39,75,.07);
-  --radius:14px
+  --radius:16px
 }
 
 * {
@@ -72,10 +72,11 @@ textarea {
   width:34px;
   height:34px;
   border-radius:10px;
-  background:linear-gradient(135deg,#5d7aff,#274bdb);
+  background:#fff;
+  color:#111614;
   display:grid;
   place-items:center;
-  box-shadow:0 8px 18px rgba(49,94,251,.32)
+  box-shadow:none
 }
 
 .nav {
@@ -106,7 +107,7 @@ textarea {
 }
 
 .nav button.active {
-  background:#2d5df5;
+  background:#111614;
   color:#fff;
   box-shadow:0 5px 16px rgba(45,93,245,.28)
 }
@@ -141,7 +142,7 @@ textarea {
 }
 
 .nav a.active {
-  background: #2d5df5;
+  background: #111614;
   color: #fff;
   box-shadow: 0 5px 16px rgba(45, 93, 245, .28);
 }
@@ -256,7 +257,7 @@ textarea:focus {
   display:grid;
   place-items:center;
   background:#eef2ff;
-  color:#315efb;
+  color:#111614;
   font-size:12px;
   font-weight:700
 }
@@ -427,7 +428,7 @@ textarea:focus {
   place-items:center;
   border-radius:9px;
   background:#edf2ff;
-  color:#244bd1;
+  color:#111614;
   font-weight:700
 }
 
@@ -436,7 +437,7 @@ textarea:focus {
 .small-btn,
 .text-btn,
 .link-action {
-  border-radius:8px;
+  border-radius:999px;
   cursor:pointer;
   transition:.16s ease
 }
@@ -515,7 +516,7 @@ textarea:focus {
   height:43px;
   border-radius:11px;
   background:#eef2ff;
-  color:#315efb;
+  color:#111614;
   display:grid;
   place-items:center;
   font-size:18px
@@ -609,7 +610,7 @@ textarea:focus {
 }
 
 .line.demand {
-  stroke:#315efb
+  stroke:#111614
 }
 
 .line.supply {
@@ -635,7 +636,7 @@ textarea:focus {
 }
 
 .demand-dot {
-  background:#315efb
+  background:#111614
 }
 
 .supply-dot {
@@ -653,7 +654,7 @@ textarea:focus {
   width:145px;
   height:145px;
   border-radius:50%;
-  background:conic-gradient(#315efb 0 43%,#59c09c 43% 74%,#f3b657 74% 100%);
+  background:conic-gradient(#111614 0 43%,#59c09c 43% 74%,#f3b657 74% 100%);
   display:grid;
   place-items:center;
   position:relative
@@ -707,7 +708,7 @@ textarea:focus {
 }
 
 .c1 {
-  background:#315efb
+  background:#111614
 }
 
 .c2 {
@@ -803,7 +804,7 @@ textarea:focus {
   height:25px;
   border-radius:7px;
   background:#eef2ff;
-  color:#315efb;
+  color:#111614;
   margin-right:7px
 }
 
@@ -907,7 +908,7 @@ td {
 .map-zone {
   position:absolute;
   padding:10px 13px;
-  border:2px solid #315efb;
+  border:2px solid #111614;
   background:rgba(49,94,251,.12);
   border-radius:14px;
   color:#2148c8;
@@ -950,8 +951,8 @@ td {
 }
 
 .tabs button.active {
-  color:#315efb;
-  border-bottom-color:#315efb
+  color:#111614;
+  border-bottom-color:#111614
 }
 
 .tab-panel {
@@ -1022,7 +1023,7 @@ fieldset input[type=checkbox] {
 
 .setting-card strong {
   font-size:26px;
-  color:#315efb;
+  color:#111614;
   display:block;
   margin-bottom:12px
 }
@@ -1314,3 +1315,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   outline: 2px solid #1FA463;
   outline-offset: 2px
 }
+
+.status-dot { display:inline-flex; align-items:center; gap:6px; margin-right:12px; }
+.status-dot i { width:8px; height:8px; border-radius:99px; background:#8A9390; display:inline-block; }
+.status-dot.green i { background:#1FA463; }
+.status-dot.amber i { background:#D08A1E; }
+.status-dot.red i { background:#C2453A; }
+.phone-preview, .drawer, .diff-view, .toast, .doc-viewer { border:1px solid #ECEEEF; border-radius:12px; padding:12px; margin:8px 0; background:#fff; }
+.table-search { margin-bottom:8px; }
+table { font-size:14px; }

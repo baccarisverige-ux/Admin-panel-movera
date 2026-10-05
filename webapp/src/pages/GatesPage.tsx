@@ -1,6 +1,7 @@
-import { chapter16, gateB } from "../gates/scenarios";
-import { frontendGateC, gateC } from "../gates/frontendC";
 import { APPS } from "../gates/apps";
+import { frontendGateC, gateC } from "../gates/frontendC";
+import { chapter16, gateB } from "../gates/scenarios";
+import { DataTable } from "../ui/DataTable";
 
 export function GatesPage() {
   const rows = chapter16();
@@ -30,26 +31,10 @@ export function GatesPage() {
           ))}
         </ul>
       </article>
-      <table>
-        <thead>
-          <tr>
-            <th>Id</th>
-            <th>Simulation</th>
-            <th>Staging</th>
-            <th>Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td>{row.id}</td>
-              <td>{row.pass ? "pass" : "not passed"}</td>
-              <td>{row.staging ? "yes" : "no"}</td>
-              <td>{row.note}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        head={["Id", "Simulation", "Staging", "Note"]}
+        rows={rows.map((row) => [row.id, row.pass ? "pass" : "not passed", row.staging ? "yes" : "no", row.note])}
+      />
       <div className="page-heading">
         <div>
           <h2>Gate C, frontend only</h2>
@@ -58,24 +43,10 @@ export function GatesPage() {
           </p>
         </div>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Id</th>
-            <th>Frontend</th>
-            <th>Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {frontend.map((row) => (
-            <tr key={row.id}>
-              <td>{row.id}</td>
-              <td>{row.pass ? "pass" : "not passed"}</td>
-              <td>{row.note}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        head={["Id", "Frontend", "Note"]}
+        rows={frontend.map((row) => [row.id, row.pass ? "pass" : "not passed", row.note])}
+      />
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { fleetStatus, type FleetCar } from "../vehicles/fleet";
+import { DataTable } from "../ui/DataTable";
 
 const CARS: FleetCar[] = [
   { id: "V1", plate: "ABC 123", driverName: "Erik Lind", year: 2022, seats: 4, fuel: "electric", category: "electric" },
@@ -15,29 +16,13 @@ export function FleetPage() {
           <p>The same rules as driver activation. An ineligible car cannot be offered.</p>
         </div>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Plate</th>
-            <th>Driver</th>
-            <th>Category</th>
-            <th>Eligible</th>
-          </tr>
-        </thead>
-        <tbody>
-          {CARS.map((car) => {
-            const status = fleetStatus(car);
-            return (
-              <tr key={car.id}>
-                <td>{car.plate}</td>
-                <td>{car.driverName}</td>
-                <td>{car.category}</td>
-                <td>{status.eligible ? "yes" : status.reason}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <DataTable
+        head={["Plate", "Driver", "Category", "Eligible"]}
+        rows={CARS.map((car) => {
+          const status = fleetStatus(car);
+          return [car.plate, car.driverName, car.category, status.eligible ? "yes" : status.reason];
+        })}
+      />
     </>
   );
 }

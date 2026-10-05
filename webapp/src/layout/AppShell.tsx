@@ -15,6 +15,7 @@ import {
   Menu,
   MessageSquare,
   MessagesSquare,
+  Palette,
   Route,
   ScrollText,
   Server,
@@ -62,6 +63,7 @@ const ICONS: Record<NavIcon, typeof Menu> = {
   Settings,
   Server,
   Shield,
+  Palette,
 };
 
 type AppShellProps = {

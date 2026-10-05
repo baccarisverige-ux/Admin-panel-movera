@@ -1,5 +1,6 @@
 import { deactivateAgent } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
+import { DataTable } from "../ui/DataTable";
 
 export function TeamPage() {
   const session = useSession();
@@ -15,41 +16,28 @@ export function TeamPage() {
         </div>
       </div>
       <article className="panel">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {session.agents.map((agent) => (
-              <tr key={agent.id}>
-                <td>{agent.name}</td>
-                <td>{agent.email}</td>
-                <td>{agent.role}</td>
-                <td>{agent.active ? "Active" : "Deactivated"}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="link-action danger-text"
-                    disabled={!agent.active || agent.id === actor.id || actor.role !== "super"}
-                    onClick={() => {
-                      const next = deactivateAgent(session.agents, agent.id, actor);
-                      if (!Array.isArray(next)) return;
-                      session.setAgents(next);
-                    }}
-                  >
-                    Deactivate
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          head={["Name", "Email", "Role", "Status", "Actions"]}
+          rows={session.agents.map((agent) => [
+            agent.name,
+            agent.email,
+            agent.role,
+            agent.active ? "Active" : "Deactivated",
+            <button
+              key={agent.id}
+              type="button"
+              className="link-action danger-text"
+              disabled={!agent.active || agent.id === actor.id || actor.role !== "super"}
+              onClick={() => {
+                const next = deactivateAgent(session.agents, agent.id, actor);
+                if (!Array.isArray(next)) return;
+                session.setAgents(next);
+              }}
+            >
+              Deactivate
+            </button>,
+          ])}
+        />
       </article>
     </>
   );

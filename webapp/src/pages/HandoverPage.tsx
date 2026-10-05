@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { healthAlerts, roleMatrix, runDrills, type DrillResult } from "../handover/drills";
+import { DataTable } from "../ui/DataTable";
 
 const NAMES: Record<string, string> = {
   "payment-failure": "Payment failure",
@@ -30,22 +31,7 @@ export function HandoverPage() {
       </article>
       <article className="panel">
         <h3>Role matrix</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Role</th>
-              <th>Permissions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roleMatrix().map((row) => (
-              <tr key={row.role}>
-                <td>{row.role}</td>
-                <td>{row.permissions.join(", ")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable head={["Role", "Permissions"]} rows={roleMatrix().map((row) => [row.role, row.permissions.join(", ")])} />
       </article>
       <article className="panel">
         <h3>Drills</h3>
