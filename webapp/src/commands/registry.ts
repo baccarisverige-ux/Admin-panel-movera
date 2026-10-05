@@ -5,7 +5,15 @@ export type CommandSpec = {
   permission: string;
 };
 
-export const COMMANDS: CommandSpec[] = [
+export type ActionSpec = CommandSpec & {
+  owner: string;
+  entity: string;
+  destructive: boolean;
+  allowedStates?: readonly string[];
+  approvalThresholdOre?: number;
+};
+
+const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.shell.menu", label: "Open menu", reason: false, permission: "overview.read" },
   { id: "admin.shell.search", label: "Search", reason: false, permission: "overview.read" },
   { id: "admin.shell.inbox", label: "Inbox", reason: false, permission: "overview.read" },
@@ -132,8 +140,83 @@ export const COMMANDS: CommandSpec[] = [
   { id: "admin.live.focus", label: "Focus live marker", reason: false, permission: "trips.read" },
 ];
 
+
+const OWNER_BY_DOMAIN: Record<string, string> = {
+  shell: "Platform",
+  auth: "Platform",
+  audit: "Finance",
+  config: "Configuration",
+  content: "Content",
+  design: "Platform",
+  driver: "Driver operations",
+  growth: "Growth",
+  handover: "Operations",
+  message: "Communications",
+  payment: "Finance",
+  pricing: "Pricing",
+  reservation: "Dispatch",
+  safety: "Safety",
+  support: "Support",
+  team: "Platform",
+  trip: "Dispatch",
+  rider: "Rider operations",
+  zone: "Places",
+  table: "Platform",
+  card: "Platform",
+  thread: "Support",
+  modal: "Platform",
+  tabs: "Platform",
+  ui: "Platform",
+  doc: "Compliance",
+  confirm: "Platform",
+  dispatch: "Dispatch",
+  live: "Dispatch",
+};
+
+const ALLOWED_STATES: Record<string, readonly string[]> = {
+  "admin.trip.cancel": ["requested", "searching", "offered", "accepted", "driver_to_pickup", "arrived", "rider_onboard", "in_trip"],
+  "admin.trip.reassign": ["accepted", "driver_to_pickup", "arrived"],
+  "admin.driver.activate": ["pending", "on_hold"],
+  "admin.reservation.assign": ["waiting", "booked"],
+  "admin.reservation.cancel": ["waiting", "booked", "assigned"],
+};
+
+const DESTRUCTIVE = new Set([
+  "admin.shell.reset",
+  "admin.config.publish",
+  "admin.config.rollback",
+  "admin.content.publish",
+  "admin.content.rollback",
+  "admin.payment.refund",
+  "admin.pricing.deleteRow",
+  "admin.reservation.cancel",
+  "admin.safety.resolve",
+  "admin.team.deactivate",
+  "admin.trip.cancel",
+  "admin.trip.refund",
+  "admin.rider.block",
+  "admin.rider.privacy",
+  "admin.zone.publish",
+  "admin.zone.rollback",
+  "admin.zone.archive",
+]);
+
+function enrich(command: CommandSpec): ActionSpec {
+  const domain = command.id.split(".")[1] ?? "platform";
+  return {
+    ...command,
+    owner: OWNER_BY_DOMAIN[domain] ?? "Platform",
+    entity: domain,
+    destructive: DESTRUCTIVE.has(command.id),
+    allowedStates: ALLOWED_STATES[command.id],
+    approvalThresholdOre: command.id === "admin.payment.refund" || command.id === "admin.audit.refund250" ? 20_000 : undefined,
+  };
+}
+
+export const COMMANDS: ActionSpec[] = RAW_COMMANDS.map(enrich);
+
 const BY_ID = new Map(COMMANDS.map((command) => [command.id, command]));
 
-export function commandById(id: string): CommandSpec | undefined {
+export function commandById(id: string): ActionSpec | undefined {
   return BY_ID.get(id);
 }
