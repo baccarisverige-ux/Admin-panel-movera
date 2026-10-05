@@ -15,7 +15,7 @@ import {
   type Fault,
 } from "./demoStore.ts";
 import { ApiError, apiRequest, classifyStatus } from "./httpClient.ts";
-import type { ApprovalRow, AuditRow, DemoDb, DemoRecord, OperationRow, InboxItem, ZoneScope } from "./seed.ts";
+import type { ApprovalRow, AuditRow, DemoDb, DemoRecord, InboxItem, OperationRow, ZoneScope } from "./seed.ts";
 
 export type ApiEnv = {
   PROD: boolean;
@@ -96,10 +96,15 @@ const TARGET_COLLECTIONS = [
   "staff",
 ] as const;
 
+type TargetCollection = (typeof TARGET_COLLECTIONS)[number];
+
+function isTargetCollection(value: string): value is TargetCollection {
+  return TARGET_COLLECTIONS.includes(value as TargetCollection);
+}
+
 function targetRecord(db: DemoDb, targetId: string, collection?: string): DemoRecord | null {
-  if (collection && TARGET_COLLECTIONS.includes(collection as (typeof TARGET_COLLECTIONS)[number])) {
-    const rows = db[collection as (typeof TARGET_COLLECTIONS)[number]];
-    return rows.find((row) => row.id === targetId) ?? null;
+  if (collection && isTargetCollection(collection)) {
+    return db[collection].find((row) => row.id === targetId) ?? null;
   }
   for (const key of TARGET_COLLECTIONS) {
     const row = db[key].find((item) => item.id === targetId);
@@ -155,7 +160,7 @@ function rememberRejected(
     idempotencyKey: string;
     scope: string;
   },
-  operationId: string,
+  opId: string,
   status: number,
   message: string,
 ): DemoDb {
@@ -175,7 +180,7 @@ function rememberRejected(
     },
     false,
   );
-  const op: OperationRow = {
+  const operation: OperationRow = {
     operationId: opId,
     idempotencyKey: input.idempotencyKey,
     action: input.action,
@@ -186,8 +191,39 @@ function rememberRejected(
     rev: next.rev,
     at: new Date().toISOString(),
   };
-  next = { ...next, operations: { ...next.operations, [operationKey(input.actorId, input.idempotencyKey)]: op } };
+  next = {
+    ...next,
+    operations: {
+      ...next.operations,
+      [operationKey(input.actorId, input.idempotencyKey)]: operation,
+    },
+  };
   return saveDb(next);
+}
+
+function rememberTransientFailure(
+  db: DemoDb,
+  input: Required<Pick<CommandInput, "action" | "targetId" | "reason" | "actorId" | "before" | "after">> & {
+    scope: string;
+  },
+  opId: string,
+  status: number,
+): DemoDb {
+  return addAudit(
+    db,
+    {
+      operationId: opId,
+      actorId: input.actorId,
+      action: input.action,
+      targetId: input.targetId,
+      scope: input.scope,
+      before: input.before,
+      after: input.after,
+      reason: input.reason,
+      result: rejectionResult(status),
+    },
+    false,
+  );
 }
 
 function replayOperation(db: DemoDb, operation: OperationRow): CommandResult {
@@ -195,7 +231,7 @@ function replayOperation(db: DemoDb, operation: OperationRow): CommandResult {
   return {
     message: operation.message,
     db,
-    operationId: operation.operationId: opId,
+    operationId: operation.operationId,
     status: operation.status,
     rev: operation.rev,
   };
@@ -205,14 +241,17 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
   return {
     kind: "fixture",
     demo: true,
+
     async ready() {
       await pause(delayMs, "none");
       return { currency: CURRENCY, timeZone: TIME_ZONE, demo: true };
     },
+
     async page(pageId) {
       await pause(delayMs, "none");
       return catalogFor(pageId);
     },
+
     async list(name, scope) {
       const fault = readFault();
       await pause(delayMs, fault);
@@ -220,10 +259,12 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       if (status !== null) throw new ApiError(status, classifyStatus(status));
       return rowsFor(loadDb(), name, scope, fault);
     },
+
     async search(query, scope) {
       await pause(delayMs, "none");
       return findHit(loadDb(), query, scope);
     },
+
     async command(raw) {
       const fault = readFault();
       await pause(delayMs, fault);
@@ -251,19 +292,22 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       const cached = db.operations[operationKey(raw.actorId, idempotencyKey)];
       if (cached) return replayOperation(db, cached);
 
-      const reject = (status: number, message: string): never => {
-        db = rememberRejected(db, input, operationId: opId, status, message);
+      const reject = (status: number, message: string, cache = true): never => {
+        if (cache) db = rememberRejected(db, input, opId, status, message);
+        else db = rememberTransientFailure(db, input, opId, status);
         throw new ApiError(status, message);
       };
 
       if (!spec) reject(422, `Unknown action ${raw.action}.`);
-      const actionSpec = spec!;
-      if (!can(actorRole, actionSpec.permission)) reject(403, "Your role cannot do that.");
+      if (!can(actorRole, spec.permission)) reject(403, "Your role cannot do that.");
       if (!scopeAllowed(actorScope, resolvedScope)) reject(403, "That record is outside your active scope.");
-      if (actionSpec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
+      if (spec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
       if (expectedRev !== db.rev) reject(409, "Someone else changed this. Reload and review the newest version.");
       if (spec.allowedStates && resolvedState && !spec.allowedStates.includes(resolvedState)) {
         reject(422, `${spec.label} is not allowed while the record is ${resolvedState}.`);
+      }
+      if (raw.collection && raw.patch && !targetRecord(db, raw.targetId, raw.collection)) {
+        reject(422, "The target record no longer exists.");
       }
 
       const injectedStatus = faultStatus(fault);
@@ -276,7 +320,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         );
       }
 
-      if (actionSpec.approvalThresholdOre && (raw.amountOre ?? 0) >= actionSpec.approvalThresholdOre) {
+      if (spec.approvalThresholdOre && (raw.amountOre ?? 0) >= spec.approvalThresholdOre) {
         const approval: ApprovalRow = {
           id: `approval-${db.approvals.length + 1}`,
           action: raw.action,
@@ -292,7 +336,7 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
           actorId: raw.actorId,
           action: raw.action,
           targetId: raw.targetId,
-          scope,
+          scope: resolvedScope,
           before: raw.before,
           after: "pending approval",
           reason: raw.reason,
@@ -309,8 +353,20 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
           rev: next.rev,
           at: new Date().toISOString(),
         };
-        next = saveDb({ ...next, operations: { ...next.operations, [operationKey(raw.actorId, idempotencyKey)]: operation } });
-        return { message: operation.message, db: next, operationId: opId, status: "pending_approval", rev: next.rev };
+        next = saveDb({
+          ...next,
+          operations: {
+            ...next.operations,
+            [operationKey(raw.actorId, idempotencyKey)]: operation,
+          },
+        });
+        return {
+          message: operation.message,
+          db: next,
+          operationId: opId,
+          status: "pending_approval",
+          rev: next.rev,
+        };
       }
 
       if (raw.collection && raw.patch) {
@@ -319,18 +375,27 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         if (Array.isArray(rows)) {
           db = {
             ...db,
-            [key]: rows.map((row) => row.id === raw.targetId ? { ...row, ...raw.patch } : row),
+            [key]: rows.map((row) => (row.id === raw.targetId ? { ...row, ...raw.patch } : row)),
           };
         }
       }
-      if (raw.sliceKey) db = { ...db, slices: { ...db.slices, [raw.sliceKey]: raw.value } };
+
+      if (raw.sliceKey) {
+        db = {
+          ...db,
+          slices: {
+            ...db.slices,
+            [raw.sliceKey]: raw.value,
+          },
+        };
+      }
 
       db = addAudit(db, {
         operationId: opId,
         actorId: raw.actorId,
         action: raw.action,
         targetId: raw.targetId,
-        scope,
+        scope: resolvedScope,
         before: raw.before,
         after: raw.after,
         reason: raw.reason,
@@ -348,37 +413,59 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         rev: db.rev,
         at: new Date().toISOString(),
       };
-      db = saveDb({ ...db, operations: { ...db.operations, [operationKey(raw.actorId, idempotencyKey)]: operation } });
-      return { message: operation.message, db, operationId: opId, status: "committed", rev: db.rev };
+      db = saveDb({
+        ...db,
+        operations: {
+          ...db.operations,
+          [operationKey(raw.actorId, idempotencyKey)]: operation,
+        },
+      });
+      return {
+        message: operation.message,
+        db,
+        operationId: opId,
+        status: "committed",
+        rev: db.rev,
+      };
     },
+
     async revision() {
       return loadDb().rev;
     },
+
     async audit() {
       return loadDb().audits;
     },
+
     async approvals() {
       return loadDb().approvals;
     },
+
     async operation(idempotencyKey, actorId) {
       return loadDb().operations[operationKey(actorId, idempotencyKey)] ?? null;
     },
+
     async reset() {
       await pause(delayMs, "none");
       return resetDb();
     },
+
     async getFault() {
       return readFault();
     },
+
     async setFault(fault) {
       writeFault(fault);
     },
+
     async inbox() {
       return loadDb().inbox;
     },
+
     async freshness() {
       return loadDb().updatedAt;
     },
+
     async readSlice(key, fallback) {
       const fault = readFault();
       await pause(delayMs, fault);
@@ -395,6 +482,7 @@ export function createHttpAdminApi(baseUrl = ""): AdminApi {
   return {
     kind: "http",
     demo: false,
+
     async ready() {
       const body = (await apiRequest(baseUrl, "/ready")) as { currency?: string; timeZone?: string };
       if (body.currency !== CURRENCY || body.timeZone !== TIME_ZONE) {
@@ -402,9 +490,11 @@ export function createHttpAdminApi(baseUrl = ""): AdminApi {
       }
       return { currency: CURRENCY, timeZone: TIME_ZONE, demo: false };
     },
+
     async page(pageId) {
       return (await apiRequest(baseUrl, `/pages/${encodeURIComponent(pageId)}`)) as PageResult;
     },
+
     list: async () => unsupported(),
     search: async () => unsupported(),
     command: async () => unsupported(),
