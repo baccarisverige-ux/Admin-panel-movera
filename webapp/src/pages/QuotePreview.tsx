@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { quotePricing, type BoostMode } from "../pricing/quote";
 import { CATEGORY_INFO, PLACES, RIDE_OPTION_INFO, distanceBetween, type PriceCategoryId } from "../pricing/sets";
-import type { PricingBook } from "../pricing/book";
+import type { PricingBook } from "../api/hooks";
 
 export function QuotePreview({ pricing }: { pricing: PricingBook }) {
   const [zoneId, setZoneId] = useState("Z001");
