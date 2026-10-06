@@ -83,13 +83,15 @@ test("R10 large refund requires and executes a second-agent decision", async ({ 
   await expect(page.getByText(/Pending approval/)).toBeVisible();
 
   await page.goto("/audit");
-  const row = page.getByRole("row", { name: /PAY0200/ });
+  const approvalsPanel = page.getByRole("heading", { level: 3, name: "Pending approvals" }).locator("..");
+  const row = approvalsPanel.getByRole("row", { name: /PAY0200/ });
   await expect(row).toContainText("250,00 kr");
   await expect(row.getByRole("button", { name: "Approve" })).toBeDisabled();
 
   await switchSession(page, "lena");
   await page.goto("/audit");
-  const decisionRow = page.getByRole("row", { name: /PAY0200/ });
+  const decisionPanel = page.getByRole("heading", { level: 3, name: "Pending approvals" }).locator("..");
+  const decisionRow = decisionPanel.getByRole("row", { name: /PAY0200/ });
   await expect(decisionRow.getByRole("button", { name: "Approve" })).toBeEnabled();
   await decisionRow.getByRole("button", { name: "Approve" }).click();
   await confirm(page);
