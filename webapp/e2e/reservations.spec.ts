@@ -8,18 +8,17 @@ async function signIn(page: Page) {
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-async function confirm(page: Page) {
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
-}
-
-test("reservation rules stay on the booking", async ({ page }) => {
+test("reservation queue uses seeded records and preserves booked policy snapshots", async ({ page }) => {
   await signIn(page);
   await page.getByRole("link", { name: "Reservations", exact: true }).click();
-  await expect(page.getByLabel("Booking horizon")).toHaveValue("7 days");
-  await expect(page.getByLabel("Give-up time")).toHaveValue("5 min");
-  await expect(page.getByRole("heading", { level: 3, name: /B1/ })).toContainText("needs a driver");
-  await page.getByRole("button", { name: "Assign" }).first().click();
-  await confirm(page);
-  await expect(page.getByText("Assigned D3.")).toBeVisible();
-  await expect(page.getByRole("heading", { level: 3, name: /B1/ })).toContainText("policy res-2");
+
+  await expect(page.getByRole("heading", { level: 2, name: "Reservations" })).toBeVisible();
+  await expect(page.getByTestId("reservation-policy")).toContainText("res-2");
+  await expect(page.getByLabel("Booking horizon")).toHaveValue("7");
+  await expect(page.getByRole("cell", { name: "B021" })).toBeVisible();
+
+  await page.getByRole("cell", { name: "B021" }).click();
+  await expect(page).toHaveURL(/\/reservations\/B021$/);
+  await expect(page.getByTestId("reservation-policy-snapshot")).toContainText("Policy snapshot · res-1");
+  await expect(page.getByTestId("reservation-policy-snapshot")).toContainText("Booking horizon 5 days");
 });
