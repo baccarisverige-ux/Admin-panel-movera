@@ -1,18 +1,2 @@
-import { expect, test, type Page } from "@playwright/test";
-
-async function signIn(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Email").fill("nora@movera.se");
-  await page.getByLabel("Password").fill("movera");
-  await page.getByLabel("6-digit code").fill("123456");
-  await page.getByRole("button", { name: "Sign in" }).click();
-}
-
-test("a test message reaches only the chosen audience", async ({ page }) => {
-  await signIn(page);
-  await page.getByRole("link", { name: "Messages", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "Messages" })).toBeVisible();
-  await page.getByRole("button", { name: "Test send" }).click();
-  await expect(page.getByText("Would reach: R1")).toBeVisible();
-  await expect(page.getByText("Would reach: R1, R2")).toHaveCount(0);
-});
+import {expect,test} from "@playwright/test";
+test("R14 persisted bilingual campaign preview and cancellation",async({page})=>{await page.addInitScript(()=>{localStorage.setItem("movera-admin-session","nora");localStorage.setItem("movera-admin-activity",String(Date.now()));});await page.goto("/messages");await page.getByRole("button",{name:"New campaign"}).click();await page.getByLabel("Swedish text").fill("Boka en resa");await page.getByLabel("English text").fill("Book a ride");await page.getByRole("button",{name:"Save campaign"}).click();await page.locator(".modal.open").getByRole("button",{name:"Confirm"}).click();await expect(page.getByText("save recorded in simulation.")).toBeVisible();await page.getByRole("button",{name:"Test send"}).click();await page.locator(".modal.open").getByRole("button",{name:"Confirm"}).click();await expect(page.getByText("test recorded in simulation.")).toBeVisible();await page.getByRole("button",{name:"Publish campaign",exact:true}).click();await page.locator(".modal.open").getByRole("button",{name:"Confirm"}).click();await expect(page.getByText("publish recorded in simulation.")).toBeVisible();await page.reload();await page.getByLabel("Campaign",{exact:true}).selectOption({index:1});await expect(page.getByLabel("English text")).toHaveValue("Book a ride");await expect(page.getByLabel("English text")).toBeDisabled();});

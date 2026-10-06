@@ -1,3 +1,4 @@
+import { emptyCampaigns, changeCampaign, type CampaignBook } from "../messages/ops.ts";
 import { emptySupport, supportChange, ticketOps, type SupportBook } from "../support/ops.ts";
 import { AGENTS, canUseZone } from "../auth/permissions.ts";
 import { emptySafety, safetyAction, validateSafety, type SafetyBook } from "../safety/ops.ts";
@@ -330,6 +331,17 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         const result = supportChange(book,row!,raw.actorId,kind,text,line?.id ?? idempotencyKey,owner,line?.attachment,kind === "metadata" ? { ...current, priority: ops!.priority, language: ops!.language, tags: ops!.tags } : undefined);
         if (result.error) reject(422,result.error);
         raw = { ...raw, sliceKey: "supportOps", value: result.book };
+      }
+
+      if (raw.action.startsWith("admin.campaign.")) {
+        const book = (db.slices.campaignOps ?? emptyCampaigns()) as CampaignBook;
+        const proposed = raw.value as CampaignBook | undefined;
+        const campaign = proposed?.campaigns.find(c => c.id === raw.targetId);
+        if (!campaign || !db.zones.some(z => z.id === campaign.zone) || !scopeAllowed(actorScope,campaign.zone)) reject(422,"Invalid campaign audience.");
+        const action = raw.action.split(".").at(-1) as "save" | "test" | "publish" | "cancel" | "refresh";
+        const result = changeCampaign(book,campaign!,action,raw.actorId,campaign!.app === "rider" ? db.riders : db.drivers);
+        if (result.error) reject(422,result.error);
+        raw = { ...raw, sliceKey: "campaignOps", value: result.book };
       }
 
       const injectedStatus = faultStatus(fault);

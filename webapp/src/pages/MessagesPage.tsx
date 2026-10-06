@@ -1,64 +1,13 @@
 import { useState } from "react";
-import { advance, testSend, useRecords, type Delivery, type Outbound } from "../api/hooks";
-import { fillTemplate } from "../messages/template";
+import { emptyCampaigns, newCampaign, changeCampaign, campaignAudience, useRecords, useSlice, type Campaign, type CampaignBook } from "../api/hooks";
+import { can } from "../auth/permissions";
+import { useSession } from "../auth/SessionContext";
 import { CommandButton } from "../ui/CommandButton";
-
-const PEOPLE = [
-  { id: "R1", app: "rider" as const, zone: "Norrmalm" },
-  { id: "R2", app: "rider" as const, zone: "Solna" },
-  { id: "D1", app: "driver" as const, zone: "Norrmalm" },
-];
-
-const LATE = { id: "late", name: "Late trip", body: "Hi {{name}}, trip {{trip}} is late." };
-
-export function MessagesPage() {
-  const [message, setMessage] = useState<Outbound>({ id: "M1", audience: { app: "rider", zone: "Norrmalm" }, body: "Reservations are open.", status: "accepted" });
-  const [hits, setHits] = useState<string[]>([]);
-  const [name, setName] = useState("Sara");
-  const [trip, setTrip] = useState("");
-  const filled = fillTemplate(LATE, { name, trip });
-  const templates = useRecords("templates", null);
-
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h2>Messages</h2>
-          <p>Status {message.status}. {templates.data?.length ?? "…"} island templates. Accepted, sent, delivered and failed stay separate.</p>
-        </div>
-      </div>
-      <article className="panel">
-        <h3>Template · {LATE.name}</h3>
-        <label>
-          Name
-          <input value={name} onChange={(event) => setName(event.target.value)} />
-        </label>
-        <label>
-          Trip
-          <input value={trip} onChange={(event) => setTrip(event.target.value)} />
-        </label>
-        <p>{filled.error ?? filled.body}</p>
-        <CommandButton command="admin.message.useText" className="secondary-btn"
-          type="button" onDone={() => {
-            if (!filled.error) setMessage({ ...message, body: filled.body, status: "accepted" });
-          }}>
-          Use this text
-        </CommandButton>
-      </article>
-      <article className="panel">
-        <p>{message.body}</p>
-        <div className="actions">
-          <CommandButton command="admin.message.testSend" className="secondary-btn" type="button" onDone={() => setHits(testSend(message.audience, PEOPLE))}>
-            Test send
-          </CommandButton>
-          {(["sent", "delivered", "failed"] as Delivery[]).map((status) => (
-            <CommandButton command="admin.message.mark" key={status} className="secondary-btn" type="button" onDone={() => setMessage(advance(message, status))}>
-              Mark {status}
-            </CommandButton>
-          ))}
-        </div>
-        <p>Would reach: {hits.length === 0 ? "nobody yet" : hits.join(", ")}</p>
-      </article>
-    </>
-  );
+export function MessagesPage(){
+ const {agent}=useSession();const store=useSlice<CampaignBook>("campaignOps",emptyCampaigns());const zones=useRecords("zones");const riders=useRecords("riders");const drivers=useRecords("drivers");const [selected,select]=useState("");const [draft,setDraft]=useState<Campaign|null>(null);const [notice,setNotice]=useState("");const saved=store.value.campaigns.find(c=>c.id===selected);const c=draft??saved;const rows=c?.app==="driver"?drivers.data:riders.data;const editable=Boolean(agent && can(agent.role,"settings.edit"));
+ function patch(value:Partial<Campaign>){if(c)setDraft({...c,...value});}
+ return <><div className="page-heading"><div><h2>Messages</h2><p>Campaigns persist with versioned history. Test results are simulation audience counts; no external notification is sent.</p></div></div><p role="status">{notice}</p><button data-command="admin.message.useText" className="primary-btn" disabled={!editable||!zones.data?.length||store.loading} onClick={()=>{const id=crypto.randomUUID();select(id);setDraft(newCampaign(id,zones.data![0].id));}}>New campaign</button>
+ <label>Campaign<select value={saved?.id??""} onChange={e=>{select(e.target.value);setDraft(null);}}><option value="">Choose campaign</option>{store.value.campaigns.map(x=><option key={x.id} value={x.id}>{x.channel} · {x.id.slice(0,8)} · {x.status}</option>)}</select></label>
+ {c?<article className="panel"><h3>{c.id} · {c.status} · version {c.version}</h3><fieldset disabled={!editable||c.status!=="draft"||store.loading}><div className="field-grid"><label>Audience app<select value={c.app} onChange={e=>patch({app:e.target.value as Campaign["app"]})}><option value="rider">Rider</option><option value="driver">Driver</option></select></label><label>Campaign zone<select value={c.zone} onChange={e=>patch({zone:e.target.value})}>{zones.data?.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}</select></label><label>Channel<select value={c.channel} onChange={e=>patch({channel:e.target.value as Campaign["channel"]})}>{["push","banner","sms","island"].map(x=><option key={x}>{x}</option>)}</select></label><label>Category<select value={c.category} onChange={e=>patch({category:e.target.value})}>{["all","economy","comfort","premium","priority","xl","electric","pet"].map(x=><option key={x}>{x}</option>)}</select></label><label>Swedish text<textarea value={c.sv} onChange={e=>patch({sv:e.target.value})}/></label><label>English text<textarea value={c.en} onChange={e=>patch({en:e.target.value})}/></label><label>Deep link<input value={c.link} onChange={e=>patch({link:e.target.value})}/></label><label>Publish at<input type="datetime-local" value={c.startAt} onChange={e=>patch({startAt:e.target.value})}/></label><label>Expire at<input type="datetime-local" value={c.expireAt} onChange={e=>patch({expireAt:e.target.value})}/></label></div></fieldset>
+ <h3>Phone preview</h3><p>{c.sv}</p><p>{c.en}</p><p>Audience preview: {campaignAudience(c,rows??[]).length} · Last tested: {c.tested.length}</p><div className="actions">{(["save","test","publish","cancel","refresh"] as const).map(action=>{const result=changeCampaign(store.value,c,action,agent?.id??"",rows??[]);return <CommandButton key={action} command={`admin.campaign.${action}`} targetId={c.id} scope={c.zone} sliceKey="campaignOps" value={result.book} expectedSliceRev={store.value.draftRev} confirmTarget={false} disabled={store.loading||Boolean(result.error)||Boolean(draft && action!=="save")} title={result.error??(draft&&action!=="save"?"Save changes first.":undefined)} onDone={()=>{setDraft(null);setNotice(`${action} recorded in simulation.`);}}>{action==="save"?"Save campaign":action==="test"?"Test send":action==="publish"?"Publish campaign":action==="cancel"?"Cancel campaign":"Evaluate schedule"}</CommandButton>;})}</div><ol>{c.events.map((e,i)=><li key={i}>{e.at} · {e.actor} · {e.action}</li>)}</ol></article>:<p>Create or select a campaign.</p>}</>;
 }
