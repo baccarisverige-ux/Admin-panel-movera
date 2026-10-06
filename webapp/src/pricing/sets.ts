@@ -47,6 +47,8 @@ export type ZonePrice = {
   commission: Record<PriceCategoryId, number>;
   fleetCommission: number;
   optionFee: Record<string, number>;
+  enabledCategories: Record<PriceCategoryId, boolean>;
+  enabledOptions: Record<string, boolean>;
 };
 
 const BASE: Record<PriceCategoryId, Rate> = {
@@ -64,6 +66,8 @@ export type PriceBook = { zones: ZonePrice[] };
 function zonePrice(zoneId: string, zoneName: string): ZonePrice {
   const commission = Object.fromEntries(CATEGORY_IDS.map((id) => [id, id === "premium" || id === "xl" ? 20 : 15])) as Record<PriceCategoryId, number>;
   const optionFee = Object.fromEntries(RIDE_OPTION_INFO.map((item) => [item.id, item.id === "pet" ? 30 : 20]));
+  const enabledCategories = Object.fromEntries(CATEGORY_IDS.map((id) => [id, true])) as Record<PriceCategoryId, boolean>;
+  const enabledOptions = Object.fromEntries(RIDE_OPTION_INFO.map((item) => [item.id, true]));
   return {
     zoneId,
     zoneName,
@@ -87,6 +91,8 @@ function zonePrice(zoneId: string, zoneName: string): ZonePrice {
     commission,
     fleetCommission: 12,
     optionFee,
+    enabledCategories,
+    enabledOptions,
   };
 }
 

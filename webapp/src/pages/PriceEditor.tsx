@@ -1,10 +1,18 @@
 import { useState } from "react";
-import { useCommands } from "../api/hooks";
 import { CATEGORY_INFO, RIDE_OPTION_INFO, type PriceBook, type PriceCategoryId, type ZonePrice } from "../pricing/sets";
 
-export function PriceEditor({ book, onChange }: { book: PriceBook; onChange: (book: PriceBook) => void }) {
-  const commands = useCommands();
-  const [zoneId, setZoneId] = useState("Z001");
+type Props = {
+  book: PriceBook;
+  zoneId: string;
+  onZoneChange: (zoneId: string) => void;
+  onChange: (book: PriceBook) => void;
+  onSave: (zoneId: string) => void;
+  canEdit: boolean;
+  saving?: boolean;
+  validationError?: string | null;
+};
+
+export function PriceEditor({ book, zoneId, onZoneChange, onChange, onSave, canEdit, saving = false, validationError = null }: Props) {
   const [category, setCategory] = useState<PriceCategoryId>("economy");
   const zone = book.zones.find((item) => item.zoneId === zoneId) ?? book.zones[0];
   if (!zone) return null;
@@ -24,11 +32,11 @@ export function PriceEditor({ book, onChange }: { book: PriceBook; onChange: (bo
 
   return (
     <article className="panel" data-testid="price-set">
-      <h3>Price set</h3>
+      <h3>Price set · {zone.zoneName} · v{zone.version}</h3>
       <div className="field-grid">
         <label>
           Price zone
-          <select aria-label="Price zone" value={zone.zoneId} onChange={(event) => setZoneId(event.target.value)}>
+          <select aria-label="Price zone" value={zone.zoneId} onChange={(event) => onZoneChange(event.target.value)}>
             {book.zones.map((item) => (
               <option key={item.zoneId} value={item.zoneId}>{item.zoneName}</option>
             ))}
@@ -42,108 +50,92 @@ export function PriceEditor({ book, onChange }: { book: PriceBook; onChange: (bo
             ))}
           </select>
         </label>
+        <label className="check-row">
+          <input
+            aria-label={`${info?.label} enabled in ${zone.zoneName}`}
+            type="checkbox"
+            checked={zone.enabledCategories[category]}
+            disabled={!canEdit}
+            onChange={(event) => patchZone({ enabledCategories: { ...zone.enabledCategories, [category]: event.target.checked } })}
+          />
+          {info?.label} enabled
+        </label>
       </div>
-      <p>{info?.line}. Badge {info?.badge}. Eligibility: {info?.eligibility}. <span className="badge-amber">To confirm</span></p>
+      <p>{info?.line}. Badge {info?.badge}. Eligibility: {info?.eligibility}.</p>
+
       <ul aria-label="Categories">
         {CATEGORY_INFO.map((item) => (
-          <li key={item.id}>{item.label} · {item.line} · {item.badge}</li>
+          <li key={item.id}>{item.label} · {zone.enabledCategories[item.id] ? "enabled" : "disabled"} · {item.line} · {item.badge}</li>
         ))}
       </ul>
-      <ul aria-label="Ride options">
-        {RIDE_OPTION_INFO.map((item) => (
-          <li key={item.id}>{item.label} · {item.note} · {zone.optionFee[item.id]} kr</li>
-        ))}
-      </ul>
+
       <div className="field-grid">
         <label>
           Pickup
-          <input aria-label={`${zone.zoneName} ${info?.label} pickup`} type="number" value={rate.pickup} onChange={(event) => patchRate("pickup", Number(event.target.value))} />
+          <input disabled={!canEdit} aria-label={`${zone.zoneName} ${info?.label} pickup`} type="number" value={rate.pickup} onChange={(event) => patchRate("pickup", Number(event.target.value))} />
         </label>
         <label>
           Per km
-          <input aria-label={`${zone.zoneName} ${info?.label} per km`} type="number" value={rate.perKm} onChange={(event) => patchRate("perKm", Number(event.target.value))} />
+          <input disabled={!canEdit} aria-label={`${zone.zoneName} ${info?.label} per km`} type="number" value={rate.perKm} onChange={(event) => patchRate("perKm", Number(event.target.value))} />
         </label>
         <label>
           Per minute
-          <input aria-label={`${zone.zoneName} ${info?.label} per minute`} type="number" value={rate.perMin} onChange={(event) => patchRate("perMin", Number(event.target.value))} />
+          <input disabled={!canEdit} aria-label={`${zone.zoneName} ${info?.label} per minute`} type="number" value={rate.perMin} onChange={(event) => patchRate("perMin", Number(event.target.value))} />
         </label>
         <label>
           Minimum
-          <input aria-label={`${zone.zoneName} ${info?.label} minimum`} type="number" value={rate.minimum} onChange={(event) => patchRate("minimum", Number(event.target.value))} />
+          <input disabled={!canEdit} aria-label={`${zone.zoneName} ${info?.label} minimum`} type="number" value={rate.minimum} onChange={(event) => patchRate("minimum", Number(event.target.value))} />
         </label>
         <label>
           Maximum
-          <input aria-label={`${zone.zoneName} ${info?.label} maximum`} type="number" value={rate.maximum} onChange={(event) => patchRate("maximum", Number(event.target.value))} />
-        </label>
-        <label>
-          Cancellation fee
-          <input aria-label="Cancellation fee" type="number" value={zone.cancelFee} onChange={(event) => patchZone({ cancelFee: Number(event.target.value) })} />
-        </label>
-        <label>
-          Reservation fee
-          <input aria-label="Reservation fee" type="number" value={zone.reservationFee} onChange={(event) => patchZone({ reservationFee: Number(event.target.value) })} />
-        </label>
-        <label>
-          Booking fee
-          <input aria-label="Booking fee" type="number" value={zone.bookingFee} onChange={(event) => patchZone({ bookingFee: Number(event.target.value) })} />
-        </label>
-        <label>
-          Airport fee
-          <input aria-label="Airport fee" type="number" value={zone.airportFee} onChange={(event) => patchZone({ airportFee: Number(event.target.value) })} />
-        </label>
-        <label>
-          Event fee
-          <input aria-label="Event fee" type="number" value={zone.eventFee} onChange={(event) => patchZone({ eventFee: Number(event.target.value) })} />
-        </label>
-        <label>
-          Manual boost
-          <input aria-label="Manual boost" type="number" step="0.1" value={zone.boostManual} onChange={(event) => patchZone({ boostManual: Number(event.target.value) })} />
-        </label>
-        <label>
-          Scheduled boost
-          <input aria-label="Scheduled boost" type="number" step="0.1" value={zone.boostScheduled} onChange={(event) => patchZone({ boostScheduled: Number(event.target.value) })} />
-        </label>
-        <label>
-          Automatic boost
-          <input aria-label="Automatic boost" type="number" step="0.1" value={zone.boostAuto} onChange={(event) => patchZone({ boostAuto: Number(event.target.value) })} />
-        </label>
-        <label>
-          Boost cap
-          <input aria-label="Boost cap" type="number" step="0.1" value={zone.boostCap} onChange={(event) => patchZone({ boostCap: Number(event.target.value) })} />
-        </label>
-        <label>
-          Commission percent
-          <input aria-label="Commission percent" type="number" value={zone.commission[category]} onChange={(event) => patchZone({ commission: { ...zone.commission, [category]: Number(event.target.value) } })} />
-        </label>
-        <label>
-          Fleet commission
-          <input aria-label="Fleet commission" type="number" value={zone.fleetCommission} onChange={(event) => patchZone({ fleetCommission: Number(event.target.value) })} />
+          <input disabled={!canEdit} aria-label={`${zone.zoneName} ${info?.label} maximum`} type="number" value={rate.maximum} onChange={(event) => patchRate("maximum", Number(event.target.value))} />
         </label>
       </div>
+
+      <h4>Ride options</h4>
+      <ul aria-label="Ride options">
+        {RIDE_OPTION_INFO.map((item) => (
+          <li key={item.id}>{item.label} · {zone.enabledOptions[item.id] ? "enabled" : "disabled"} · {zone.optionFee[item.id]} kr · {item.note}</li>
+        ))}
+      </ul>
+      <div className="field-grid">
+        {RIDE_OPTION_INFO.map((item) => (
+          <div key={item.id}>
+            <label className="check-row">
+              <input
+                aria-label={`${item.label} enabled`}
+                type="checkbox"
+                checked={zone.enabledOptions[item.id]}
+                disabled={!canEdit}
+                onChange={(event) => patchZone({ enabledOptions: { ...zone.enabledOptions, [item.id]: event.target.checked } })}
+              />
+              {item.label} enabled
+            </label>
+            <label>
+              {item.label} fee
+              <input
+                aria-label={`${item.label} fee`}
+                type="number"
+                min="0"
+                disabled={!canEdit}
+                value={zone.optionFee[item.id]}
+                onChange={(event) => patchZone({ optionFee: { ...zone.optionFee, [item.id]: Number(event.target.value) } })}
+              />
+            </label>
+          </div>
+        ))}
+      </div>
+
+      {validationError ? <p className="state-line">{validationError}</p> : null}
       <button
         data-command="admin.pricing.saveZone"
         className="primary-btn"
         type="button"
-        disabled={commands.phase === "submitting"}
-        onClick={() => {
-          const saved = {
-            ...book,
-            zones: book.zones.map((item) => (item.zoneId === zone.zoneId ? { ...item, version: item.version + 1 } : item)),
-          };
-          onChange(saved);
-          void commands.run("admin.pricing.saveZone", {
-            reason: "Safety review",
-            targetId: zone.zoneId,
-            before: `${zone.zoneName} v${zone.version}`,
-            after: `${zone.zoneName} v${zone.version + 1} ${info?.label} ${rate.perKm} kr/km`,
-            sliceKey: "prices",
-            value: saved,
-          });
-        }}
+        disabled={!canEdit || saving || Boolean(validationError)}
+        onClick={() => onSave(zone.zoneId)}
       >
         Save price set
       </button>
-      {commands.message ? <p className="state-line">{commands.message}</p> : null}
     </article>
   );
 }

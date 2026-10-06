@@ -25,6 +25,8 @@ export { editContent, phonePreview, publishContent, rollbackContent } from "../c
 export type { ContentBook } from "../content/book.ts";
 export { advanceConfigClock, approveConfig, configDiff, draftRevisionMatches, effectiveValue, emptyConfig, impactPreview, missingTranslations, normalizeConfig, publishConfig, removeOverride, rollbackConfig, REASON_GROUPS, setAppUpdate, setAppVersion, setEnvironment, setExpiry, setFeature, setMaxStops, setOverride, setReason, setSchedule, setSwitch, setZoneOverride, submitConfigApproval } from "../config/book.ts";
 export type { ConfigBook, EffectiveContext, FeatureKey, OverrideLevel, OverrideRule } from "../config/book.ts";
+export { activeScheduledBoost, defaultPricingBook, enabledCategoryIds, normalizePricingBook, pricingDiff, removeBoostSchedule, restorePricingVersion, saveBoostSchedule, savePriceZone, validateZonePrice } from "../pricing/book.ts";
+export type { BoostSchedule, PricingBook, PricingSnapshot } from "../pricing/book.ts";
 
 export function useRecords(name: string, scope?: string | null) {
   const api = useAdminApi();
