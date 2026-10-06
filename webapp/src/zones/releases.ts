@@ -169,7 +169,7 @@ function zone(input: Pick<ZoneShape, "id" | "code" | "name" | "kind" | "points">
     ...input,
     holes: input.holes ?? [],
     pickups: (input.pickups ?? []).map((pickup) => ({ ...pickup, photoUrl: pickup.photoUrl ?? "" })),
-    queuePolygon: input.queuePolygon ?? (input.points.length >= 3 ? [...input.points] : []),
+    queuePolygon: input.queuePolygon ?? (airport && input.points.length >= 3 ? [...input.points] : []),
     pickupArea: input.pickupArea ?? [],
   };
 }
@@ -660,6 +660,9 @@ function rectBounds(points: [number, number][]): RectBounds | null {
 export function splitZone(book: ZoneBook, zoneId: string, authorId: string): { book: ZoneBook; newId?: string; error?: string } {
   const source = book.draft.find((item) => item.id === zoneId);
   if (!source || source.kind === "pickup") return { book, error: "Select a polygon zone to split." };
+  if (source.queuePolygon.length > 0 || source.pickupArea.length > 0) {
+    return { book, error: "Clear or redraw queue and pickup subareas before splitting this zone." };
+  }
   const bounds = rectBounds(source.points);
   if (!bounds) return { book, error: "Split currently requires a rectangular zone. Use Edit points to make the boundary rectangular first." };
   const latSpan = bounds.north - bounds.south;
@@ -701,6 +704,9 @@ export function mergeZones(book: ZoneBook, targetId: string, sourceId: string, a
   const source = book.draft.find((item) => item.id === sourceId);
   if (!target || !source || target.kind === "pickup" || source.kind === "pickup") return { book, error: "Both merge targets must be polygon zones." };
   if (target.kind !== source.kind) return { book, error: "Merge requires zones of the same type." };
+  if (target.queuePolygon.length > 0 || target.pickupArea.length > 0 || source.queuePolygon.length > 0 || source.pickupArea.length > 0) {
+    return { book, error: "Clear or redraw queue and pickup subareas before merging these zones." };
+  }
   const a = rectBounds(target.points);
   const b = rectBounds(source.points);
   if (!a || !b) return { book, error: "Merge currently requires rectangular zones." };
