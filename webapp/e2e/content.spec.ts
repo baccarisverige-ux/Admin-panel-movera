@@ -1,22 +1,2 @@
-import { expect, test, type Page } from "@playwright/test";
-
-async function signIn(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Email").fill("nora@movera.se");
-  await page.getByLabel("Password").fill("movera");
-  await page.getByLabel("6-digit code").fill("123456");
-  await page.getByRole("button", { name: "Sign in" }).click();
-}
-
-async function confirm(page: Page) {
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
-}
-
-test("publishing one content slot leaves the others", async ({ page }) => {
-  await signIn(page);
-  await page.getByRole("link", { name: "Content", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "Content" })).toBeVisible();
-  await page.getByRole("button", { name: "Publish" }).click();
-  await confirm(page);
-  await expect(page.getByText("A second agent must publish.")).toBeVisible();
-});
+import {expect,test} from "@playwright/test";
+test("R15 content draft persists with second-agent publication gate",async({page})=>{await page.addInitScript(()=>{localStorage.setItem("movera-admin-session","nora");localStorage.setItem("movera-admin-activity",String(Date.now()));});await page.goto("/content");await page.getByLabel("Swedish content").fill("Hej");await page.getByLabel("English content").fill("Welcome");await page.getByRole("button",{name:"Save draft"}).click();await page.locator(".modal.open").getByRole("button",{name:"Confirm"}).click();await expect(page.getByText("driver-home: save recorded.")).toBeVisible();await expect(page.getByRole("button",{name:"Publish",exact:true})).toBeDisabled();await page.reload();await expect(page.getByLabel("English content")).toHaveValue("Welcome");await page.getByLabel("Content slot").selectOption("help");await expect(page.getByLabel("English content")).toHaveValue("");});
