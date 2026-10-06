@@ -157,7 +157,7 @@ function Authed() {
         <Route path="zones/:zoneId" element={<ZoneDetailPage />} />
         <Route path="pricing" element={<Screen id="pricing" />} />
         <Route path="support" element={<Screen id="support" />} />
-        <Route path="tickets/:id" element={<RecordPage label="Ticket" list="/support" />} />
+        <Route path="tickets/:id" element={<SupportPage />} />
         <Route path="chat" element={<Screen id="chat" />} />
         <Route path="incidents" element={<Screen id="incidents" />} />
         <Route path="incidents/:id" element={<RecordPage label="Incident" list="/incidents" />} />
