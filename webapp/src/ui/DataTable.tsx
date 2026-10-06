@@ -1,21 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { statusLabel } from "../domain/labels";
+import { statusLabel, statusPresentation } from "../domain/labels";
 import { toCsv } from "../reports/csv";
 import { StatusDot } from "./kit";
 import { CommandButton } from "./CommandButton";
-
-const STATUS_WORDS = /Active|Complete|Pending|CRITICAL|HIGH|Expired|Operational|In Progress/;
-
-export type StatusTone = "active" | "danger" | "warning" | "inactive";
-
-export function statusTone(value: string): StatusTone | null {
-  if (value === "Inactive") return "inactive";
-  if (!STATUS_WORDS.test(value)) return null;
-  if (/Active|Complete|Operational/.test(value)) return "active";
-  if (/CRITICAL|Expired/.test(value)) return "danger";
-  return "warning";
-}
 
 function textOf(cell: ReactNode): string {
   if (typeof cell === "string" || typeof cell === "number") return statusLabel(String(cell));
@@ -25,43 +13,74 @@ function textOf(cell: ReactNode): string {
 function renderCell(value: ReactNode): ReactNode {
   if (typeof value !== "string" && typeof value !== "number") return value;
   const raw = String(value);
-  const label = statusLabel(raw);
-  if (label !== raw || /Active|Complete|Pending|Expired|Approved|Rejected|On a trip/.test(label)) {
-    const tone = statusTone(raw);
-    const dot = tone === "active" ? "green" : tone === "danger" ? "red" : tone === "warning" ? "amber" : label === "On a trip" || label === "Active" || label === "Approved" ? "green" : "muted";
-    if (label !== raw || tone) return <StatusDot tone={dot}>{label}</StatusDot>;
-  }
-  return label;
+  const status = statusPresentation(raw);
+  if (!status) return statusLabel(raw);
+  return <StatusDot tone={status.tone}>{status.label}</StatusDot>;
 }
 
-type Row = { id: string; cells: ReactNode[]; text: string[] };
+type Row = {
+  id: string;
+  sourceIndex: number;
+  cells: ReactNode[];
+  text: string[];
+};
 
 type DataTableProps = {
   head: string[];
   rows: ReactNode[][];
+  rowIds?: string[];
   className?: string;
   state?: "ready" | "loading" | "error";
   onRetry?: () => void;
   onRow?: (index: number) => void;
 };
 
-export function DataTable({ head, rows, className, state = "ready", onRetry, onRow }: DataTableProps) {
+function stableRows(rows: ReactNode[][], rowIds?: string[]): Row[] {
+  const seen = new Map<string, number>();
+  return rows.map((cells, sourceIndex) => {
+    const text = cells.map((cell) => textOf(cell));
+    const explicit = rowIds?.[sourceIndex]?.trim();
+    const natural = text.filter(Boolean).join("\u001f");
+    const base = explicit || natural || `row-${sourceIndex}`;
+    const occurrence = seen.get(base) ?? 0;
+    seen.set(base, occurrence + 1);
+    return {
+      id: occurrence === 0 ? base : `${base}#${occurrence + 1}`,
+      sourceIndex,
+      cells,
+      text,
+    };
+  });
+}
+
+export function DataTable({ head, rows, rowIds, className, state = "ready", onRetry, onRow }: DataTableProps) {
   const [query, setQuery] = useState("");
   const [chips, setChips] = useState<string[]>([]);
   const [page, setPage] = useState(0);
-  const [menu, setMenu] = useState<number | null>(null);
+  const [menu, setMenu] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
+
   const data = useMemo<Row[]>(() => {
     const needles = [query.trim().toLowerCase(), ...chips.map((chip) => chip.toLowerCase())].filter(Boolean);
-    return rows
-      .map((cells, index) => ({ id: String(index), cells, text: cells.map((cell) => textOf(cell)) }))
+    return stableRows(rows, rowIds)
       .filter((row) => needles.every((needle) => row.text.some((cell) => cell.toLowerCase().includes(needle))));
-  }, [chips, query, rows]);
+  }, [chips, query, rowIds, rows]);
+
   const columns = useMemo<ColumnDef<Row>[]>(
     () => head.map((column, index) => ({ id: column, header: column, accessorFn: (row) => row.text[index] ?? "" })),
     [head],
   );
-  const table = useReactTable({ data, columns, state: { sorting }, onSortingChange: setSorting, getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel() });
+
+  const table = useReactTable({
+    data,
+    columns,
+    getRowId: (row) => row.id,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
   const sorted = table.getRowModel().rows;
   const pageCount = Math.max(1, Math.ceil(sorted.length / 25));
   const safePage = Math.min(page, pageCount - 1);
@@ -114,14 +133,14 @@ export function DataTable({ head, rows, className, state = "ready", onRetry, onR
           </thead>
           <tbody>
             {visible.map((row) => (
-              <tr key={row.original.id} onClick={() => onRow?.(Number(row.original.id))}>
+              <tr key={row.id} onClick={() => onRow?.(row.original.sourceIndex)}>
                 {row.original.cells.map((cell, index) => (
-                  <td key={`${row.original.id}-${index}`}>{renderCell(cell)}</td>
+                  <td key={`${row.id}-${index}`}>{renderCell(cell)}</td>
                 ))}
                 <td>
-                  <CommandButton command="admin.table.menu" className="link-action" type="button" onDone={() => setMenu(menu === Number(row.original.id) ? null : Number(row.original.id))}>Menu</CommandButton>
-                  {menu === Number(row.original.id) ? (
-                    <CommandButton command="admin.table.open" className="link-action" type="button" onDone={() => onRow?.(Number(row.original.id))}>Open</CommandButton>
+                  <CommandButton command="admin.table.menu" className="link-action" type="button" onDone={() => setMenu(menu === row.id ? null : row.id)}>Menu</CommandButton>
+                  {menu === row.id ? (
+                    <CommandButton command="admin.table.open" className="link-action" type="button" onDone={() => onRow?.(row.original.sourceIndex)}>Open</CommandButton>
                   ) : null}
                 </td>
               </tr>
