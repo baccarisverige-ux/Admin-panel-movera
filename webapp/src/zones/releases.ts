@@ -36,6 +36,7 @@ export type PickupPoint = {
   lat: number;
   lng: number;
   instructions: string;
+  photoUrl: string;
 };
 
 export type ZoneShape = {
@@ -45,13 +46,18 @@ export type ZoneShape = {
   kind: ZoneKind;
   parentId: string | null;
   notes: string;
+  color: string;
+  priority: number;
   points: [number, number][];
   holes: [number, number][][];
   archived: boolean;
   active: boolean;
   categories: string[];
+  options: string[];
+  paymentMethods: string[];
   cash: boolean;
   pinRequired: boolean;
+  pickupOnly: boolean;
   minAppVersion: string;
   suspendedUntil: string;
   suspendReason: string;
@@ -66,6 +72,8 @@ export type ZoneShape = {
   maxWaitMin: number;
   pickups: PickupPoint[];
   queueOn: boolean;
+  queuePolygon: [number, number][];
+  pickupArea: [number, number][];
   maxQueueMin: number;
   queueFeeOre: number;
   terminals: string;
@@ -89,14 +97,30 @@ export type ZoneIssue = { level: "error" | "warn"; zoneId: string; message: stri
 
 export type ActivityPoint = {
   id: string;
-  kind: "driver" | "trip" | "queue";
+  kind: "driver" | "trip" | "request" | "queue" | "demand_hour" | "demand_7d";
   name: string;
   lat: number;
   lng: number;
   online: boolean;
+  stale?: boolean;
+  weight?: number;
 };
 
 export const RIDE_CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet"];
+export const RIDE_OPTIONS = ["baby_seat", "child_seat", "booster_seat", "extra_bags", "pet"];
+export const ZONE_PAYMENT_METHODS = ["card", "swish", "klarna", "apple", "google", "paypal", "cash", "wallet"];
+
+const DEFAULT_PRIORITY: Record<ZoneKind, number> = {
+  service: 10,
+  operating: 20,
+  airport: 40,
+  boost: 60,
+  event: 70,
+  no_pickup: 100,
+  restricted: 90,
+  fleet: 50,
+  pickup: 110,
+};
 
 function rect(south: number, west: number, north: number, east: number): [number, number][] {
   return [
@@ -112,11 +136,16 @@ function zone(input: Pick<ZoneShape, "id" | "code" | "name" | "kind" | "points">
   return {
     parentId: input.kind === "service" ? null : "svc-stockholm",
     notes: "",
+    color: ZONE_COLOR[input.kind],
+    priority: DEFAULT_PRIORITY[input.kind],
     archived: false,
     active: true,
     categories: [...RIDE_CATEGORIES],
+    options: [...RIDE_OPTIONS],
+    paymentMethods: [...ZONE_PAYMENT_METHODS],
     cash: false,
     pinRequired: airport,
+    pickupOnly: false,
     minAppVersion: "1.0.0",
     suspendedUntil: "",
     suspendReason: "",
@@ -139,7 +168,9 @@ function zone(input: Pick<ZoneShape, "id" | "code" | "name" | "kind" | "points">
     until: "",
     ...input,
     holes: input.holes ?? [],
-    pickups: input.pickups ?? [],
+    pickups: (input.pickups ?? []).map((pickup) => ({ ...pickup, photoUrl: pickup.photoUrl ?? "" })),
+    queuePolygon: input.queuePolygon ?? (airport && input.points.length >= 3 ? [...input.points] : []),
+    pickupArea: input.pickupArea ?? [],
   };
 }
 
@@ -148,8 +179,7 @@ export function zoneStatus(zone: ZoneShape, book: ZoneBook): "Archived" | "In re
   if (book.status === "in_review") return "In review";
   const published = book.published.find((item) => item.id === zone.id);
   if (!published) return "Draft";
-  const sameShape = JSON.stringify(published.points) === JSON.stringify(zone.points) && JSON.stringify(published.holes) === JSON.stringify(zone.holes);
-  return sameShape && published.zoneFeeOre === zone.zoneFeeOre ? "Published" : "Draft";
+  return JSON.stringify(published) === JSON.stringify(zone) ? "Published" : "Draft";
 }
 
 export function zoneTypeLabel(kind: ZoneKind): string {
@@ -194,6 +224,42 @@ function cloneZones(zones: ZoneShape[]): ZoneShape[] {
 export function emptyBook(authorId = "nora"): ZoneBook {
   const seed = stockholmZones();
   return { authorId, status: "draft", draft: seed, published: cloneZones(seed), versions: [cloneZones(seed)] };
+}
+
+function normalizePickup(raw: Partial<PickupPoint>): PickupPoint {
+  return {
+    id: raw.id ?? `pin-${Math.random().toString(16).slice(2)}`,
+    name: raw.name ?? "Pickup",
+    lat: Number(raw.lat) || 0,
+    lng: Number(raw.lng) || 0,
+    instructions: raw.instructions ?? "",
+    photoUrl: raw.photoUrl ?? "",
+  };
+}
+
+function normalizeZone(raw: ZoneShape): ZoneShape {
+  return zone({
+    ...raw,
+    color: raw.color ?? ZONE_COLOR[raw.kind],
+    priority: Number.isFinite(raw.priority) ? raw.priority : DEFAULT_PRIORITY[raw.kind],
+    options: Array.isArray(raw.options) ? raw.options : [...RIDE_OPTIONS],
+    paymentMethods: Array.isArray(raw.paymentMethods) ? raw.paymentMethods : [...ZONE_PAYMENT_METHODS],
+    pickupOnly: raw.pickupOnly ?? false,
+    pickups: (raw.pickups ?? []).map((pickup) => normalizePickup(pickup)),
+    queuePolygon: raw.queuePolygon ?? (raw.kind === "airport" ? [...raw.points] : []),
+    pickupArea: raw.pickupArea ?? [],
+  });
+}
+
+export function normalizeZoneBook(raw: ZoneBook): ZoneBook {
+  const normalize = (zones: ZoneShape[]) => zones.map((item) => normalizeZone(item));
+  return {
+    ...raw,
+    status: raw.status === "in_review" ? "in_review" : "draft",
+    draft: normalize(raw.draft ?? []),
+    published: normalize(raw.published ?? []),
+    versions: (raw.versions ?? []).map((version) => normalize(version)),
+  };
 }
 
 export function updateDraft(book: ZoneBook, zoneId: string, points: [number, number][], authorId: string): ZoneBook {
@@ -287,6 +353,41 @@ export function zoneAreaKm(zone: ZoneShape): number {
   return area(shape) / 1_000_000;
 }
 
+function orientation(a: [number, number], b: [number, number], c: [number, number]): number {
+  const value = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1]);
+  if (Math.abs(value) < 1e-12) return 0;
+  return value > 0 ? 1 : -1;
+}
+
+function properSegmentCross(a: [number, number], b: [number, number], c: [number, number], d: [number, number]): boolean {
+  const o1 = orientation(a, b, c);
+  const o2 = orientation(a, b, d);
+  const o3 = orientation(c, d, a);
+  const o4 = orientation(c, d, b);
+  return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
+}
+
+function polygonEdges(points: [number, number][]): Array<[[number, number], [number, number]]> {
+  return points.map((pointA, index) => [pointA, points[(index + 1) % points.length] ?? pointA]);
+}
+
+function polygonsOverlapArea(
+  left: ZoneShape,
+  right: ZoneShape,
+  leftShape: NonNullable<ReturnType<typeof asPolygon>>,
+  rightShape: NonNullable<ReturnType<typeof asPolygon>>,
+): boolean {
+  if (!booleanIntersects(leftShape, rightShape)) return false;
+  if (left.points.some(([lat, lng]) => booleanWithin(point([lng, lat]), rightShape))) return true;
+  if (right.points.some(([lat, lng]) => booleanWithin(point([lng, lat]), leftShape))) return true;
+  for (const [a, b] of polygonEdges(left.points)) {
+    for (const [c, d] of polygonEdges(right.points)) {
+      if (properSegmentCross(a, b, c, d)) return true;
+    }
+  }
+  return false;
+}
+
 export function validateZones(zones: ZoneShape[]): ZoneIssue[] {
   const issues: ZoneIssue[] = [];
   const live = zones.filter((item) => !item.archived);
@@ -317,6 +418,23 @@ export function validateZones(zones: ZoneShape[]): ZoneIssue[] {
         issues.push({ level: "error", zoneId: item.id, message: `${item.name} has a hole outside the shape.` });
       }
     }
+    for (const [label, boundary] of [["queue polygon", item.queuePolygon], ["pickup area", item.pickupArea]] as const) {
+      if (boundary.length === 0) continue;
+      if (boundary.length < 3) {
+        issues.push({ level: "error", zoneId: item.id, message: `${item.name} ${label} needs at least 3 points.` });
+        continue;
+      }
+      const child = polygon([closedRing(boundary)]);
+      if (kinks(child).features.length > 0 || !booleanWithin(child, shape)) {
+        issues.push({ level: "error", zoneId: item.id, message: `${item.name} ${label} must stay inside the zone.` });
+      }
+    }
+    if (item.schedule === "weekly" && !item.hours.trim()) {
+      issues.push({ level: "error", zoneId: item.id, message: `${item.name} weekly schedule needs hours.` });
+    }
+    if (item.schedule === "range" && (!item.from.trim() || !item.until.trim())) {
+      issues.push({ level: "error", zoneId: item.id, message: `${item.name} date range needs from and until.` });
+    }
     const squareKm = zoneAreaKm(item);
     if (item.kind === "service" && squareKm > 500) {
       issues.push({ level: "warn", zoneId: item.id, message: `${item.name} is the service area.` });
@@ -340,7 +458,7 @@ export function validateZones(zones: ZoneShape[]): ZoneIssue[] {
       const b = asPolygon(right, false);
       if (!a || !b || left.points.length < 3 || right.points.length < 3) continue;
       if (kinks(a).features.length > 0 || kinks(b).features.length > 0) continue;
-      if (booleanIntersects(a, b)) {
+      if (polygonsOverlapArea(left, right, a, b)) {
         issues.push({ level: "error", zoneId: left.id, message: `${left.name} overlaps ${right.name}. Operating zones cannot overlap.` });
       }
     }
@@ -380,11 +498,18 @@ export function publishZones(book: ZoneBook, actorId: string): { book: ZoneBook;
   return { book: { ...book, authorId: actorId, status: "draft", published: snapshot, versions: [...book.versions, snapshot] } };
 }
 
-export function rollbackZones(book: ZoneBook): ZoneBook {
+export function rollbackZones(book: ZoneBook, actorId = book.authorId): ZoneBook {
   if (book.versions.length < 2) return book;
-  const versions = book.versions.slice(0, -1);
-  const published = versions[versions.length - 1] ?? [];
-  return { ...book, status: "draft", versions, published: cloneZones(published), draft: cloneZones(published) };
+  const previous = book.versions[book.versions.length - 2] ?? [];
+  const snapshot = cloneZones(previous);
+  return {
+    ...book,
+    authorId: actorId,
+    status: "draft",
+    published: snapshot,
+    draft: cloneZones(snapshot),
+    versions: [...book.versions, cloneZones(snapshot)],
+  };
 }
 
 export type ZoneImpact = {
@@ -397,21 +522,46 @@ export type ZoneImpact = {
 };
 
 export function activityPoints(): ActivityPoint[] {
-  return [
+  const points: ActivityPoint[] = [
     { id: "drv-1", kind: "driver", name: "Erik Lind", lat: 59.335, lng: 18.06, online: true },
-    { id: "drv-2", kind: "driver", name: "Sara Berg", lat: 59.31, lng: 18.06, online: true },
+    { id: "drv-2", kind: "driver", name: "Sara Berg", lat: 59.31, lng: 18.06, online: true, stale: true },
     { id: "drv-3", kind: "driver", name: "Noah Ek", lat: 59.34, lng: 18.1, online: true },
     { id: "drv-4", kind: "driver", name: "Maja Holm", lat: 59.332, lng: 18.02, online: false },
     { id: "drv-5", kind: "driver", name: "Lars Dahl", lat: 59.355, lng: 18.05, online: true },
     { id: "drv-6", kind: "driver", name: "Ingrid Sand", lat: 59.335, lng: 17.93, online: true },
     { id: "trip-1", kind: "trip", name: "T0001", lat: 59.336, lng: 18.064, online: true },
     { id: "trip-2", kind: "trip", name: "T0008", lat: 59.338, lng: 18.095, online: true },
-    { id: "trip-3", kind: "trip", name: "T0014", lat: 59.648, lng: 17.91, online: true },
+    { id: "trip-3", kind: "trip", name: "T0014", lat: 59.648, lng: 17.91, online: true, stale: true },
     { id: "res-1", kind: "trip", name: "B0003", lat: 59.348, lng: 18.04, online: true },
+    { id: "req-1", kind: "request", name: "Open request 1", lat: 59.337, lng: 18.08, online: true },
+    { id: "req-2", kind: "request", name: "Open request 2", lat: 59.316, lng: 18.07, online: true },
     { id: "q-1", kind: "queue", name: "Queue 1", lat: 59.64, lng: 17.9, online: true },
     { id: "q-2", kind: "queue", name: "Queue 2", lat: 59.655, lng: 17.93, online: true },
     { id: "q-3", kind: "queue", name: "Queue 3", lat: 59.358, lng: 17.85, online: true },
   ];
+  for (let index = 0; index < 18; index += 1) {
+    points.push({
+      id: `d1-${index}`,
+      kind: "demand_hour",
+      name: "Demand last hour",
+      lat: 59.31 + (index % 6) * 0.012,
+      lng: 18.02 + Math.floor(index / 6) * 0.03,
+      online: true,
+      weight: 1 + (index % 4),
+    });
+  }
+  for (let index = 0; index < 24; index += 1) {
+    points.push({
+      id: `d7-${index}`,
+      kind: "demand_7d",
+      name: "Demand 7 days",
+      lat: 59.29 + (index % 8) * 0.015,
+      lng: 17.98 + Math.floor(index / 8) * 0.045,
+      online: true,
+      weight: 1 + (index % 5),
+    });
+  }
+  return points;
 }
 
 function countInside(zones: ZoneShape[], kind: ActivityPoint["kind"]): number {
@@ -446,7 +596,7 @@ export function zonesToGeoJSON(zones: ZoneShape[]): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const item of zones) {
     if (item.archived) continue;
-    const color = ZONE_COLOR[item.kind];
+    const color = item.color || ZONE_COLOR[item.kind];
     if (item.kind === "pickup") {
       const [lat, lng] = item.points[0] ?? [59.33, 18.06];
       features.push({ type: "Feature", properties: { id: item.id, name: item.name, kind: item.kind, color }, geometry: { type: "Point", coordinates: [lng, lat] } });
@@ -491,6 +641,224 @@ export function geoJSONToZones(raw: string, book: ZoneBook, authorId: string): {
       target.holes = rings.slice(1).map((ring) => ring.slice(0, -1).map(([lng, lat]) => [lat ?? 0, lng ?? 0]));
     }
   }
+  return { book: { ...book, authorId, status: "draft", draft } };
+}
+
+
+type RectBounds = { south: number; west: number; north: number; east: number };
+
+function rectBounds(points: [number, number][]): RectBounds | null {
+  if (points.length !== 4) return null;
+  const lats = [...new Set(points.map(([lat]) => Number(lat.toFixed(8))))].sort((a, b) => a - b);
+  const lngs = [...new Set(points.map(([, lng]) => Number(lng.toFixed(8))))].sort((a, b) => a - b);
+  if (lats.length !== 2 || lngs.length !== 2) return null;
+  const combos = new Set(points.map(([lat, lng]) => `${Number(lat.toFixed(8))}:${Number(lng.toFixed(8))}`));
+  for (const lat of lats) for (const lng of lngs) if (!combos.has(`${lat}:${lng}`)) return null;
+  return { south: lats[0]!, north: lats[1]!, west: lngs[0]!, east: lngs[1]! };
+}
+
+export function splitZone(book: ZoneBook, zoneId: string, authorId: string): { book: ZoneBook; newId?: string; error?: string } {
+  const source = book.draft.find((item) => item.id === zoneId);
+  if (!source || source.kind === "pickup") return { book, error: "Select a polygon zone to split." };
+  if (source.queuePolygon.length > 0 || source.pickupArea.length > 0) {
+    return { book, error: "Clear or redraw queue and pickup subareas before splitting this zone." };
+  }
+  const bounds = rectBounds(source.points);
+  if (!bounds) return { book, error: "Split currently requires a rectangular zone. Use Edit points to make the boundary rectangular first." };
+  const latSpan = bounds.north - bounds.south;
+  const lngSpan = bounds.east - bounds.west;
+  const splitVertical = lngSpan >= latSpan;
+  const newId = `${source.id}-split-${book.draft.filter((item) => item.id.startsWith(`${source.id}-split-`)).length + 1}`;
+  const first = splitVertical
+    ? rect(bounds.south, bounds.west, bounds.north, (bounds.west + bounds.east) / 2)
+    : rect(bounds.south, bounds.west, (bounds.south + bounds.north) / 2, bounds.east);
+  const second = splitVertical
+    ? rect(bounds.south, (bounds.west + bounds.east) / 2, bounds.north, bounds.east)
+    : rect((bounds.south + bounds.north) / 2, bounds.west, bounds.north, bounds.east);
+  const sibling = normalizeZone({
+    ...source,
+    id: newId,
+    code: `${source.code}-B`,
+    name: `${source.name} B`,
+    points: second,
+    holes: [],
+    pickups: [],
+  });
+  return {
+    newId,
+    book: {
+      ...book,
+      authorId,
+      status: "draft",
+      draft: [
+        ...book.draft.map((item) => item.id === source.id ? { ...item, name: `${source.name} A`, code: `${source.code}-A`, points: first, holes: [] } : item),
+        sibling,
+      ],
+    },
+  };
+}
+
+export function mergeZones(book: ZoneBook, targetId: string, sourceId: string, authorId: string): { book: ZoneBook; error?: string } {
+  if (targetId === sourceId) return { book, error: "Choose two different zones." };
+  const target = book.draft.find((item) => item.id === targetId);
+  const source = book.draft.find((item) => item.id === sourceId);
+  if (!target || !source || target.kind === "pickup" || source.kind === "pickup") return { book, error: "Both merge targets must be polygon zones." };
+  if (target.kind !== source.kind) return { book, error: "Merge requires zones of the same type." };
+  if (target.queuePolygon.length > 0 || target.pickupArea.length > 0 || source.queuePolygon.length > 0 || source.pickupArea.length > 0) {
+    return { book, error: "Clear or redraw queue and pickup subareas before merging these zones." };
+  }
+  const a = rectBounds(target.points);
+  const b = rectBounds(source.points);
+  if (!a || !b) return { book, error: "Merge currently requires rectangular zones." };
+  const combined = {
+    south: Math.min(a.south, b.south),
+    west: Math.min(a.west, b.west),
+    north: Math.max(a.north, b.north),
+    east: Math.max(a.east, b.east),
+  };
+  const areaA = (a.north - a.south) * (a.east - a.west);
+  const areaB = (b.north - b.south) * (b.east - b.west);
+  const overlap = Math.max(0, Math.min(a.north, b.north) - Math.max(a.south, b.south))
+    * Math.max(0, Math.min(a.east, b.east) - Math.max(a.west, b.west));
+  const unionArea = areaA + areaB - overlap;
+  const combinedArea = (combined.north - combined.south) * (combined.east - combined.west);
+  if (Math.abs(unionArea - combinedArea) > 1e-8) {
+    return { book, error: "These rectangles do not form one rectangle. Edit the boundaries before merging." };
+  }
+  return {
+    book: {
+      ...book,
+      authorId,
+      status: "draft",
+      draft: book.draft.map((item) => {
+        if (item.id === target.id) {
+          return {
+            ...item,
+            points: rect(combined.south, combined.west, combined.north, combined.east),
+            holes: [],
+            priority: Math.max(target.priority, source.priority),
+            notes: [target.notes, `Merged from ${source.name} (${source.id})`].filter(Boolean).join(" · "),
+          };
+        }
+        if (item.id === source.id) return { ...item, archived: true, active: false };
+        return item;
+      }),
+    },
+  };
+}
+
+function rotatePoints(points: [number, number][], degrees: number): [number, number][] {
+  if (points.length === 0) return points;
+  const centerLat = points.reduce((sum, [lat]) => sum + lat, 0) / points.length;
+  const centerLng = points.reduce((sum, [, lng]) => sum + lng, 0) / points.length;
+  const radians = degrees * Math.PI / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return points.map(([lat, lng]) => {
+    const y = lat - centerLat;
+    const x = (lng - centerLng) * Math.cos(centerLat * Math.PI / 180);
+    const rx = x * cos - y * sin;
+    const ry = x * sin + y * cos;
+    return [
+      Number((centerLat + ry).toFixed(6)),
+      Number((centerLng + rx / Math.cos(centerLat * Math.PI / 180)).toFixed(6)),
+    ];
+  });
+}
+
+export function rotateZone(book: ZoneBook, zoneId: string, degrees: number, authorId: string): ZoneBook {
+  const target = book.draft.find((item) => item.id === zoneId);
+  if (!target || target.kind === "pickup") return book;
+  return patchZone(book, zoneId, {
+    points: rotatePoints(target.points, degrees),
+    holes: target.holes.map((hole) => rotatePoints(hole, degrees)),
+    queuePolygon: rotatePoints(target.queuePolygon, degrees),
+    pickupArea: rotatePoints(target.pickupArea, degrees),
+  }, authorId);
+}
+
+export function priorityZones(zones: ZoneShape[]): ZoneShape[] {
+  return zones
+    .filter((item) => !item.archived && item.kind !== "service" && item.kind !== "operating" && item.kind !== "pickup")
+    .sort((left, right) => right.priority - left.priority || left.name.localeCompare(right.name));
+}
+
+export function reorderZonePriorities(book: ZoneBook, orderedIds: string[], authorId: string): ZoneBook {
+  const priorities = new Map(orderedIds.map((id, index) => [id, 1000 - index * 10]));
+  return {
+    ...book,
+    authorId,
+    status: "draft",
+    draft: book.draft.map((item) => priorities.has(item.id) ? { ...item, priority: priorities.get(item.id)! } : item),
+  };
+}
+
+export function effectiveZonesAt(zones: ZoneShape[], lat: number, lng: number): ZoneShape[] {
+  return zonesAt(zones, lat, lng).sort((left, right) => right.priority - left.priority);
+}
+
+export function zoneRuleSummary(zone: ZoneShape): string {
+  const fees = [zone.zoneFeeOre ? `zone fee ${(zone.zoneFeeOre / 100).toFixed(0)} kr` : "", zone.airportFeeOre ? `airport fee ${(zone.airportFeeOre / 100).toFixed(0)} kr` : ""].filter(Boolean);
+  return [
+    `price ${zone.priceSet}`,
+    fees.join(", "),
+    zone.boostRule ? `boost ${zone.boostRule}` : "",
+    zone.pickupOnly ? "pickup points only" : "",
+    zone.cash ? "cash allowed" : "cash off",
+    `priority ${zone.priority}`,
+  ].filter(Boolean).join(" · ");
+}
+
+function xmlText(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_match, inner: string) => inner)
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .trim();
+}
+
+function kmlCoordinates(raw: string): [number, number][] {
+  return raw
+    .trim()
+    .split(/\s+/)
+    .map((entry) => entry.split(",").map(Number))
+    .filter((parts) => Number.isFinite(parts[0]) && Number.isFinite(parts[1]))
+    .map(([lng, lat]) => [Number(lat.toFixed(6)), Number(lng.toFixed(6))] as [number, number]);
+}
+
+export function kmlToZones(raw: string, book: ZoneBook, authorId: string): { book: ZoneBook; error?: string } {
+  if (!/<kml[\s>]/i.test(raw) && !/<Placemark[\s>]/i.test(raw)) return { book, error: "That file is not KML." };
+  const placemarks = [...raw.matchAll(/<Placemark\b[^>]*>([\s\S]*?)<\/Placemark>/gi)];
+  if (placemarks.length === 0) return { book, error: "KML contains no placemarks." };
+  const draft = cloneZones(book.draft);
+  let changed = 0;
+  for (const match of placemarks) {
+    const body = match[1] ?? "";
+    const name = xmlText(/<name\b[^>]*>([\s\S]*?)<\/name>/i.exec(body)?.[1] ?? "");
+    const id = /<Data\s+name=["']id["'][^>]*>[\s\S]*?<value>([\s\S]*?)<\/value>/i.exec(body)?.[1]?.trim() ?? "";
+    const target = draft.find((item) => item.id === id || item.name === name);
+    if (!target) continue;
+    const coords = /<coordinates\b[^>]*>([\s\S]*?)<\/coordinates>/i.exec(body)?.[1];
+    if (!coords) continue;
+    const points = kmlCoordinates(coords);
+    if (/<Point\b/i.test(body)) {
+      if (points[0]) {
+        target.points = [points[0]];
+        changed += 1;
+      }
+      continue;
+    }
+    if (points.length >= 4) {
+      const first = points[0]!;
+      const last = points[points.length - 1]!;
+      target.points = first[0] === last[0] && first[1] === last[1] ? points.slice(0, -1) : points;
+      target.holes = [];
+      changed += 1;
+    }
+  }
+  if (changed === 0) return { book, error: "KML placemarks did not match an existing zone id or name." };
   return { book: { ...book, authorId, status: "draft", draft } };
 }
 

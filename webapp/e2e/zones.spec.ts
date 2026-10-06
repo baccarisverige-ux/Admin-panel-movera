@@ -53,14 +53,19 @@ test("zones map lists nine types and terra draw", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 3, name: "Stockholm zones" })).toBeVisible();
   await expect(page.getByText("Terra Draw")).toBeVisible();
   await expect(page.getByRole("button", { name: "Draw circle" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Freehand" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit points" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Cut hole" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export GeoJSON" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Import KML" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Search address" })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "Online drivers" })).toBeChecked();
   await expect(page.getByRole("checkbox", { name: "Trips" })).toBeChecked();
-  await expect(page.getByRole("checkbox", { name: "Airport queue" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Airport queues" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Open requests" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Pickup points" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Demand heatmap · last hour" })).not.toBeChecked();
   await expect(page.locator("[data-impact='zones']")).toContainText("Online drivers inside");
   await expect(page.getByRole("list", { name: "Versions" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
@@ -131,14 +136,17 @@ test("A05 draw Östermalm, cut a hole, add Arlanda pickups, review, publish, rel
   await page.getByLabel("Pickup latitude").fill("59.651");
   await page.getByLabel("Pickup longitude").fill("17.930");
   await page.getByLabel("Pickup instructions").fill("Door 2");
+  await page.getByLabel("Pickup photo URL").fill("https://example.invalid/t2.jpg");
   await page.getByRole("button", { name: "Add pickup" }).click();
   await expect(page.getByText("Terminal 2 door")).toBeVisible();
   await page.getByLabel("Pickup name").fill("Terminal 5 door");
   await page.getByLabel("Pickup latitude").fill("59.649");
   await page.getByLabel("Pickup longitude").fill("17.922");
   await page.getByLabel("Pickup instructions").fill("Door 4");
+  await page.getByLabel("Pickup photo URL").fill("https://example.invalid/t5.jpg");
   await page.getByRole("button", { name: "Add pickup" }).click();
   await expect(page.getByText("Terminal 5 door")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Only these pickup points" }).check();
 
   await page.getByRole("link", { name: "Zones", exact: true }).click();
   await page.getByRole("button", { name: "Send for review" }).click();
@@ -160,7 +168,7 @@ test("A05 draw Östermalm, cut a hole, add Arlanda pickups, review, publish, rel
   await page.getByRole("button", { name: "Roll back" }).click();
   await confirm(page);
   await expect(page.getByText("Rolled back to the previous published zones.")).toBeVisible();
-  await expect(page.getByText("Versions: 1")).toBeVisible();
+  await expect(page.getByText("Versions: 3")).toBeVisible();
   await expect(page.locator("[data-holes='0']")).toBeVisible();
   await expect(page.locator("[data-pickups='0']")).toBeVisible();
   expect(errors, errors.join("\n")).toEqual([]);

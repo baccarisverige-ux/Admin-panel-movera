@@ -7,20 +7,36 @@ import {
   createZone,
   emptyBook,
   geoJSONToZones,
+  kmlToZones,
+  mergeZones,
+  normalizeZoneBook,
   patchZone,
   publishZones,
+  reorderZonePriorities,
   restoreZone,
   rollbackZones,
+  rotateZone,
   setOuter,
+  splitZone,
   submitReview,
   type PickupPoint,
   type ZoneBook,
   type ZoneShape,
 } from "./releases";
 
-export type DrawTool = "render" | "polygon" | "rectangle" | "circle" | "point" | "select" | "hole";
+export type DrawTool = "render" | "polygon" | "rectangle" | "circle" | "freehand" | "point" | "select" | "hole";
 
-export type ZoneLayers = { drivers: boolean; trips: boolean; queue: boolean };
+export type ZoneLayers = {
+  drivers: boolean;
+  trips: boolean;
+  requests: boolean;
+  demandHour: boolean;
+  demand7d: boolean;
+  pickups: boolean;
+  queue: boolean;
+  boosts: boolean;
+  events: boolean;
+};
 
 export type ZoneFocus = { lat: number; lng: number; nonce: number };
 
@@ -45,8 +61,7 @@ function loadBook(): ZoneBook {
   try {
     const parsed = JSON.parse(raw) as ZoneBook;
     if (!parsed?.draft?.length || !parsed.draft[0]?.code || !parsed.published || !Array.isArray(parsed.versions)) return emptyBook();
-    if (parsed.status !== "draft" && parsed.status !== "in_review") return { ...parsed, status: "draft" };
-    return parsed;
+    return normalizeZoneBook(parsed);
   } catch {
     return emptyBook();
   }
@@ -60,7 +75,17 @@ let state: ZoneUi = {
   notice: "Pick a zone, draw with Terra Draw, then send it for review. A second agent publishes.",
   focus: null,
   selectionNonce: 0,
-  layers: { drivers: true, trips: true, queue: true },
+  layers: {
+    drivers: true,
+    trips: true,
+    requests: true,
+    demandHour: false,
+    demand7d: false,
+    pickups: true,
+    queue: true,
+    boosts: true,
+    events: true,
+  },
   past: [],
   future: [],
 };
@@ -106,6 +131,10 @@ export const zoneStore = {
   setTool(tool: DrawTool) {
     coalesce = false;
     update((current) => ({ ...current, tool }));
+  },
+  cancelTool() {
+    coalesce = false;
+    update((current) => ({ ...current, tool: "render", notice: "Drawing cancelled." }));
   },
   toggleLayer(layer: keyof ZoneLayers) {
     update((current) => ({ ...current, layers: { ...current.layers, [layer]: !current.layers[layer] } }));
@@ -183,7 +212,7 @@ export const zoneStore = {
       remember(setOuter(state.book, zoneId, [point], authorId, false), `Moved ${zone.name}.`);
       return;
     }
-    const pickup: PickupPoint = { id: `pin-${Date.now()}`, name: "Map pin", lat: point[0], lng: point[1], instructions: "" };
+    const pickup: PickupPoint = { id: `pin-${Date.now()}`, name: "Map pin", lat: point[0], lng: point[1], instructions: "", photoUrl: "" };
     remember(addPickup(state.book, zoneId, pickup, authorId), `Pickup added in ${zone.name}.`);
   },
   review(actorId: string) {
@@ -196,8 +225,15 @@ export const zoneStore = {
     if (result.error) update((current) => ({ ...current, notice: result.error ?? "Publish blocked." }));
     else update((current) => ({ ...current, book: result.book, notice: `Published version ${result.book.versions.length}.` }));
   },
-  rollback() {
-    update((current) => ({ ...current, book: rollbackZones(current.book), notice: "Rolled back to the previous published zones." }));
+  rollback(actorId?: string) {
+    update((current) => {
+      const next = rollbackZones(current.book, actorId ?? current.book.authorId);
+      return {
+        ...current,
+        book: next,
+        notice: next === current.book ? "No previous published zones to restore." : "Rolled back to the previous published zones.",
+      };
+    });
   },
   create(authorId: string) {
     const result = createZone(state.book, authorId);
@@ -235,5 +271,38 @@ export const zoneStore = {
     const result = geoJSONToZones(raw, state.book, authorId);
     if (result.error) update((current) => ({ ...current, notice: result.error ?? "Import failed." }));
     else remember(result.book, "Imported GeoJSON into matching zones.");
+  },
+  importKml(raw: string, authorId: string) {
+    const result = kmlToZones(raw, state.book, authorId);
+    if (result.error) update((current) => ({ ...current, notice: result.error ?? "KML import failed." }));
+    else remember(result.book, "Imported KML into matching zones.");
+  },
+  rotate(zoneId: string, degrees: number, authorId: string) {
+    const before = state.book;
+    const next = rotateZone(before, zoneId, degrees, authorId);
+    if (next === before) {
+      update((current) => ({ ...current, notice: "Select a polygon zone to rotate." }));
+      return;
+    }
+    remember(next, `Rotated selected zone ${degrees}°.`);
+  },
+  split(zoneId: string, authorId: string) {
+    const result = splitZone(state.book, zoneId, authorId);
+    if (result.error) {
+      update((current) => ({ ...current, notice: result.error ?? "Split failed." }));
+      return;
+    }
+    remember(result.book, "Split the selected rectangular zone.", result.newId ? { selectedId: result.newId, selectionNonce: state.selectionNonce + 1 } : undefined);
+  },
+  merge(targetId: string, sourceId: string, authorId: string) {
+    const result = mergeZones(state.book, targetId, sourceId, authorId);
+    if (result.error) {
+      update((current) => ({ ...current, notice: result.error ?? "Merge failed." }));
+      return;
+    }
+    remember(result.book, `Merged ${sourceId} into ${targetId}; the source id was archived.`);
+  },
+  reorderPriority(orderedIds: string[], authorId: string) {
+    remember(reorderZonePriorities(state.book, orderedIds, authorId), "Updated overlap priority.");
   },
 };
