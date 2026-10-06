@@ -38,6 +38,7 @@ import { SystemPage } from "./pages/SystemPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TripsPage } from "./pages/TripsPage";
 import { TripPage } from "./pages/TripPage";
+import { VehicleDetailPage } from "./pages/VehicleDetailPage";
 import { ZoneDetailPage } from "./pages/ZoneDetailPage";
 import { ZonesPage } from "./pages/ZonesPage";
 
@@ -146,7 +147,7 @@ function Authed() {
         <Route path="riders" element={<Screen id="riders" />} />
         <Route path="riders/:riderId" element={<RiderDetailPage />} />
         <Route path="vehicles" element={<Screen id="vehicles" />} />
-        <Route path="vehicles/:id" element={<RecordPage label="Vehicle" list="/vehicles" />} />
+        <Route path="vehicles/:id" element={<VehicleDetailPage />} />
         <Route path="payments" element={<Screen id="payments" />} />
         <Route path="payments/:id" element={<PaymentPage />} />
         <Route path="payouts" element={<Screen id="payouts" />} />
