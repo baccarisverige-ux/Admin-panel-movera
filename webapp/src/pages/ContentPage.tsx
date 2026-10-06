@@ -1,70 +1,9 @@
 import { useState } from "react";
+import { STUDIO_SLOTS, emptyStudio, studioSlot, changeStudio, useSlice, type StudioBook, type StudioText } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
-import { editContent, phonePreview, publishContent, rollbackContent, useRecords, type ContentBook } from "../api/hooks";
-import { CONTENT_SLOTS, emptySlot, type SlotId } from "../content/slots";
+import { can } from "../auth/permissions";
 import { CommandButton } from "../ui/CommandButton";
-
-export function ContentPage() {
-  const { agent } = useSession();
-  const [slot, setSlot] = useState<SlotId>("home");
-  const [books, setBooks] = useState<Record<SlotId, ContentBook>>(() => ({
-    home: emptySlot("home"),
-    help: emptySlot("help"),
-    legal: emptySlot("legal"),
-  }));
-  const [notice, setNotice] = useState("Each text publishes on its own. A second agent is required.");
-  const book = books[slot];
-  const banners = useRecords("banners", null);
-
-  function save(next: ContentBook) {
-    setBooks({ ...books, [slot]: next });
-  }
-
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h2>Content</h2>
-          <p>Home, help and legal are separate. {banners.data?.length ?? "…"} rider-home banners. Publishing one does not change the others.</p>
-        </div>
-      </div>
-      <p className="state-line">{notice}</p>
-      <div className="actions">
-        {CONTENT_SLOTS.map((id) => (
-          <CommandButton command="admin.content.slot" key={id} className="secondary-btn" type="button" onDone={() => setSlot(id)}>
-            {id}
-          </CommandButton>
-        ))}
-      </div>
-      <article className="panel">
-        <h3>{book.draft.title}</h3>
-        <label>
-          Text
-          <textarea value={book.draft.body} onChange={(event) => agent && save(editContent(book, event.target.value, agent.id))} />
-        </label>
-        <pre>{phonePreview(book.published)}</pre>
-        <div className="actions">
-          <CommandButton command="admin.content.publish" className="primary-btn"
-            type="button" onDone={() => {
-              if (!agent) return;
-              const result = publishContent(book, agent.id);
-              if (result.error) setNotice(result.error);
-              else {
-                save(result.book);
-                setNotice(`${slot} published. The other texts are unchanged.`);
-              }
-            }}>
-            Publish
-          </CommandButton>
-          <CommandButton command="admin.content.rollback" className="secondary-btn"
-            type="button" onDone={() => {
-              save(rollbackContent(book));
-              setNotice(`${slot} rolled back.`);
-            }}>
-            Roll back
-          </CommandButton>
-        </div>
-      </article>
-    </>
-  );
+export function ContentPage(){const {agent}=useSession();const store=useSlice<StudioBook>("studioOps",emptyStudio());const [id,setId]=useState<string>("driver-home");const [draft,setDraft]=useState<StudioText|null>(null);const [notice,setNotice]=useState("");const slot=studioSlot(store.value,id);const text=draft??slot.draft;const editable=Boolean(agent&&can(agent.role,"settings.edit"));function patch(v:Partial<StudioText>){setDraft({...text,...v});}
+return <><div className="page-heading"><div><h2>Content</h2><p>Bilingual content studio. A second agent must publish. Originals and every publication remain in history. Simulation only.</p></div></div><p role="status">{notice}</p><label>Content slot<select value={id} onChange={e=>{setId(e.target.value);setDraft(null);setNotice("");}}>{STUDIO_SLOTS.map(x=><option key={x}>{x}</option>)}</select></label><article className="panel"><h3>{id} · published version {slot.history.at(-1)?.version??"none"}</h3><fieldset disabled={!editable||store.loading}><div className="field-grid"><label>Title<input value={text.title} onChange={e=>patch({title:e.target.value})}/></label><label>Swedish content<textarea value={text.sv} onChange={e=>patch({sv:e.target.value})}/></label><label>English content<textarea value={text.en} onChange={e=>patch({en:e.target.value})}/></label><label>Image URL<input value={text.image} onChange={e=>patch({image:e.target.value})}/></label><label>Content expiry<input type="datetime-local" value={text.expiresAt} onChange={e=>patch({expiresAt:e.target.value})}/></label>{id==="app-versions"?<><label>Minimum app version<input value={text.minVersion} onChange={e=>patch({minVersion:e.target.value})}/></label><label>Recommended app version<input value={text.recommendedVersion} onChange={e=>patch({recommendedVersion:e.target.value})}/></label><label><input type="checkbox" checked={text.reaccept} onChange={e=>patch({reaccept:e.target.checked})}/>Require re-acceptance</label></>:null}</div></fieldset>
+<h3>Phone preview</h3><p>{text.title}</p><p>{text.sv}</p><p>{text.en}</p><p>Published: {slot.published?.en??"No publication"}</p><div className="actions">{(["save","publish","rollback"] as const).map(action=>{const result=changeStudio(store.value,id,text,action,agent?.id??"");return <CommandButton key={action} command={`admin.studio.${action}`} targetId={id} sliceKey="studioOps" value={result.book} expectedSliceRev={store.value.draftRev} confirmTarget={false} disabled={store.loading||Boolean(result.error)||Boolean(draft&&action!=="save")} title={result.error} onDone={()=>{setDraft(null);setNotice(`${id}: ${action} recorded.`);}}>{action==="save"?"Save draft":action==="publish"?"Publish":"Roll back"}</CommandButton>;})}</div><p role="alert">{changeStudio(store.value,id,text,"publish",agent?.id??"").error}</p><ol aria-label="Content history">{slot.history.map(h=><li key={h.version}>v{h.version} · {h.action} · {h.actor} · {h.at} · {h.text.en}</li>)}</ol></article></>;
 }

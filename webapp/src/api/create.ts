@@ -1,3 +1,4 @@
+import { emptyStudio, changeStudio, studioSlot, type StudioBook } from "../content/studio.ts";
 import { emptyCampaigns, changeCampaign, type CampaignBook } from "../messages/ops.ts";
 import { emptySupport, supportChange, ticketOps, type SupportBook } from "../support/ops.ts";
 import { AGENTS, canUseZone } from "../auth/permissions.ts";
@@ -342,6 +343,17 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         const result = changeCampaign(book,campaign!,action,raw.actorId,campaign!.app === "rider" ? db.riders : db.drivers);
         if (result.error) reject(422,result.error);
         raw = { ...raw, sliceKey: "campaignOps", value: result.book };
+      }
+
+      if (raw.action.startsWith("admin.studio.")) {
+        if (actorScope.zones !== "all") reject(403,"Global content requires all-zone scope.");
+        const book = (db.slices.studioOps ?? emptyStudio()) as StudioBook;
+        const proposed = raw.value as StudioBook | undefined;
+        const action = raw.action.split(".").at(-1) as "save" | "publish" | "rollback";
+        const draft = proposed?.slots[raw.targetId]?.draft ?? studioSlot(book,raw.targetId).draft;
+        const result = changeStudio(book,raw.targetId,draft,action,raw.actorId);
+        if (result.error) reject(422,result.error);
+        raw = { ...raw, sliceKey: "studioOps", value: result.book };
       }
 
       const injectedStatus = faultStatus(fault);

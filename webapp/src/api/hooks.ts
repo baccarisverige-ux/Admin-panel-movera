@@ -279,3 +279,6 @@ export type { SupportBook, TicketOps } from "../support/ops.ts";
 
 export { emptyCampaigns, newCampaign, validateCampaign, campaignAudience, changeCampaign } from "../messages/ops.ts";
 export type { Campaign, CampaignBook } from "../messages/ops.ts";
+
+export { STUDIO_SLOTS, emptyStudio, studioSlot, changeStudio } from "../content/studio.ts";
+export type { StudioBook, StudioText } from "../content/studio.ts";
