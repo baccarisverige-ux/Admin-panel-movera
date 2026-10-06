@@ -20,6 +20,13 @@ export type DemoRecord = {
   driverId?: string | null;
   fareOre?: number;
   kind?: string;
+  fleetId?: string | null;
+  year?: number;
+  seats?: number;
+  fuel?: "petrol" | "diesel" | "electric" | "hybrid";
+  category?: "economy" | "comfort" | "premium" | "priority" | "xl" | "electric" | "pet";
+  make?: string;
+  model?: string;
 };
 
 export type AuditRow = {
@@ -128,16 +135,29 @@ export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
     zoneId: zoneId(index),
     status: STATUSES[index % STATUSES.length],
     kind: DOC_STATES[index % DOC_STATES.length],
+    fleetId: index % 5 === 0 ? `F${(index % 3) + 1}` : null,
   }));
-  const vehicles = Array.from({ length: 45 }, (_, index) => ({
-    id: `V${String(index + 1).padStart(4, "0")}`,
-    name: drivers[index % drivers.length].name,
-    phone: "",
-    zoneId: zoneId(index),
-    status: index % 7 === 0 ? "ineligible" : "eligible",
-    plate: index === 0 ? PLATE : `MVR ${String(100 + index)}`,
-    driverId: drivers[index % drivers.length].id,
-  }));
+  const vehicleCategories = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet"] as const;
+  const vehicles = Array.from({ length: 45 }, (_, index) => {
+    const category = vehicleCategories[index % vehicleCategories.length];
+    const fuel = category === "electric" ? "electric" as const : index % 3 === 0 ? "hybrid" as const : "petrol" as const;
+    return {
+      id: `V${String(index + 1).padStart(4, "0")}`,
+      name: drivers[index % drivers.length].name,
+      phone: "",
+      zoneId: zoneId(index),
+      status: index % 7 === 0 ? "ineligible" : "eligible",
+      plate: index === 0 ? PLATE : `MVR ${String(100 + index)}`,
+      driverId: drivers[index % drivers.length].id,
+      fleetId: drivers[index % drivers.length].fleetId ?? null,
+      year: index % 11 === 0 ? 2013 : 2018 + (index % 7),
+      seats: category === "xl" ? 6 : 4,
+      fuel,
+      category,
+      make: index % 2 === 0 ? "Volvo" : "Mercedes-Benz",
+      model: index % 2 === 0 ? "XC40" : "E-Class",
+    };
+  });
   const riders = Array.from({ length: 250 }, (_, index) => ({
     id: `R${String(index + 1).padStart(4, "0")}`,
     name: person(index + 3),
