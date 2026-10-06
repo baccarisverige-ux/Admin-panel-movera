@@ -23,6 +23,21 @@ function asItems(tabs: TabsProps["tabs"]): TabItem[] {
 
 export function Tabs({ tabs, activeId, onChange }: TabsProps) {
   const items = asItems(tabs);
+
+  function selectTab(id: string) {
+    // Make the selected panel visible immediately. React then reconciles the
+    // controlled activeId from the parent. This avoids a transient hidden
+    // panel when a parent also updates URL/query state on the same click.
+    for (const item of items) {
+      const panel = document.getElementById(`tabpanel-${item.id}`);
+      if (!panel) continue;
+      const active = item.id === id;
+      panel.hidden = !active;
+      panel.classList.toggle("active", active);
+    }
+    onChange(id);
+  }
+
   return (
     <div className="tabs">
       {items.map((tab) => (
@@ -34,7 +49,7 @@ export function Tabs({ tabs, activeId, onChange }: TabsProps) {
           aria-controls={`tabpanel-${tab.id}`}
           className={tab.id === activeId ? "active" : undefined}
           data-tab={tab.id}
-          onClick={() => onChange(tab.id)}
+          onClick={() => selectTab(tab.id)}
         >
           {tab.label}
         </button>
