@@ -49,6 +49,7 @@ export type ReservationOps = {
 export type ReservationBook = {
   draftRev: number;
   currentPolicy: ReservationPolicy;
+  policies: Record<string, ReservationPolicy>;
   reservations: Record<string, ReservationOps>;
 };
 
@@ -63,10 +64,23 @@ export const DEFAULT_RESERVATION_POLICY: ReservationPolicy = {
   freeCancelAfterAcceptMinutes: 2,
 };
 
+export const LEGACY_RESERVATION_POLICY: ReservationPolicy = {
+  version: "res-1",
+  bookingHorizonDays: 5,
+  assignmentLeadMinutes: 45,
+  giveUpMinutes: 5,
+  includedWaitingMinutes: 5,
+  freeCancelAfterAcceptMinutes: 0,
+};
+
 export function emptyReservationBook(): ReservationBook {
   return {
     draftRev: 1,
     currentPolicy: { ...DEFAULT_RESERVATION_POLICY },
+    policies: {
+      [LEGACY_RESERVATION_POLICY.version]: { ...LEGACY_RESERVATION_POLICY },
+      [DEFAULT_RESERVATION_POLICY.version]: { ...DEFAULT_RESERVATION_POLICY },
+    },
     reservations: {},
   };
 }
@@ -74,9 +88,17 @@ export function emptyReservationBook(): ReservationBook {
 export function normalizeReservationBook(value: unknown): ReservationBook {
   if (!value || typeof value !== "object") return emptyReservationBook();
   const raw = value as Partial<ReservationBook>;
+  const currentPolicy = raw.currentPolicy ? { ...DEFAULT_RESERVATION_POLICY, ...raw.currentPolicy } : { ...DEFAULT_RESERVATION_POLICY };
   return {
     draftRev: typeof raw.draftRev === "number" && raw.draftRev > 0 ? raw.draftRev : 1,
-    currentPolicy: raw.currentPolicy ? { ...DEFAULT_RESERVATION_POLICY, ...raw.currentPolicy } : { ...DEFAULT_RESERVATION_POLICY },
+    currentPolicy,
+    policies: raw.policies && typeof raw.policies === "object"
+      ? structuredClone(raw.policies)
+      : {
+          [LEGACY_RESERVATION_POLICY.version]: { ...LEGACY_RESERVATION_POLICY },
+          [DEFAULT_RESERVATION_POLICY.version]: { ...DEFAULT_RESERVATION_POLICY },
+          [currentPolicy.version]: { ...currentPolicy },
+        },
     reservations: raw.reservations && typeof raw.reservations === "object" ? structuredClone(raw.reservations) : {},
   };
 }
@@ -109,7 +131,10 @@ export function reservationOps(book: ReservationBook, record: DemoRecord): Reser
     pickupAt,
     returnPickupAt,
     category: fallbackCategory(record),
-    policy: { ...book.currentPolicy, version: record.policyVersion ?? book.currentPolicy.version },
+    policy: {
+      ...(book.policies[record.policyVersion ?? book.currentPolicy.version] ?? book.currentPolicy),
+      version: record.policyVersion ?? book.currentPolicy.version,
+    },
     contacts: [],
     offers: [],
     activity: [`Reservation ${record.id} opened with policy ${record.policyVersion ?? book.currentPolicy.version}`],
@@ -267,6 +292,7 @@ export function saveReservationPolicy(
       ...book,
       draftRev: book.draftRev + 1,
       currentPolicy,
+      policies: { ...book.policies, [currentPolicy.version]: { ...currentPolicy } },
       reservations: { ...book.reservations },
     },
   };
