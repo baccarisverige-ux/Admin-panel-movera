@@ -165,7 +165,7 @@ export function PaymentsPage() {
           >
             Save payment methods
           </CommandButton>
-          <button className="secondary-btn" type="button" disabled={!policyDirty} onClick={() => setPolicyDraft(null)}>Discard unsaved</button>
+          <button data-command="admin.card.action" className="secondary-btn" type="button" disabled={!policyDirty} onClick={() => setPolicyDraft(null)}>Discard unsaved</button>
         </div>
       </article>
 
