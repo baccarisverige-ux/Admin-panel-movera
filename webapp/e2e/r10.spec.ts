@@ -92,6 +92,7 @@ test("R10 large refund requires and executes a second-agent decision", async ({ 
   await expect(decisionRow.getByRole("button", { name: "Approve" })).toBeEnabled();
   await decisionRow.getByRole("button", { name: "Approve" }).click();
   await confirm(reviewer);
+  await expect(decisionPanel.getByRole("row", { name: /PAY0200/ })).toHaveCount(0);
   await reviewer.close();
 
   await page.goto("/payments/PAY0200");
