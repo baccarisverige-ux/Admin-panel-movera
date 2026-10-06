@@ -36,6 +36,7 @@ export type PickupPoint = {
   lat: number;
   lng: number;
   instructions: string;
+  photoUrl: string;
 };
 
 export type ZoneShape = {
@@ -45,13 +46,18 @@ export type ZoneShape = {
   kind: ZoneKind;
   parentId: string | null;
   notes: string;
+  color: string;
+  priority: number;
   points: [number, number][];
   holes: [number, number][][];
   archived: boolean;
   active: boolean;
   categories: string[];
+  options: string[];
+  paymentMethods: string[];
   cash: boolean;
   pinRequired: boolean;
+  pickupOnly: boolean;
   minAppVersion: string;
   suspendedUntil: string;
   suspendReason: string;
@@ -66,6 +72,8 @@ export type ZoneShape = {
   maxWaitMin: number;
   pickups: PickupPoint[];
   queueOn: boolean;
+  queuePolygon: [number, number][];
+  pickupArea: [number, number][];
   maxQueueMin: number;
   queueFeeOre: number;
   terminals: string;
@@ -89,14 +97,30 @@ export type ZoneIssue = { level: "error" | "warn"; zoneId: string; message: stri
 
 export type ActivityPoint = {
   id: string;
-  kind: "driver" | "trip" | "queue";
+  kind: "driver" | "trip" | "request" | "queue" | "demand_hour" | "demand_7d";
   name: string;
   lat: number;
   lng: number;
   online: boolean;
+  stale?: boolean;
+  weight?: number;
 };
 
 export const RIDE_CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet"];
+export const RIDE_OPTIONS = ["baby_seat", "child_seat", "booster_seat", "extra_bags", "pet"];
+export const ZONE_PAYMENT_METHODS = ["card", "swish", "klarna", "apple", "google", "paypal", "cash", "wallet"];
+
+const DEFAULT_PRIORITY: Record<ZoneKind, number> = {
+  service: 10,
+  operating: 20,
+  airport: 40,
+  boost: 60,
+  event: 70,
+  no_pickup: 100,
+  restricted: 90,
+  fleet: 50,
+  pickup: 110,
+};
 
 function rect(south: number, west: number, north: number, east: number): [number, number][] {
   return [
@@ -112,11 +136,16 @@ function zone(input: Pick<ZoneShape, "id" | "code" | "name" | "kind" | "points">
   return {
     parentId: input.kind === "service" ? null : "svc-stockholm",
     notes: "",
+    color: ZONE_COLOR[input.kind],
+    priority: DEFAULT_PRIORITY[input.kind],
     archived: false,
     active: true,
     categories: [...RIDE_CATEGORIES],
+    options: [...RIDE_OPTIONS],
+    paymentMethods: [...ZONE_PAYMENT_METHODS],
     cash: false,
     pinRequired: airport,
+    pickupOnly: false,
     minAppVersion: "1.0.0",
     suspendedUntil: "",
     suspendReason: "",
@@ -130,6 +159,8 @@ function zone(input: Pick<ZoneShape, "id" | "code" | "name" | "kind" | "points">
     destinationMode: false,
     maxWaitMin: 5,
     queueOn: airport,
+    queuePolygon: input.points.length >= 3 ? [...input.points] : [],
+    pickupArea: [],
     maxQueueMin: airport ? 45 : 0,
     queueFeeOre: airport ? 4500 : 0,
     terminals: "",
@@ -139,7 +170,9 @@ function zone(input: Pick<ZoneShape, "id" | "code" | "name" | "kind" | "points">
     until: "",
     ...input,
     holes: input.holes ?? [],
-    pickups: input.pickups ?? [],
+    pickups: (input.pickups ?? []).map((pickup) => ({ ...pickup, photoUrl: pickup.photoUrl ?? "" })),
+    queuePolygon: input.queuePolygon ?? (input.points.length >= 3 ? [...input.points] : []),
+    pickupArea: input.pickupArea ?? [],
   };
 }
 
@@ -148,8 +181,7 @@ export function zoneStatus(zone: ZoneShape, book: ZoneBook): "Archived" | "In re
   if (book.status === "in_review") return "In review";
   const published = book.published.find((item) => item.id === zone.id);
   if (!published) return "Draft";
-  const sameShape = JSON.stringify(published.points) === JSON.stringify(zone.points) && JSON.stringify(published.holes) === JSON.stringify(zone.holes);
-  return sameShape && published.zoneFeeOre === zone.zoneFeeOre ? "Published" : "Draft";
+  return JSON.stringify(published) === JSON.stringify(zone) ? "Published" : "Draft";
 }
 
 export function zoneTypeLabel(kind: ZoneKind): string {
