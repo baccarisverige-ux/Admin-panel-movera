@@ -90,6 +90,13 @@ export function RiderDetailPage() {
   const promotion = addRiderPromotion(store.value, seed, promoCode, promoLabel, agent?.id ?? "");
   const riderAudits = (audit.data ?? []).filter((item) => item.targetId === rider.id).slice(0, 30);
 
+  function settle(text: string, after?: () => void) {
+    void store.refetch().then(() => {
+      after?.();
+      setNotice(text);
+    });
+  }
+
   return (
     <>
       <div className="page-heading">
@@ -127,10 +134,7 @@ export function RiderDetailPage() {
               expectedSliceRev={store.value.draftRev}
               sliceKey="riderOps"
               value={setRiderAccountReason(store.value, seed, "active", accountReason || "Manual unblock", agent?.id ?? "")}
-              onDone={() => {
-                setNotice("Rider unblocked.");
-                setAccountReason("");
-              }}
+              onDone={() => settle("Rider unblocked.", () => setAccountReason(""))}
             >
               Unblock
             </CommandButton>
@@ -148,10 +152,7 @@ export function RiderDetailPage() {
               expectedSliceRev={store.value.draftRev}
               sliceKey="riderOps"
               value={setRiderAccountReason(store.value, seed, "blocked", accountReason || "Manual block", agent?.id ?? "")}
-              onDone={() => {
-                setNotice("Rider blocked.");
-                setAccountReason("");
-              }}
+              onDone={() => settle("Rider blocked.", () => setAccountReason(""))}
             >
               Block
             </CommandButton>
@@ -170,7 +171,7 @@ export function RiderDetailPage() {
             value={sessionsNext}
             disabled={activeSessions.length === 0}
             title={activeSessions.length === 0 ? "No active rider session remains." : undefined}
-            onDone={() => setNotice("Signed out of every active rider session.")}
+            onDone={() => settle("Signed out of every active rider session.")}
           >
             Sign out all sessions
           </CommandButton>
@@ -187,7 +188,7 @@ export function RiderDetailPage() {
             value={privacyNext}
             disabled={ops.privacy === "done"}
             title={ops.privacy === "done" ? "Privacy request is already complete." : undefined}
-            onDone={() => setNotice("Privacy request advanced.")}
+            onDone={() => settle("Privacy request advanced.")}
           >
             Advance privacy
           </CommandButton>
@@ -241,7 +242,7 @@ export function RiderDetailPage() {
             value={credit.book}
             disabled={Boolean(credit.error)}
             title={credit.error}
-            onDone={() => setNotice(`Credited ${formatOre(walletAmountOre)}. The ceiling is 500 kr per adjustment.`)}
+            onDone={() => settle(`Credited ${formatOre(walletAmountOre)}. The ceiling is 500 kr per adjustment.`)}
           >
             Credit wallet
           </CommandButton>
@@ -291,11 +292,10 @@ export function RiderDetailPage() {
             value={promotion.book}
             disabled={Boolean(promotion.error)}
             title={promotion.error}
-            onDone={() => {
-              setNotice(`Promotion ${promoCode.trim().toUpperCase()} added.`);
+            onDone={() => settle(`Promotion ${promoCode.trim().toUpperCase()} added.`, () => {
               setPromoCode("");
               setPromoLabel("");
-            }}
+            })}
           >
             Apply promotion
           </CommandButton>
@@ -317,7 +317,7 @@ export function RiderDetailPage() {
                       expectedSliceRev={store.value.draftRev}
                       sliceKey="riderOps"
                       value={removeRiderPromotion(store.value, seed, item.code, agent?.id ?? "")}
-                      onDone={() => setNotice(`Promotion ${item.code} removed.`)}
+                      onDone={() => settle(`Promotion ${item.code} removed.`)}
                     >
                       remove
                     </CommandButton>
@@ -369,10 +369,7 @@ export function RiderDetailPage() {
             sliceKey="riderOps"
             value={noteNext}
             disabled={!privateNote.trim()}
-            onDone={() => {
-              setNotice("Private rider note saved.");
-              setPrivateNote("");
-            }}
+            onDone={() => settle("Private rider note saved.", () => setPrivateNote(""))}
           >
             Save private note
           </CommandButton>
