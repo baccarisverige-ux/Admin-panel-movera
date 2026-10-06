@@ -103,7 +103,7 @@ test("full precedence viewer resolves through cohort and impact preview names th
 
   await page.getByLabel("Preview zone").selectOption("op-norrmalm");
   await page.getByLabel("Preview category").selectOption("premium");
-  await page.getByLabel("Preview app").selectOption("rider");
+  await page.getByLabel("Preview app", { exact: true }).selectOption("rider");
   await page.getByLabel("Preview platform").selectOption("ios");
   await page.getByLabel("Preview app version").fill("1.0.0");
   await page.getByLabel("Preview cohort").fill("beta");
