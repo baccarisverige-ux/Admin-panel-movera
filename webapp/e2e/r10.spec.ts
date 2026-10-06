@@ -7,13 +7,6 @@ async function session(page: Page, agentId = "astrid") {
   }, agentId);
 }
 
-async function switchSession(page: Page, agentId: string) {
-  await page.evaluate((id) => {
-    localStorage.setItem("movera-admin-session", id);
-    localStorage.setItem("movera-admin-activity", String(Date.now()));
-  }, agentId);
-}
-
 async function confirm(page: Page) {
   await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
 }
@@ -88,13 +81,18 @@ test("R10 large refund requires and executes a second-agent decision", async ({ 
   await expect(row).toContainText("250,00 kr");
   await expect(row.getByRole("button", { name: "Approve" })).toBeDisabled();
 
-  await switchSession(page, "lena");
-  await page.goto("/audit");
-  const decisionPanel = page.getByRole("heading", { level: 3, name: "Pending approvals" }).locator("..");
+  const reviewer = await page.context().newPage();
+  await reviewer.addInitScript(() => {
+    localStorage.setItem("movera-admin-session", "lena");
+    localStorage.setItem("movera-admin-activity", String(Date.now()));
+  });
+  await reviewer.goto("/audit");
+  const decisionPanel = reviewer.getByRole("heading", { level: 3, name: "Pending approvals" }).locator("..");
   const decisionRow = decisionPanel.getByRole("row", { name: /PAY0200/ });
   await expect(decisionRow.getByRole("button", { name: "Approve" })).toBeEnabled();
   await decisionRow.getByRole("button", { name: "Approve" }).click();
-  await confirm(page);
+  await confirm(reviewer);
+  await reviewer.close();
 
   await page.goto("/payments/PAY0200");
   await expect(page.getByTestId("payment-timeline")).toContainText("Refunded");
