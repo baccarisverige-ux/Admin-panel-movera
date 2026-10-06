@@ -35,9 +35,12 @@ export function OnboardingPage() {
 
   const queue = useMemo(
     () => (drivers.data ?? [])
-      .filter((driver) => driver.status === "pending" || driver.status === "on_hold")
+      .filter((driver) => {
+        if (agent?.scope.fleetPartnerId && driver.fleetId !== agent.scope.fleetPartnerId) return false;
+        return driver.status === "pending" || driver.status === "on_hold";
+      })
       .sort((left, right) => Number(Boolean(left.fleetId)) - Number(Boolean(right.fleetId)) || left.id.localeCompare(right.id)),
-    [drivers.data],
+    [agent?.scope.fleetPartnerId, drivers.data],
   );
 
   useEffect(() => {
