@@ -353,15 +353,17 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       }
 
       if (raw.action === "admin.approval.approve" || raw.action === "admin.approval.reject") {
-        const approval = db.approvals.find((item) => item.id === raw.targetId);
-        if (!approval) reject(404, "Approval was not found.");
+        const foundApproval = db.approvals.find((item) => item.id === raw.targetId);
+        if (!foundApproval) reject(404, "Approval was not found.");
+        const approval = foundApproval!;
         if (approval.status !== "pending") reject(422, `Approval is already ${approval.status}.`);
         if (approval.requestedBy === raw.actorId) reject(403, "A second authorised agent must decide this action.");
 
         const approved = raw.action === "admin.approval.approve";
         if (approved && approval.action === "admin.payment.refund") {
-          const payment = db.payments.find((item) => item.id === approval.targetId);
-          if (!payment) reject(404, "Payment for this approval was not found.");
+          const foundPayment = db.payments.find((item) => item.id === approval.targetId);
+          if (!foundPayment) reject(404, "Payment for this approval was not found.");
+          const payment = foundPayment!;
           if (payment.status !== "captured") {
             reject(409, `Payment changed to ${payment.status}. Reload before deciding the approval.`);
           }
