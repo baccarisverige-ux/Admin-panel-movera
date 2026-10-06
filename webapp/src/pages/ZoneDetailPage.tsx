@@ -139,6 +139,7 @@ export function ZoneDetailPage() {
                 lat: Number(pickupLat) || 0,
                 lng: Number(pickupLng) || 0,
                 instructions: pickupNotes,
+                photoUrl: "",
               }, agent.id);
               setPickupName("");
             }}
