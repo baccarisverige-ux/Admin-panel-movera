@@ -58,7 +58,7 @@ export function ReservationsPage() {
   }
 
   const policyPrepared = agent
-    ? saveReservationPolicy(book, policy, agent.id)
+    ? saveReservationPolicy(book, policy)
     : { book, error: "Sign in again." };
 
   return (
