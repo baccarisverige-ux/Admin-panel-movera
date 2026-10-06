@@ -40,7 +40,7 @@ test("R7 rider account wallet privacy promotion notes and sessions persist", asy
   await expect(page.getByText(/Credited 125,00 kr/)).toBeVisible();
   await expect(page.getByRole("list", { name: "Rider wallet ledger" })).toContainText("125,00 kr");
 
-  await page.getByRole("button", { name: "Promotions" }).click();
+  await page.getByRole("tab", { name: "Promotions" }).click();
   await page.getByLabel("Promotion code").fill("ARN120");
   await page.getByLabel("Label").fill("Airport 120");
   await page.getByRole("button", { name: "Apply promotion" }).click();
@@ -62,7 +62,7 @@ test("R7 rider account wallet privacy promotion notes and sessions persist", asy
   await expect(page.getByText(/Privacy processing/)).toBeVisible();
   await page.getByRole("tab", { name: "Payments" }).click();
   await expect(page.getByRole("list", { name: "Rider wallet ledger" })).toContainText("125,00 kr");
-  await page.getByRole("button", { name: "Promotions" }).click();
+  await page.getByRole("tab", { name: "Promotions" }).click();
   await expect(page.getByRole("list", { name: "Rider promotions" })).toContainText("ARN120");
   await page.getByRole("tab", { name: "Notes" }).click();
   await expect(page.getByText("Call rider before airport pickup")).toBeVisible();
