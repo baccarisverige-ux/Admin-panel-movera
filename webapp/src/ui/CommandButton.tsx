@@ -23,6 +23,8 @@ type CommandButtonProps = {
   expectedRev?: number;
   expectedSliceRev?: number;
   idempotencyKey?: string;
+  validationError?: string;
+  onValidationError?: (message: string) => void;
   sliceKey?: string;
   value?: unknown;
   confirmTarget?: boolean;
@@ -49,6 +51,8 @@ export function CommandButton({
   expectedRev,
   expectedSliceRev,
   idempotencyKey,
+  validationError,
+  onValidationError,
   sliceKey,
   value,
   confirmTarget = true,
@@ -119,6 +123,10 @@ export function CommandButton({
               event.preventDefault();
               if (!confirmed) return;
               setOpen(false);
+              if (validationError) {
+                onValidationError?.(validationError);
+                return;
+              }
               fire(reason);
             }}
           >
