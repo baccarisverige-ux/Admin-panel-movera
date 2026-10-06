@@ -1,7 +1,4 @@
 import { useMemo, useState } from "react";
-import { useCommands, useSlice } from "../api/hooks";
-import { can } from "../auth/permissions";
-import { useSession } from "../auth/SessionContext";
 import {
   defaultPricingBook,
   normalizePricingBook,
@@ -9,10 +6,14 @@ import {
   restorePricingVersion,
   saveBoostSchedule,
   savePriceZone,
+  useCommands,
+  useSlice,
   validateZonePrice,
   type BoostSchedule,
   type PricingBook,
-} from "../pricing/book";
+} from "../api/hooks";
+import { can } from "../auth/permissions";
+import { useSession } from "../auth/SessionContext";
 import {
   CATEGORY_INFO,
   RIDE_OPTION_INFO,
