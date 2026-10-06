@@ -293,3 +293,6 @@ export type { GrowthBook, GrowthRule } from "../growth/ops.ts";
 
 export { emptyReports, reportRows, reportExport, stockholmDay } from "../reports/ops.ts";
 export type { ReportsBook, ReportFilter } from "../reports/ops.ts";
+
+export { GATE_A_CHECKS, emptyGateA, recordGateA, gateAState } from "../gates/gateA.ts";
+export type { GateBook, GateCheck, GateEvidence } from "../gates/gateA.ts";

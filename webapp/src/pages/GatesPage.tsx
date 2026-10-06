@@ -1,3 +1,4 @@
+import { GateAAcceptance } from "../ui/GateAAcceptance";
 import { APPS } from "../gates/apps";
 import { frontendGateC, gateC } from "../gates/frontendC";
 import { chapter16, gateB } from "../gates/scenarios";
@@ -13,6 +14,7 @@ export function GatesPage() {
 
   return (
     <>
+      <GateAAcceptance />
       <div className="page-heading">
         <div>
           <h2>Chapter 16</h2>

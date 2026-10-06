@@ -1,3 +1,4 @@
+import { emptyGateA, recordGateA, type GateBook } from "../gates/gateA.ts";
 import { scopedSlice, type ReadContext } from "./scopes.ts";
 import { emptyReports, reportExport, type ReportsBook } from "../reports/ops.ts";
 import { emptyGrowth, saveGrowthRule, redeemGrowth, moderateGrowth, growthReviews, type GrowthBook } from "../growth/ops.ts";
@@ -394,6 +395,16 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         const result = reportExport(book,visible,job!.filter,raw.actorId,job!.id);
         if (result.error) reject(422,result.error);
         raw = { ...raw, sliceKey: "reportOps", value: result.book };
+      }
+
+      if (raw.action === "admin.gateA.record") {
+        if(actorScope.zones!=="all") reject(403,"Acceptance evidence requires all-zone scope.");
+        const book=(db.slices.gateAOps??emptyGateA()) as GateBook;
+        const entry=(raw.value as GateBook | undefined)?.evidence.at(-1);
+        if(!entry)reject(422,"Evidence is required.");
+        const result=recordGateA(book,{...entry!,actor:raw.actorId,at:new Date().toISOString()});
+        if(result.error)reject(422,result.error);
+        raw={...raw,sliceKey:"gateAOps",value:result.book};
       }
 
       const injectedStatus = faultStatus(fault);
