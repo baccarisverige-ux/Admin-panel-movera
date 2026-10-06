@@ -93,6 +93,11 @@ export function PriceEditor({ book, zoneId, onZoneChange, onChange, onSave, canE
       </div>
 
       <h4>Ride options</h4>
+      <ul aria-label="Ride options">
+        {RIDE_OPTION_INFO.map((item) => (
+          <li key={item.id}>{item.label} · {zone.enabledOptions[item.id] ? "enabled" : "disabled"} · {zone.optionFee[item.id]} kr · {item.note}</li>
+        ))}
+      </ul>
       <div className="field-grid">
         {RIDE_OPTION_INFO.map((item) => (
           <div key={item.id}>
