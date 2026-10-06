@@ -2,7 +2,7 @@ import type { DemoRecord } from "../api/seed.ts";
 import { ZONES } from "../api/seed.ts";
 import { CATEGORIES, TRIP_STATUSES, formatOre, type TripStatus } from "../domain/contract.ts";
 import { statusLabel } from "../domain/labels.ts";
-import { adjustFare, canCancel, cancelTrip, eligibleDrivers, reassign, type OfferDriver, type Trip } from "./rules.ts";
+import { canAdjustFare, canOffer, canReassign, canRefundTrip, canSetWaiting, cancelTrip, eligibleDrivers, type OfferDriver, type Trip } from "./rules.ts";
 
 export const PAYMENT_STATES = ["pending", "authorized", "captured", "failed", "refunded"] as const;
 export type PaymentState = (typeof PAYMENT_STATES)[number];
@@ -93,11 +93,30 @@ export function stopsOf(trip: DemoRecord): StopPoint[] {
   return [pickup, ...mids, dropoff];
 }
 
+const ACTIVE_FLOW = TRIP_STATUSES.slice(0, TRIP_STATUSES.indexOf("completed") + 1);
+
+function terminalBaseStatus(trip: DemoRecord): TripStatus {
+  if (trip.previousStatus && ACTIVE_FLOW.includes(trip.previousStatus as TripStatus)) return trip.previousStatus as TripStatus;
+  if (trip.status === "cancelled_by_rider") return "searching";
+  if (trip.status === "cancelled_by_driver") return "accepted";
+  if (trip.status === "cancelled_by_admin") return "arrived";
+  if (trip.status === "no_show") return "arrived";
+  if (trip.status === "expired") return "searching";
+  if (trip.status === "failed") return "in_trip";
+  return "draft";
+}
+
 export function timelineOf(trip: DemoRecord): { at: string; label: string; code: string }[] {
-  const index = TRIP_STATUSES.indexOf(trip.status as TripStatus);
-  const end = index < 0 ? 0 : index;
   const start = Date.parse(startedAt(trip.id));
-  return TRIP_STATUSES.slice(0, end + 1).map((code, step) => ({
+  let codes: readonly TripStatus[];
+  if (ACTIVE_FLOW.includes(trip.status as TripStatus)) {
+    codes = ACTIVE_FLOW.slice(0, ACTIVE_FLOW.indexOf(trip.status as TripStatus) + 1);
+  } else {
+    const base = terminalBaseStatus(trip);
+    const prefix = ACTIVE_FLOW.slice(0, Math.max(0, ACTIVE_FLOW.indexOf(base)) + 1);
+    codes = [...prefix, trip.status as TripStatus];
+  }
+  return codes.map((code, step) => ({
     code,
     label: statusLabel(code),
     at: new Date(start + step * 90_000).toISOString(),
@@ -111,7 +130,7 @@ export function fareBreakdown(trip: DemoRecord) {
   const perKmOre = 1500;
   const minutes = 8 + (index % 25);
   const perMinOre = 650;
-  const waitingMin = index % 6;
+  const waitingMin = trip.waitingMin ?? (index % 6);
   const waitingOre = waitingMin * perMinOre;
   const summed = pickupOre + km * perKmOre + minutes * perMinOre + waitingOre;
   const minimumOre = 8900;
@@ -148,8 +167,7 @@ export function cancelledBy(status: string): string {
 }
 
 export function cancelReason(trip: DemoRecord): string {
-  const notes = (trip as { notes?: string }).notes;
-  if (notes) return notes;
+  if (trip.notes) return trip.notes;
   if (trip.status.startsWith("cancelled") || trip.status === "no_show") {
     return ["Rider changed plans", "Could not reach the pickup", "Safety review", "Rider did not arrive"][tripIndex(trip.id) % 4];
   }
@@ -176,20 +194,28 @@ export function cancelBlock(status: string): string | null {
   return error && error !== "A reason is required." ? error : null;
 }
 
+export function offerBlock(status: string): string | null {
+  return canOffer(status) ? null : "Offer is only available while the trip is requested or searching.";
+}
+
 export function reassignBlock(status: string): string | null {
-  if (canCancel(status) || status === "offered" || status === "driver_to_pickup") return null;
-  return reassign(
-    { id: "x", status, category: "economy", fareOre: 1, ruleVersion: "v", driverId: null },
-    { id: "nope", name: "No one", status: "active", category: "economy" },
-    [],
-  ).error ?? "This trip can no longer be reassigned.";
+  return canReassign(status) ? null : "Reassign is only available after acceptance and before rider pickup.";
 }
 
 export function adjustBlock(status: string): string | null {
-  return adjustFare({ id: "x", status, category: "economy", fareOre: 10000, ruleVersion: "v", driverId: null }, 10).error ?? null;
+  return canAdjustFare(status)
+    ? null
+    : `Fare adjustment is not allowed while the trip is ${status}.`;
 }
 
-export function refundBlock(payment: PaymentState): string | null {
+export function waitingBlock(status: string): string | null {
+  return canSetWaiting(status)
+    ? null
+    : `Waiting time cannot be changed while the trip is ${status}.`;
+}
+
+export function refundBlock(payment: PaymentState, status = "completed"): string | null {
+  if (!canRefundTrip(status)) return "Refund is only available after the trip reaches a refundable terminal state.";
   if (payment === "refunded") return "This payment is already refunded.";
   if (payment !== "captured") return "Refund is only available after the payment is captured.";
   return null;
@@ -252,13 +278,28 @@ export function driverCategory(id: string): Trip["category"] {
   return CATEGORIES[tripIndex(id) % CATEGORIES.length].id;
 }
 
-export function toOffer(driver: DemoRecord): OfferDriver {
-  const status = driver.status === "active" || driver.status === "suspended" ? driver.status : "on_hold";
-  return { id: driver.id, name: driver.name, status, category: driverCategory(driver.id) };
+export function toOffer(driver: DemoRecord, vehicle?: DemoRecord | null): OfferDriver {
+  const driverStatus = driver.status === "active" || driver.status === "suspended" ? driver.status : "on_hold";
+  const status = vehicle && vehicle.status !== "eligible" ? "on_hold" : driverStatus;
+  return {
+    id: driver.id,
+    name: driver.name,
+    status,
+    category: vehicle?.category ?? driverCategory(driver.id),
+  };
 }
 
-export function offersFor(trip: DemoRecord, drivers: readonly DemoRecord[]): OfferDriver[] {
-  return eligibleDrivers(asTrip(trip), drivers.map(toOffer));
+export function offersFor(
+  trip: DemoRecord,
+  drivers: readonly DemoRecord[],
+  vehicles?: readonly DemoRecord[],
+): OfferDriver[] {
+  const candidates = drivers.map((driver) => {
+    if (!vehicles) return toOffer(driver);
+    const vehicle = vehicles.find((item) => item.driverId === driver.id) ?? null;
+    return toOffer(driver, vehicle ?? { ...driver, status: "ineligible" });
+  });
+  return eligibleDrivers(asTrip(trip), candidates);
 }
 
 export type LiveKind = "driver" | "trip" | "request" | "queue" | "boost";

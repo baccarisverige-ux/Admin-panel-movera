@@ -107,6 +107,7 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.rider.revealSensitive", label: "Reveal rider sensitive data", reason: true, permission: "riders.viewSensitive" },
   { id: "admin.trip.cancel", label: "Cancel trip", reason: true, permission: "trips.intervene" },
   { id: "admin.trip.adjust", label: "Adjust fare", reason: true, permission: "trips.intervene" },
+  { id: "admin.trip.waiting", label: "Change waiting time", reason: true, permission: "trips.intervene" },
   { id: "admin.trip.offer", label: "Offer to driver", reason: true, permission: "trips.intervene" },
   { id: "admin.rider.block", label: "Block rider", reason: true, permission: "riders.block" },
   { id: "admin.rider.unblock", label: "Unblock rider", reason: true, permission: "riders.block" },
@@ -170,6 +171,7 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.trip.reassign", label: "Reassign trip", reason: true, permission: "trips.intervene" },
   { id: "admin.trip.refund", label: "Refund trip", reason: true, permission: "payments.refund" },
   { id: "admin.dispatch.save", label: "Save dispatch rules", reason: true, permission: "trips.intervene" },
+  { id: "admin.dispatch.restore", label: "Restore dispatch version", reason: true, permission: "trips.intervene" },
   { id: "admin.live.focus", label: "Focus live marker", reason: false, permission: "trips.read" },
 ];
 
@@ -209,8 +211,12 @@ const OWNER_BY_DOMAIN: Record<string, string> = {
 };
 
 const ALLOWED_STATES: Record<string, readonly string[]> = {
-  "admin.trip.cancel": ["requested", "searching", "offered", "accepted", "driver_to_pickup", "arrived", "rider_onboard", "in_trip"],
+  "admin.trip.cancel": ["searching", "accepted", "arrived", "in_trip"],
+  "admin.trip.offer": ["requested", "searching"],
   "admin.trip.reassign": ["accepted", "driver_to_pickup", "arrived"],
+  "admin.trip.adjust": ["accepted", "driver_to_pickup", "arrived", "rider_onboard", "in_trip", "approaching_dropoff"],
+  "admin.trip.waiting": ["arrived", "rider_onboard", "in_trip"],
+  "admin.trip.refund": ["completed", "cancelled_by_rider", "cancelled_by_driver", "cancelled_by_admin", "no_show", "failed"],
   "admin.driver.activate": ["pending", "on_hold"],
   "admin.driver.onHold": ["pending", "active"],
   "admin.driver.suspend": ["active", "on_hold"],
@@ -237,6 +243,7 @@ const DESTRUCTIVE = new Set([
   "admin.vehicle.hold",
   "admin.trip.cancel",
   "admin.trip.refund",
+  "admin.dispatch.restore",
   "admin.rider.block",
   "admin.rider.promoRemove",
   "admin.rider.privacy",

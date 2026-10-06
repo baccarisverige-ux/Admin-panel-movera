@@ -27,6 +27,9 @@ export type DemoRecord = {
   category?: "economy" | "comfort" | "premium" | "priority" | "xl" | "electric" | "pet";
   make?: string;
   model?: string;
+  waitingMin?: number;
+  previousStatus?: string;
+  notes?: string;
 };
 
 export type AuditRow = {
