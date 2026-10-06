@@ -116,6 +116,8 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.zone.merge", label: "Merge zones", reason: false, permission: "zones.edit" },
   { id: "admin.zone.priority", label: "Reorder overlap priority", reason: false, permission: "zones.edit" },
   { id: "admin.zone.importKml", label: "Import KML", reason: false, permission: "zones.edit" },
+  { id: "admin.zone.copyQueue", label: "Use shape as airport queue", reason: false, permission: "zones.edit" },
+  { id: "admin.zone.copyPickupArea", label: "Use shape as airport pickup area", reason: false, permission: "zones.edit" },
   { id: "admin.zone.editPoints", label: "Edit points", reason: false, permission: "zones.edit" },
   { id: "admin.zone.cutHole", label: "Cut hole", reason: false, permission: "zones.edit" },
   { id: "admin.zone.undo", label: "Undo zone edit", reason: false, permission: "zones.edit" },
