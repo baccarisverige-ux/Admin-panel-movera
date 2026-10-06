@@ -1,39 +1,10 @@
+import { useState } from "react";
+import { DEFAULT_SAFETY, emptySafety, validateSafety, useRecords, useSlice, type SafetyBook, type SafetyPolicy } from "../api/hooks";
+import { can } from "../auth/permissions";
+import { useSession } from "../auth/SessionContext";
+import { CommandButton } from "../ui/CommandButton";
+const NUMBERS: [keyof SafetyPolicy, string][] = [["impossibleTravelMps","Impossible travel (m/s)"],["trustedContacts","Trusted contacts"],["dailyHours","Daily driving hours"],["weeklyHours","Weekly driving hours"],["breakMinutes","Rest minutes"],["warningMinutes","Warning minutes"],["staleSeconds","Location stale after seconds"]];
 export function RiskPage() {
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h2>Risk</h2>
-          <p>Thresholds the owner has not replaced. Impossible travel is an alert, not a ban by itself.</p>
-        </div>
-      </div>
-      <div className="field-grid">
-        <label>
-          Impossible travel
-          <input readOnly value="55 m/s" />
-        </label>
-        <label>
-          Trusted contacts
-          <input readOnly value="5" />
-        </label>
-        <label>
-          PIN
-          <input readOnly value="Required only where the zone says so. The PIN is never shown." />
-        </label>
-        <label>
-          Driving hours
-          <input readOnly value="none" />
-        </label>
-        <label>
-          Acceptance window
-          <input readOnly value="last 100 requests" />
-        </label>
-        <label>
-          RideCheck
-          <input readOnly value="Text is not confirmed." />
-        </label>
-      </div>
-      <p className="state-line">Stale GPS and a speed over 55 m/s raise an alert. No second number is invented here.</p>
-    </>
-  );
+ const zones=useRecords("zones"); const {agent}=useSession(); const store=useSlice<SafetyBook>("safetyOps",emptySafety()); const [zone,setZone]=useState(""); const [draft,setDraft]=useState<SafetyPolicy|null>(null); const id=zone || zones.data?.[0]?.id || ""; const policy=draft ?? store.value.policies[id] ?? DEFAULT_SAFETY; const editable=Boolean(agent && can(agent.role,"safety.edit")); const error=validateSafety(policy);
+ return <><div className="page-heading"><div><h2>Risk</h2><p>Versioned safety rules per zone. Zero driving limits mean unconfigured, not an approved legal limit. Simulation only.</p></div></div><label>Safety zone<select value={id} onChange={e=>{setZone(e.target.value);setDraft(null);}}>{zones.data?.map(z=><option key={z.id} value={z.id}>{z.id} · {z.name}</option>)}</select></label><fieldset disabled={!editable || store.loading}><div className="field-grid">{NUMBERS.map(([key,label])=><label key={key}>{label}<input type="number" min="0" value={Number(policy[key])} onChange={e=>setDraft({...policy,[key]:Number(e.target.value)})}/></label>)}{(["rideCheck","pin","sharing","audio"] as const).map(key=><label key={key}><input type="checkbox" checked={policy[key]} onChange={e=>setDraft({...policy,[key]:e.target.checked})}/>{key}</label>)}</div></fieldset><p role="alert">{error}</p><CommandButton command="admin.safetyOps.save" scope={id} targetId={id} confirmTarget={false} sliceKey="safetyOps" expectedSliceRev={store.value.draftRev} value={{...store.value,draftRev:store.value.draftRev+1,policies:{...store.value.policies,[id]:policy}}} disabled={!id || !draft || Boolean(error) || store.loading} onDone={()=>setDraft(null)}>Save safety rules</CommandButton></>;
 }

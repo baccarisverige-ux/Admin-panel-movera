@@ -1,3 +1,4 @@
+import { emptySafety, safetyAction, validateSafety, type SafetyBook } from "../safety/ops.ts";
 import { can, type AgentScope, type Role } from "../auth/permissions.ts";
 import { commandById } from "../commands/registry.ts";
 import { catalogFor, type CatalogEntry } from "../data/catalog.ts";
@@ -288,6 +289,27 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       }
       if (actionSpec.allowedStates && resolvedState && !actionSpec.allowedStates.includes(resolvedState)) {
         reject(422, `${actionSpec.label} is not allowed while the record is ${resolvedState}.`);
+      }
+
+      if (raw.action.startsWith("admin.safety.")) {
+        const incident = db.incidents.find(r => r.id === raw.targetId);
+        if (!incident) reject(404, "Incident not found.");
+        const book = (db.slices.safetyOps ?? emptySafety()) as SafetyBook;
+        const proposed = raw.value as SafetyBook | undefined;
+        const text = proposed?.incidents[raw.targetId]?.events.at(-1)?.text ?? "";
+        const kind = raw.action.split(".").at(-1) as "take" | "contact" | "resolve";
+        const result = safetyAction(book, incident!, raw.actorId, kind, text);
+        if (result.error) reject(422, result.error);
+        raw = { ...raw, sliceKey: "safetyOps", value: result.book, collection: "incidents", patch: { status: result.status } };
+      }
+      if (raw.action === "admin.safetyOps.save") {
+        const proposed = raw.value as SafetyBook | undefined;
+        const policy = proposed?.policies[raw.targetId];
+        if (!policy || !db.zones.some(z => z.id === raw.targetId)) reject(422, "Select a valid safety zone.");
+        const error = validateSafety(policy!);
+        if (error) reject(422, error);
+        const book = (db.slices.safetyOps ?? emptySafety()) as SafetyBook;
+        raw = { ...raw, sliceKey: "safetyOps", value: { ...book, draftRev: book.draftRev + 1, policies: { ...book.policies, [raw.targetId]: policy } } };
       }
 
       const injectedStatus = faultStatus(fault);

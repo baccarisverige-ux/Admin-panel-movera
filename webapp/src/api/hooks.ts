@@ -270,3 +270,6 @@ export function useSlice<T>(key: string, fallback: T) {
     },
   };
 }
+
+export { DEFAULT_SAFETY, emptySafety, validateSafety, safetyAction } from "../safety/ops.ts";
+export type { SafetyBook, SafetyPolicy } from "../safety/ops.ts";
