@@ -25,26 +25,27 @@ export function PaymentPage() {
     );
   }
 
-  const amount = row.fareOre ?? 0;
-  const needsSecond = amount >= REFUND_LIMIT_ORE && row.status === "captured";
-  const pendingApproval = (approvals.data ?? []).find((item) => item.targetId === row.id && item.action === "admin.payment.refund" && item.status === "pending");
-  const blocked = row.status === "refunded"
+  const payment = row;
+  const amount = payment.fareOre ?? 0;
+  const needsSecond = amount >= REFUND_LIMIT_ORE && payment.status === "captured";
+  const pendingApproval = (approvals.data ?? []).find((item) => item.targetId === payment.id && item.action === "admin.payment.refund" && item.status === "pending");
+  const blocked = payment.status === "refunded"
     ? "Already refunded."
-    : row.status !== "captured"
+    : payment.status !== "captured"
       ? "Refund is only available after capture."
       : pendingApproval
         ? `Pending second-agent approval ${pendingApproval.id}.`
         : null;
-  const matches = refundRows(payments.data ?? [], row.id);
-  const operationKey = `refund-${row.id}`;
+  const matches = refundRows(payments.data ?? [], payment.id);
+  const operationKey = `refund-${payment.id}`;
 
   function refund() {
     if (blocked) return;
     void commands.run("admin.payment.refund", {
       reason: "Safety review",
-      targetId: row.id,
+      targetId: payment.id,
       collection: "payments",
-      before: row.status,
+      before: payment.status,
       after: needsSecond ? "pending approval" : "refunded",
       patch: { status: "refunded" },
       amountOre: amount,
@@ -56,8 +57,8 @@ export function PaymentPage() {
     <>
       <div className="page-heading">
         <div>
-          <h2>Payment {row.id}</h2>
-          <p>{statusLabel(row.status)} · {formatOre(amount)} · {row.zoneId}</p>
+          <h2>Payment {payment.id}</h2>
+          <p>{statusLabel(payment.status)} · {formatOre(amount)} · {payment.zoneId}</p>
         </div>
         <Link to="/payments">Back to payments</Link>
       </div>
@@ -65,7 +66,7 @@ export function PaymentPage() {
       <article className="panel" data-testid="payment-timeline">
         <h3>Timeline</h3>
         <ol className="version-list">
-          {paymentTimeline(row.status).map((step) => <li key={step}>{step}</li>)}
+          {paymentTimeline(payment.status).map((step) => <li key={step}>{step}</li>)}
         </ol>
       </article>
 
