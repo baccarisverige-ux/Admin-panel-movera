@@ -12,6 +12,7 @@ import {
   type ReservationBook,
   type ReservationPolicy,
 } from "../api/hooks";
+import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { CommandButton } from "../ui/CommandButton";
 import { DataTable } from "../ui/DataTable";
@@ -37,6 +38,7 @@ export function ReservationsPage() {
   const [notice, setNotice] = useState("Existing reservations keep the policy version they were booked with.");
 
   const policy = policyDraft ?? book.currentPolicy;
+  const canIntervene = Boolean(agent && can(agent.role, "trips.intervene"));
   const nowIso = new Date().toISOString();
   const needle = query.trim().toLowerCase();
 
@@ -137,6 +139,7 @@ export function ReservationsPage() {
             <input
               aria-label="Booking horizon"
               type="number"
+              disabled={!canIntervene}
               value={policy.bookingHorizonDays}
               onChange={(event) => patchPolicy({ bookingHorizonDays: Number(event.target.value) })}
             />
@@ -146,6 +149,7 @@ export function ReservationsPage() {
             <input
               aria-label="Assignment lead"
               type="number"
+              disabled={!canIntervene}
               value={policy.assignmentLeadMinutes}
               onChange={(event) => patchPolicy({ assignmentLeadMinutes: Number(event.target.value) })}
             />
@@ -155,6 +159,7 @@ export function ReservationsPage() {
             <input
               aria-label="Give-up time"
               type="number"
+              disabled={!canIntervene}
               value={policy.giveUpMinutes}
               onChange={(event) => patchPolicy({ giveUpMinutes: Number(event.target.value) })}
             />
@@ -164,6 +169,7 @@ export function ReservationsPage() {
             <input
               aria-label="Included waiting"
               type="number"
+              disabled={!canIntervene}
               value={policy.includedWaitingMinutes}
               onChange={(event) => patchPolicy({ includedWaitingMinutes: Number(event.target.value) })}
             />
@@ -173,6 +179,7 @@ export function ReservationsPage() {
             <input
               aria-label="Free cancel after accept"
               type="number"
+              disabled={!canIntervene}
               value={policy.freeCancelAfterAcceptMinutes}
               onChange={(event) => patchPolicy({ freeCancelAfterAcceptMinutes: Number(event.target.value) })}
             />
@@ -192,7 +199,7 @@ export function ReservationsPage() {
             expectedSliceRev={book.draftRev}
             sliceKey="reservationOps"
             value={policyPrepared.book}
-            disabled={!policyDraft || Boolean(policyPrepared.error)}
+            disabled={!canIntervene || !policyDraft || Boolean(policyPrepared.error)}
             title={policyPrepared.error ?? (!policyDraft ? "No unsaved policy change." : undefined)}
             onDone={() => {
               setPolicyDraft(null);
@@ -205,7 +212,7 @@ export function ReservationsPage() {
             data-command="admin.card.action"
             className="secondary-btn"
             type="button"
-            disabled={!policyDraft}
+            disabled={!canIntervene || !policyDraft}
             onClick={() => setPolicyDraft(null)}
           >
             Discard policy changes
