@@ -154,7 +154,7 @@ export function minutesUntil(pickupAt: string, nowIso: string): number {
 }
 
 export function needsDriverSoon(reservation: Reservation, nowIso: string): boolean {
-  return reservation.status === "booked" && !reservation.driverId && minutesUntil(reservation.pickupAt, nowIso) < 60;
+  return (reservation.status === "booked" || reservation.status === "waiting") && !reservation.driverId && minutesUntil(reservation.pickupAt, nowIso) < 60;
 }
 
 export function reservationWarning(record: DemoRecord, ops: ReservationOps, nowIso: string): string | null {
@@ -162,8 +162,8 @@ export function reservationWarning(record: DemoRecord, ops: ReservationOps, nowI
   const minutes = minutesUntil(ops.pickupAt, nowIso);
   if (minutes < 0) return "Pickup time has passed.";
   if (!record.driverId && minutes <= ops.policy.giveUpMinutes) return `Give-up threshold reached: ${ops.policy.giveUpMinutes} minutes.`;
-  if (!record.driverId && minutes < 60) return "Needs a driver within 60 minutes.";
   if (!record.driverId && minutes <= ops.policy.assignmentLeadMinutes) return `Inside assignment lead: ${ops.policy.assignmentLeadMinutes} minutes.`;
+  if (!record.driverId && minutes < 60) return "Needs a driver within 60 minutes.";
   return null;
 }
 
