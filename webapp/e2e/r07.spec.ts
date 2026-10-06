@@ -56,17 +56,6 @@ test("R7 rider account wallet privacy promotion notes and sessions persist", asy
 
   await page.getByRole("button", { name: "Advance privacy" }).click();
   await confirm(page, "R0001");
-  console.log("R7 privacy state lines:", await page.locator(".state-line").allTextContents());
-  console.log("R7 privacy store:", await page.evaluate(() => {
-    const raw = localStorage.getItem("movera-demo-v3");
-    const db = raw ? JSON.parse(raw) : {};
-    return {
-      rev: db.rev,
-      draftRev: db.slices?.riderOps?.draftRev,
-      privacy: db.slices?.riderOps?.riders?.R0001?.privacy,
-      lastAudit: db.audits?.[0],
-    };
-  }));
   await expect(page.getByText("Privacy request advanced.")).toBeVisible();
 
   await page.reload();
