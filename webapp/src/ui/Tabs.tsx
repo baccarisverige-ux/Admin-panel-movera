@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { CommandButton } from "./CommandButton";
 
 export type TabItem = {
   id: string;
@@ -13,7 +12,7 @@ type TabsProps = {
 };
 
 export function tabIdFromLabel(label: string): string {
-  return label.toLowerCase().replace(/\s+/g, "-");
+  return label.toLowerCase().replace(/s+/g, "-");
 }
 
 function asItems(tabs: TabsProps["tabs"]): TabItem[] {
@@ -25,14 +24,22 @@ function asItems(tabs: TabsProps["tabs"]): TabItem[] {
 export function Tabs({ tabs, activeId, onChange }: TabsProps) {
   const items = asItems(tabs);
   return (
-    <div className="tabs">
+    <div className="tabs" role="tablist">
       {items.map((tab) => (
-        <CommandButton command="admin.tabs.select" key={tab.id}
+        <button
+          data-command="admin.tabs.select"
+          key={tab.id}
           type="button"
+          role="tab"
+          aria-selected={tab.id === activeId}
+          aria-controls={`tabpanel-${tab.id}`}
+          id={`tab-${tab.id}`}
           className={tab.id === activeId ? "active" : undefined}
-          data-tab={tab.id} onDone={() => onChange(tab.id)}>
+          data-tab={tab.id}
+          onClick={() => onChange(tab.id)}
+        >
           {tab.label}
-        </CommandButton>
+        </button>
       ))}
     </div>
   );
@@ -45,10 +52,15 @@ type TabPanelProps = {
 };
 
 export function TabPanel({ id, activeId, children }: TabPanelProps) {
+  const active = id === activeId;
   return (
     <div
-      className={id === activeId ? "tab-panel active" : "tab-panel"}
+      className={active ? "tab-panel active" : "tab-panel"}
       data-tab-panel={id}
+      role="tabpanel"
+      id={`tabpanel-${id}`}
+      aria-labelledby={`tab-${id}`}
+      hidden={!active}
     >
       {children}
     </div>
