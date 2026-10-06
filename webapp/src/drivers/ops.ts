@@ -133,7 +133,7 @@ export function driverOps(book: DriverOpsBook, driver: DriverSeed): DriverOps {
       pet: true,
     },
     bank: {
-      status: "in_review",
+      status: "approved",
       holder: driver.name,
       last4: String(4100 + (suffix % 800)).slice(-4),
       reviewerId: "",
