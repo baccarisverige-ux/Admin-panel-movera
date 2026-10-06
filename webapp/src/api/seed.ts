@@ -66,6 +66,9 @@ export type ApprovalRow = {
   amountOre: number;
   reason: string;
   status: "pending" | "approved" | "rejected";
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionReason?: string;
 };
 
 export type InboxItem = { id: string; title: string; path: string };
@@ -206,7 +209,7 @@ export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
     phone: "",
     zoneId: zoneId(index),
     status: index % 8 === 0 ? "failed" : "captured",
-    fareOre: 10000 + index * 10,
+    fareOre: index === 199 ? 25_000 : 10000 + index * 10,
   }));
   const refunds = Array.from({ length: 20 }, (_, index) => ({
     id: `RF${String(index + 1).padStart(3, "0")}`,
