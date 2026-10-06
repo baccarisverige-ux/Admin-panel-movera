@@ -32,7 +32,7 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { can } from "../auth/permissions";
+import { allowedZones, can, canUseZone } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { useAdminApi } from "../api/AdminApiContext";
 import { useInbox, useSearch } from "../api/hooks";
@@ -96,6 +96,8 @@ export function AppShell({ page, children }: AppShellProps) {
   const groups = MENU_GROUPS.filter((group) => visible.some((item) => item.group === group));
   const env = import.meta.env.VITE_DATA || "demo";
   const scope = params.get("scope") ?? "";
+  const zoneOptions = allowedZones(agent ?? { id: "", email: "", name: "", password: "", code: "", role: "viewer", active: false, presence: "away", scope: { zones: "all", market: "SE-STO" } }, ZONES.map(([id, name]) => ({ id, name })));
+  const scopeDenied = Boolean(agent && scope && !canUseZone(agent, scope));
   const found = useSearch(searchOpen ? query : "");
   const inbox = useInbox();
   const [clock, setClock] = useState(() => new Date());
@@ -162,14 +164,15 @@ export function AppShell({ page, children }: AppShellProps) {
               aria-label="Scope"
               value={scope}
               onChange={(event) => {
+                client.clear();
                 const next = new URLSearchParams(params);
                 if (event.target.value) next.set("scope", event.target.value);
                 else next.delete("scope");
                 setParams(next);
               }}
             >
-              <option value="">All Stockholm</option>
-              {ZONES.map(([id, name]) => (
+              <option value="">All allowed zones</option>
+              {zoneOptions.map(({ id, name }) => (
                 <option key={id} value={id}>{name}</option>
               ))}
             </select>
@@ -195,6 +198,7 @@ export function AppShell({ page, children }: AppShellProps) {
             </div>
           </div>
         </header>
+        {scopeDenied ? <p className="state-line">No access to scope {scope}. Choose an allowed zone.</p> : null}
         {searchOpen ? (
           <div className="panel">
             <label>

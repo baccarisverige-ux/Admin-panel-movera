@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useRecords } from "../api/hooks";
 import { DataTable } from "../ui/DataTable";
+import { SensitiveValue } from "../ui/SensitiveValue";
 
 const VIEWS = [
   { id: "all", label: "All" },
@@ -34,7 +35,7 @@ export function DriversPage() {
       </div>
       <DataTable
         head={["Driver", "Name", "Phone", "Status", "Zone", "Documents"]}
-        rows={rows.map((driver) => [driver.id, driver.name, driver.phone, driver.status, driver.zoneId, driver.kind ?? "needed"])}
+        rows={rows.map((driver) => [driver.id, driver.name, <SensitiveValue key={`${driver.id}-phone`} value={driver.phone} permission="drivers.viewSensitive" command="admin.driver.revealSensitive" targetId={driver.id} label="Phone" />, driver.status, driver.zoneId, driver.kind ?? "needed"])}
         state={drivers.isLoading ? "loading" : drivers.isError ? "error" : "ready"}
         onRetry={() => void drivers.refetch()}
         onRow={(index) => {

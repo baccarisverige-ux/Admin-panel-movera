@@ -2,7 +2,7 @@ import { catalogFor, type CatalogEntry } from "../data/catalog.ts";
 import { CURRENCY, TIME_ZONE } from "../domain/contract.ts";
 import { addAudit, assertWritable, findHit, loadDb, pause, readFault, resetDb, rowsFor, writeFault, type Fault } from "./demoStore.ts";
 import { ApiError, apiRequest } from "./httpClient.ts";
-import type { DemoDb, DemoRecord, InboxItem } from "./seed.ts";
+import type { DemoDb, DemoRecord, InboxItem, ZoneScope } from "./seed.ts";
 
 export type ApiEnv = {
   PROD: boolean;
@@ -30,8 +30,8 @@ export type AdminApi = {
   demo: boolean;
   ready: () => Promise<{ currency: typeof CURRENCY; timeZone: typeof TIME_ZONE; demo: boolean }>;
   page: (pageId: string) => Promise<PageResult>;
-  list: (name: string, scope: string | null) => Promise<DemoRecord[]>;
-  search: (query: string) => Promise<{ kind: string; id: string; label: string; path: string }[]>;
+  list: (name: string, scope: ZoneScope) => Promise<DemoRecord[]>;
+  search: (query: string, scope: ZoneScope) => Promise<{ kind: string; id: string; label: string; path: string }[]>;
   command: (input: CommandInput) => Promise<{ message: string; db: DemoDb }>;
   reset: () => Promise<DemoDb>;
   getFault: () => Promise<Fault>;
@@ -65,9 +65,9 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       if (fault === "offline") assertWritable(fault);
       return rowsFor(loadDb(), name, scope, fault);
     },
-    async search(query) {
+    async search(query, scope) {
       await pause(delayMs, "none");
-      return findHit(loadDb(), query);
+      return findHit(loadDb(), query, scope);
     },
     async command(input) {
       const fault = readFault();

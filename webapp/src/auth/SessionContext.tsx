@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AGENTS, IDLE_MS, isIdle, signIn, type Agent } from "./permissions";
 
 type SessionValue = {
@@ -19,14 +20,31 @@ function readAgents(): Agent[] {
   const raw = localStorage.getItem(AGENTS_KEY);
   if (!raw) return AGENTS;
   try {
-    const parsed = JSON.parse(raw) as Agent[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : AGENTS;
+    const parsed = JSON.parse(raw) as Partial<Agent>[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return AGENTS;
+    return parsed
+      .filter((item): item is Partial<Agent> & Pick<Agent, "id" | "email" | "name" | "role"> =>
+        typeof item.id === "string" && typeof item.email === "string" && typeof item.name === "string" && typeof item.role === "string",
+      )
+      .map((item) => {
+        const fallback = AGENTS.find((agent) => agent.id === item.id || agent.email === item.email);
+        return {
+          ...(fallback ?? AGENTS[0]!),
+          ...item,
+          password: item.password ?? fallback?.password ?? "movera",
+          code: item.code ?? fallback?.code ?? "123456",
+          active: item.active ?? true,
+          presence: item.presence ?? "away",
+          scope: item.scope ?? fallback?.scope ?? { zones: "all", market: "SE-STO" as const },
+        } as Agent;
+      });
   } catch {
     return AGENTS;
   }
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [agents, setAgentsState] = useState<Agent[]>(() => readAgents());
   const [agent, setAgent] = useState<Agent | null>(() => {
     const id = localStorage.getItem(SESSION_KEY);
@@ -46,6 +64,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const last = Number(localStorage.getItem(ACTIVITY_KEY) || "0");
       if (isIdle(last, Date.now(), IDLE_MS)) {
         localStorage.removeItem(SESSION_KEY);
+        queryClient.clear();
         setAgent(null);
       }
     }, 30_000);
@@ -74,6 +93,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       signOut() {
         localStorage.removeItem(SESSION_KEY);
+        queryClient.clear();
         setAgent(null);
       },
       setAgents(next) {
@@ -81,7 +101,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setAgentsState(next);
       },
     }),
-    [agent, agents, error],
+    [agent, agents, error, queryClient],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

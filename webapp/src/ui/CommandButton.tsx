@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useCommands } from "../api/hooks";
+import { can } from "../auth/permissions";
+import { useSession } from "../auth/SessionContext";
 import { ACTION_REASONS } from "../domain/labels";
 import { commandById } from "../commands/registry";
 
@@ -37,7 +39,10 @@ export function CommandButton({
   "aria-label": ariaLabel,
 }: CommandButtonProps) {
   const commands = useCommands();
+  const session = useSession();
   const spec = commandById(command);
+  const denied = Boolean(spec && session.agent && !can(session.agent.role, spec.permission));
+  const disabledReason = !spec ? "Action is not registered." : denied ? "Your role cannot perform this action." : undefined;
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState(ACTION_REASONS[0]);
   const [typed, setTyped] = useState("");
@@ -64,8 +69,8 @@ export function CommandButton({
         className={className}
         type={type}
         aria-label={ariaLabel}
-        disabled={disabled || commands.phase === "submitting" || !spec}
-        title={title}
+        disabled={disabled || commands.phase === "submitting" || !spec || denied}
+        title={title ?? disabledReason}
         onClick={() => {
           if (!spec) return;
           if (spec.reason) setOpen(true);

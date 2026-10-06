@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
-import { can } from "./auth/permissions";
+import { can, canUseZone } from "./auth/permissions";
 import { SessionProvider, useSession } from "./auth/SessionContext";
 import { AppShell } from "./layout/AppShell";
 import { menuItem, pageForPath, type MenuItem } from "./nav";
@@ -103,7 +103,7 @@ function NoAccess() {
   );
 }
 
-function Shell({ page, children }: { page: MenuItem | undefined; children: ReactNode }) {
+function Shell({ page, children, forceNoAccess = false }: { page: MenuItem | undefined; children: ReactNode; forceNoAccess?: boolean }) {
   const { agent } = useSession();
   const shown: MenuItem = page ?? {
     id: "not-found",
@@ -116,7 +116,7 @@ function Shell({ page, children }: { page: MenuItem | undefined; children: React
   return (
     <AppShell page={shown}>
       <section className="page active" data-page={shown.id}>
-        {page && agent && !can(agent.role, page.permission) ? <NoAccess /> : children}
+        {forceNoAccess || (page && agent && !can(agent.role, page.permission)) ? <NoAccess /> : children}
       </section>
     </AppShell>
   );
@@ -127,8 +127,10 @@ function Authed() {
   const location = useLocation();
   if (!agent) return <LoginPage />;
   const page = pageForPath(location.pathname);
+  const scope = new URLSearchParams(location.search).get("scope");
+  const scopeDenied = Boolean(agent && scope && !canUseZone(agent, scope));
   return (
-    <Shell page={page}>
+    <Shell page={page} forceNoAccess={scopeDenied}>
       <Routes>
         <Route index element={<Screen id="dashboard" />} />
         <Route path="reports" element={<Screen id="reports" />} />

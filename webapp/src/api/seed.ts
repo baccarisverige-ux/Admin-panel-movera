@@ -256,12 +256,18 @@ export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
   };
 }
 
-export function inScope<T extends { zoneId: string }>(rows: T[], scope: string | null): T[] {
+export type ZoneScope = string | readonly string[] | null;
+
+export function inScope<T extends { zoneId: string }>(rows: T[], scope: ZoneScope): T[] {
   if (!scope) return rows;
+  if (Array.isArray(scope)) {
+    const allowed = new Set(scope);
+    return rows.filter((row) => allowed.has(row.zoneId));
+  }
   return rows.filter((row) => row.zoneId === scope);
 }
 
-export function searchDb(db: DemoDb, query: string): { kind: string; id: string; label: string; path: string }[] {
+export function searchDb(db: DemoDb, query: string, scope: ZoneScope = null): { kind: string; id: string; label: string; path: string }[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
   const hits: { kind: string; id: string; label: string; path: string }[] = [];
@@ -269,11 +275,11 @@ export function searchDb(db: DemoDb, query: string): { kind: string; id: string;
     const hay = `${row.id} ${row.name} ${row.phone} ${row.plate ?? ""} ${row.tripId ?? ""}`.toLowerCase();
     if (hay.includes(needle)) hits.push({ kind, id: row.id, label: `${row.name || row.plate || row.id}`, path });
   };
-  for (const row of db.drivers) consider("driver", row, `/drivers/${row.id}`);
-  for (const row of db.riders) consider("rider", row, `/riders/${row.id}`);
-  for (const row of db.trips) consider("trip", row, `/trips/${row.id}`);
-  for (const row of db.vehicles) consider("vehicle", row, `/vehicles/${row.id}`);
-  for (const row of db.reservations) consider("reservation", row, `/reservations/${row.id}`);
-  for (const row of db.tickets) consider("ticket", row, `/tickets/${row.id}`);
+  for (const row of inScope(db.drivers, scope)) consider("driver", row, `/drivers/${row.id}`);
+  for (const row of inScope(db.riders, scope)) consider("rider", row, `/riders/${row.id}`);
+  for (const row of inScope(db.trips, scope)) consider("trip", row, `/trips/${row.id}`);
+  for (const row of inScope(db.vehicles, scope)) consider("vehicle", row, `/vehicles/${row.id}`);
+  for (const row of inScope(db.reservations, scope)) consider("reservation", row, `/reservations/${row.id}`);
+  for (const row of inScope(db.tickets, scope)) consider("ticket", row, `/tickets/${row.id}`);
   return hits.slice(0, 8);
 }
