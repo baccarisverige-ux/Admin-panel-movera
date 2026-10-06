@@ -22,6 +22,7 @@ type CommandButtonProps = {
   scope?: string;
   expectedRev?: number;
   expectedSliceRev?: number;
+  idempotencyKey?: string;
   sliceKey?: string;
   value?: unknown;
   confirmTarget?: boolean;
@@ -47,6 +48,7 @@ export function CommandButton({
   scope,
   expectedRev,
   expectedSliceRev,
+  idempotencyKey,
   sliceKey,
   value,
   confirmTarget = true,
@@ -83,6 +85,7 @@ export function CommandButton({
       scope,
       expectedRev,
       expectedSliceRev,
+      idempotencyKey,
       sliceKey,
       value,
     }).then((result) => {
