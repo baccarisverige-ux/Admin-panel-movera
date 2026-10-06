@@ -25,16 +25,6 @@ export function Tabs({ tabs, activeId, onChange }: TabsProps) {
   const items = asItems(tabs);
 
   function selectTab(id: string) {
-    // Make the selected panel visible immediately. React then reconciles the
-    // controlled activeId from the parent. This avoids a transient hidden
-    // panel when a parent also updates URL/query state on the same click.
-    for (const item of items) {
-      const panel = document.getElementById(`tabpanel-${item.id}`);
-      if (!panel) continue;
-      const active = item.id === id;
-      panel.hidden = !active;
-      panel.classList.toggle("active", active);
-    }
     onChange(id);
   }
 
