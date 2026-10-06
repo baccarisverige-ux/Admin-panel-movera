@@ -79,7 +79,7 @@ const noPickup = overlap.find((zone) => zone.kind === "no_pickup");
 assert(noPickup && zoneRuleSummary(noPickup).includes("priority"), "test-point rule summary exposes applied priority");
 
 let book = emptyBook("nora");
-book = updateDraft(book, "op-norrmalm", [[59.33, 18.06], [59.331, 18.07], [59.332, 18.06]], "nora");
+book = updateDraft(book, "op-norrmalm", [[59.326, 18.061], [59.326, 18.08], [59.34, 18.08], [59.34, 18.061]], "nora");
 const early = publishZones(book, "lena");
 assert(early.error === "Send the draft for review before publishing.", "review comes first");
 const reviewed = submitReview(book, "nora");
