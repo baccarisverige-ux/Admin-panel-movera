@@ -148,7 +148,7 @@ export function DriverDetailPage() {
               const exempt = Boolean(driver.fleetId && id === "company_registration");
               return (
                 <li key={id}>
-                  <strong>{id.replaceAll("_", " ")}</strong> · {exempt ? "fleet exempt" : doc.status} · {doc.fileType} {doc.fileName}
+                  <span>{id} · latest review {doc.status}</span> · <strong>{id.replaceAll("_", " ")}</strong> · {exempt ? "fleet exempt" : doc.status} · {doc.fileType} {doc.fileName}
                   {doc.expiresAt ? ` · expires ${doc.expiresAt}` : ""}
                   {doc.reviewerId ? ` · reviewed by ${doc.reviewerId}` : ""}
                   {doc.note ? ` · ${doc.note}` : ""}
