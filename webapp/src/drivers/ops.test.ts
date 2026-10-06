@@ -45,7 +45,7 @@ assert(
   "independent driver requires all documents",
 );
 
-let fleetBook = approveRequiredDocuments(emptyDriverOpsBook(), fleet, "ida");
+const fleetBook = approveRequiredDocuments(emptyDriverOpsBook(), fleet, "ida");
 assert(driverOps(fleetBook, fleet).documents.company_registration.status === "needed", "fleet driver keeps company registration exempt");
 
 book = setBankReview(book, independent, "approved", "ida", "Matched holder");
