@@ -135,7 +135,7 @@ export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
     zoneId: zoneId(index),
     status: STATUSES[index % STATUSES.length],
     kind: DOC_STATES[index % DOC_STATES.length],
-    fleetId: index % 4 === 0 ? `F${(index % 3) + 1}` : null,
+    fleetId: index % 5 === 0 ? `F${(index % 3) + 1}` : null,
   }));
   const vehicleCategories = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet"] as const;
   const vehicles = Array.from({ length: 45 }, (_, index) => {
