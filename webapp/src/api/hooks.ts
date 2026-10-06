@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router";
 import { canUseZone } from "../auth/permissions.ts";
 import { useSession } from "../auth/SessionContext.tsx";
@@ -114,6 +114,24 @@ type Attempt = {
   expectedRev: number;
 };
 
+let globalCommandBusy = false;
+const globalCommandListeners = new Set<() => void>();
+
+function setGlobalCommandBusy(next: boolean) {
+  if (globalCommandBusy === next) return;
+  globalCommandBusy = next;
+  for (const listener of globalCommandListeners) listener();
+}
+
+function subscribeGlobalCommand(listener: () => void) {
+  globalCommandListeners.add(listener);
+  return () => globalCommandListeners.delete(listener);
+}
+
+function globalCommandSnapshot() {
+  return globalCommandBusy;
+}
+
 function newIdempotencyKey(action: string): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${action}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -125,6 +143,7 @@ export function useCommands() {
   const session = useSession();
   const [params] = useSearchParams();
   const lock = useRef(false);
+  const busy = useSyncExternalStore(subscribeGlobalCommand, globalCommandSnapshot, globalCommandSnapshot);
   const lastAttempt = useRef<Attempt | null>(null);
   const [phase, setPhase] = useState<"idle" | "submitting" | "unknown" | "committed" | "rejected" | "pending_approval">("idle");
   const [message, setMessage] = useState("");
@@ -132,7 +151,7 @@ export function useCommands() {
   async function run(id: string, extra: Partial<CommandInput> = {}) {
     const spec = commandById(id);
     if (!spec) throw new Error(`Unknown command ${id}`);
-    if (lock.current) return undefined;
+    if (lock.current || globalCommandBusy) return undefined;
     const publicPick = id === "admin.auth.pickAgent";
     if (!session.agent && !publicPick) {
       setPhase("rejected");
@@ -146,6 +165,7 @@ export function useCommands() {
     }
 
     lock.current = true;
+    setGlobalCommandBusy(true);
     setPhase("submitting");
     setMessage("");
 
@@ -214,10 +234,11 @@ export function useCommands() {
       return undefined;
     } finally {
       lock.current = false;
+      setGlobalCommandBusy(false);
     }
   }
 
-  return { run, phase, message };
+  return { run, phase, message, busy };
 }
 
 export function useCommand(action: string) {
