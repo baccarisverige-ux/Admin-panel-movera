@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useAudit, useRecords, useSlice } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
@@ -38,7 +38,12 @@ export function DriverDetailPage() {
   const incidents = useRecords("incidents", null);
   const audit = useAudit();
   const store = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
-  const tab = params.get("tab") ?? "overview";
+  const [tab, setTab] = useState(() => params.get("tab") ?? "overview");
+  useEffect(() => {
+    const restore = () => setTab(new URLSearchParams(window.location.search).get("tab") ?? "overview");
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
   const [reviewNote, setReviewNote] = useState("");
   const [privateNote, setPrivateNote] = useState("");
   const [notice, setNotice] = useState("");
@@ -131,6 +136,7 @@ export function DriverDetailPage() {
         tabs={TABS}
         activeId={tab}
         onChange={(id) => {
+          setTab(id);
           const next = new URLSearchParams(params);
           next.set("tab", id);
           setParams(next);
