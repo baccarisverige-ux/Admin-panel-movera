@@ -45,12 +45,15 @@ function closedRing(points: [number, number][]): [number, number][] {
   return ring;
 }
 
-function zonesGeo(zones: ZoneShape[], selectedId: string): GeoJSON.FeatureCollection {
+function zonesGeo(zones: ZoneShape[], selectedId: string, layers: ZoneLayers): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   const ordered = [...zones].sort((left, right) => Number(left.kind !== "service") - Number(right.kind !== "service"));
   for (const zone of ordered) {
     if (zone.archived) continue;
-    const color = ZONE_COLOR[zone.kind];
+    if (zone.kind === "pickup" && !layers.pickups) continue;
+    if (zone.kind === "boost" && !layers.boosts) continue;
+    if (zone.kind === "event" && !layers.events) continue;
+    const color = zone.color || ZONE_COLOR[zone.kind];
     const selected = zone.id === selectedId ? 1 : 0;
     if (zone.kind === "pickup") {
       const [lat, lng] = zone.points[0] ?? [59.33, 18.06];
@@ -63,6 +66,7 @@ function zonesGeo(zones: ZoneShape[], selectedId: string): GeoJSON.FeatureCollec
         geometry: { type: "Polygon", coordinates: [closedRing(zone.points), ...holes] },
       });
     }
+    if (!layers.pickups) continue;
     for (const pickup of zone.pickups) {
       features.push({
         type: "Feature",
@@ -74,12 +78,29 @@ function zonesGeo(zones: ZoneShape[], selectedId: string): GeoJSON.FeatureCollec
   return { type: "FeatureCollection", features };
 }
 
-function activityGeo(layers: ZoneLayers): GeoJSON.FeatureCollection {
+function activityVisible(kind: ReturnType<typeof activityPoints>[number]["kind"], layers: ZoneLayers): boolean {
+  if (kind === "driver") return layers.drivers;
+  if (kind === "trip") return layers.trips;
+  if (kind === "request") return layers.requests;
+  if (kind === "queue") return layers.queue;
+  if (kind === "demand_hour") return layers.demandHour;
+  return layers.demand7d;
+}
+
+function activityGeo(layers: ZoneLayers, demand: boolean): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = activityPoints()
-    .filter((item) => (item.kind === "driver" ? layers.drivers && item.online : item.kind === "trip" ? layers.trips : layers.queue))
+    .filter((item) => {
+      const isDemand = item.kind === "demand_hour" || item.kind === "demand_7d";
+      return isDemand === demand && activityVisible(item.kind, layers) && (item.kind !== "driver" || item.online);
+    })
     .map((item) => ({
       type: "Feature",
-      properties: { name: item.name, kind: item.kind },
+      properties: {
+        name: item.name,
+        kind: item.kind,
+        stale: item.stale ? 1 : 0,
+        weight: item.weight ?? 1,
+      },
       geometry: { type: "Point", coordinates: [item.lng, item.lat] },
     }));
   return { type: "FeatureCollection", features };
@@ -184,7 +205,7 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
     };
     map.on("load", () => {
       if (!alive) return;
-      map.addSource("zones", { type: "geojson", data: zonesGeo(zonesRef.current, selectedRef.current) });
+      map.addSource("zones", { type: "geojson", data: zonesGeo(zonesRef.current, selectedRef.current, layers) });
       map.addLayer({
         id: "zones-fill",
         type: "fill",
@@ -212,16 +233,58 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
         filter: ["==", ["geometry-type"], "Point"],
         paint: { "circle-color": ["get", "color"], "circle-radius": 6, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" },
       });
-      map.addSource("activity", { type: "geojson", data: activityGeo({ drivers: true, trips: true, queue: true }) });
+      map.addSource("activity", {
+        type: "geojson",
+        data: activityGeo(layers, false),
+        cluster: true,
+        clusterRadius: 35,
+        clusterMaxZoom: 13,
+      });
+      map.addLayer({
+        id: "activity-cluster",
+        type: "circle",
+        source: "activity",
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-radius": ["step", ["get", "point_count"], 14, 10, 18, 30, 22],
+          "circle-color": "#5E6B66",
+          "circle-opacity": 0.82,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      map.addLayer({
+        id: "activity-cluster-count",
+        type: "symbol",
+        source: "activity",
+        filter: ["has", "point_count"],
+        layout: { "text-field": ["get", "point_count_abbreviated"], "text-size": 11 },
+        paint: { "text-color": "#ffffff" },
+      });
       map.addLayer({
         id: "activity-dot",
         type: "circle",
         source: "activity",
+        filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": 6,
-          "circle-color": ["match", ["get", "kind"], "driver", "#1FA463", "trip", "#111614", "queue", "#C2453A", "#5E6B66"],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
+          "circle-color": ["match", ["get", "kind"], "driver", "#1FA463", "trip", "#111614", "request", "#D08A1E", "queue", "#C2453A", "#5E6B66"],
+          "circle-opacity": ["case", ["==", ["get", "stale"], 1], 0.35, 0.95],
+          "circle-stroke-width": ["case", ["==", ["get", "stale"], 1], 3, 2],
+          "circle-stroke-color": ["case", ["==", ["get", "stale"], 1], "#D08A1E", "#ffffff"],
+        },
+      });
+      map.addSource("demand", { type: "geojson", data: activityGeo(layers, true) });
+      map.addLayer({
+        id: "demand-heat",
+        type: "heatmap",
+        source: "demand",
+        maxzoom: 15,
+        paint: {
+          "heatmap-weight": ["interpolate", ["linear"], ["get", "weight"], 0, 0, 5, 1],
+          "heatmap-intensity": 0.8,
+          "heatmap-radius": 28,
+          "heatmap-opacity": 0.62,
         },
       });
       paintLabels(map);
@@ -270,7 +333,7 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
       const [lat, lng] = centroid(zone.points);
       const element = document.createElement("div");
       element.className = "zone-label";
-      element.style.borderColor = ZONE_COLOR[zone.kind];
+      element.style.borderColor = zone.color || ZONE_COLOR[zone.kind];
       element.style.pointerEvents = "none";
       element.textContent = text;
       markersRef.current.push(new maplibregl.Marker({ element, anchor: "center" }).setLngLat([lng, lat]).addTo(map));
@@ -280,14 +343,18 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
   useEffect(() => {
     const map = mapRef.current;
     const source = map?.getSource("zones");
-    if (source && "setData" in source) (source as GeoJSONSource).setData(zonesGeo(zones, selectedId));
+    if (source && "setData" in source) (source as GeoJSONSource).setData(zonesGeo(zones, selectedId, layers));
     if (map?.isStyleLoaded()) paintLabels(map);
   }, [zones, selectedId]);
 
   useEffect(() => {
-    const source = mapRef.current?.getSource("activity");
-    if (source && "setData" in source) (source as GeoJSONSource).setData(activityGeo(layers));
-  }, [layers]);
+    const activity = mapRef.current?.getSource("activity");
+    if (activity && "setData" in activity) (activity as GeoJSONSource).setData(activityGeo(layers, false));
+    const demand = mapRef.current?.getSource("demand");
+    if (demand && "setData" in demand) (demand as GeoJSONSource).setData(activityGeo(layers, true));
+    const zonesSource = mapRef.current?.getSource("zones");
+    if (zonesSource && "setData" in zonesSource) (zonesSource as GeoJSONSource).setData(zonesGeo(zones, selectedId, layers));
+  }, [layers, selectedId, zones]);
 
   useEffect(() => {
     const draw = drawRef.current;
@@ -372,12 +439,13 @@ function GoogleDraw({ zones, selectedId, mode, layers, focus, selectionNonce, on
     if (!map) return;
     const paint = () => {
       map.data.forEach((feature) => map.data.remove(feature));
-      map.data.addGeoJson(zonesGeo(zonesRef.current, selectedRef.current));
+      map.data.addGeoJson(zonesGeo(zonesRef.current, selectedRef.current, layers));
       map.data.addGeoJson(activityGeo(layers));
       map.data.setStyle((feature) => ({
-        fillColor: String(feature.getProperty("color") ?? "#1FA463"),
+        fillColor: String(feature.getProperty("color") ?? (feature.getProperty("kind") === "request" ? "#D08A1E" : "#1FA463")),
         strokeColor: String(feature.getProperty("color") ?? "#111614"),
-        fillOpacity: feature.getProperty("kind") === "service" ? 0.22 : 0.78,
+        fillOpacity: feature.getProperty("kind") === "service" ? 0.22 : feature.getProperty("stale") === 1 ? 0.28 : 0.72,
+        strokeOpacity: feature.getProperty("stale") === 1 ? 0.45 : 0.9,
         strokeWeight: feature.getProperty("selected") === 1 ? 4 : 2,
       }));
     };
