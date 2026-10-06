@@ -61,7 +61,7 @@ test("R10 payout requires reviewed bank and stays paid once", async ({ page }) =
   await page.getByLabel("Bank review note").fill("Account holder and IBAN verified");
   await page.getByRole("button", { name: "Approve bank" }).click();
   await confirm(page);
-  await expect(page.getByText("Bank details approved for D0001.")).toBeVisible();
+  await expect(page.getByText("Bank details approved.")).toBeVisible();
 
   await page.getByRole("button", { name: "Mark paid" }).click();
   await confirm(page);
