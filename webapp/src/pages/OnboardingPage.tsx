@@ -34,7 +34,9 @@ export function OnboardingPage() {
   const [notice, setNotice] = useState("Application is pending. Review the required documents, bank details and linked vehicle before activation.");
 
   const queue = useMemo(
-    () => (drivers.data ?? []).filter((driver) => driver.status === "pending" || driver.status === "on_hold"),
+    () => (drivers.data ?? [])
+      .filter((driver) => driver.status === "pending" || driver.status === "on_hold")
+      .sort((left, right) => Number(Boolean(left.fleetId)) - Number(Boolean(right.fleetId)) || left.id.localeCompare(right.id)),
     [drivers.data],
   );
 
@@ -202,7 +204,7 @@ export function OnboardingPage() {
             expectedSliceRev={store.value.draftRev}
             sliceKey="driverOps"
             value={approveRequiredDocuments(store.value, driverSeed, agent?.id ?? "")}
-            onDone={() => setNotice("All remaining required documents were approved.")}
+            onDone={() => setNotice("Documents approved.")}
           >
             Approve remaining
           </CommandButton>
