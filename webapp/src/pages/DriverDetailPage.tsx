@@ -59,6 +59,17 @@ export function DriverDetailPage() {
       </div>
     );
   }
+  if (agent?.scope.fleetPartnerId && driver.fleetId !== agent.scope.fleetPartnerId) {
+    return (
+      <div className="page-heading">
+        <div>
+          <h2>No access</h2>
+          <p>This driver belongs to another fleet partner.</p>
+          <Link to="/drivers">Back to drivers</Link>
+        </div>
+      </div>
+    );
+  }
 
   const driverSeed = { id: driver.id, name: driver.name, fleetId: driver.fleetId };
   const ops = driverOps(store.value, driverSeed);
@@ -132,7 +143,7 @@ export function DriverDetailPage() {
             {accountAction("admin.driver.activate", "active", "Activate", Boolean(activationIssue) || driver.status === "active")}
             {accountAction("admin.driver.onHold", "on_hold", "Put on hold", driver.status === "on_hold" || driver.status === "suspended")}
             {accountAction("admin.driver.suspend", "suspended", "Suspend", driver.status !== "active" && driver.status !== "on_hold")}
-            {accountAction("admin.driver.reactivate", "active", "Reactivate", driver.status !== "suspended" && driver.status !== "on_hold")}
+            {accountAction("admin.driver.reactivate", "active", "Reactivate", Boolean(activationIssue) || (driver.status !== "suspended" && driver.status !== "on_hold"))}
           </div>
           {ops.accountReason ? <p className="state-line">Latest account reason: {ops.accountReason}</p> : null}
         </TabPanel>
