@@ -1,5 +1,7 @@
+import { useAdminApi } from "../api/AdminApiContext";
+import { useFreshness } from "../api/hooks";
 const INTEGRATIONS = [
-  ["Maps", "OpenStreetMap", "Connected"],
+  ["Maps", "OpenStreetMap", "Configured tile provider; availability not probed"],
   ["Google Maps key", "empty", "Not connected"],
   ["SMS", "6-digit demo code", "Simulated"],
   ["Payouts", "Demo ledger", "Simulated"],
@@ -7,6 +9,7 @@ const INTEGRATIONS = [
 ] as const;
 
 export function SystemPage() {
+  const api=useAdminApi(); const freshness=useFreshness();
   return (
     <>
       <div className="page-heading">
@@ -20,7 +23,7 @@ export function SystemPage() {
           <li key={name}>{name}: {value} · {state}</li>
         ))}
       </ul>
-      <p className="state-line">Production build refuses the fixture adapter. This screen cannot run a query.</p>
+      <p className="state-line">Transport: {api.kind} · Simulation: {api.demo ? "yes" : "no"} · Data updated {freshness.data ?? "unavailable"}. External SMS, payout and mobile delivery are not verified.</p>
     </>
   );
 }

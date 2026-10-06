@@ -1,42 +1,8 @@
 import { useState } from "react";
-import { toCsv } from "../reports/csv";
-import { rowsInRange, type ReportRow } from "../reports/range";
-
-const ALL: ReportRow[] = [
-  { date: "2026-09-01", zone: "Solna", trips: "3", fare: "800 kr" },
-  { date: "2026-10-01", zone: "Norrmalm", trips: "42", fare: "12 400 kr" },
-  { date: "2026-10-04", zone: "=cmd", trips: "1", fare: "+100" },
-];
-
-export function ReportsPage() {
-  const [from, setFrom] = useState("2026-10-01");
-  const [to, setTo] = useState("2026-10-05");
-  const slice = rowsInRange(ALL, from, to);
-  const csv = toCsv([["Date", "Zone", "Trips", "Fare"], ...slice.rows.map((row) => [row.date, row.zone, row.trips, row.fare])]);
-
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h2>Reports</h2>
-          <p>Only rows inside the dates are exported. Formula cells stay guarded.</p>
-        </div>
-      </div>
-      <article className="panel">
-        <label>
-          From
-          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-        </label>
-        <label>
-          To
-          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-        </label>
-        <p>{slice.error ?? `${slice.rows.length} rows`}</p>
-        <pre>{csv}</pre>
-        <a className="primary-btn" href={`data:text/csv,${encodeURIComponent(csv)}`} download="movera-report.csv">
-          Download CSV
-        </a>
-      </article>
-    </>
-  );
+import { emptyReports, reportRows, reportExport, stockholmDay, useRecords, useSlice, type ReportFilter, type ReportsBook } from "../api/hooks";
+import { useSession } from "../auth/SessionContext";
+import { CommandButton } from "../ui/CommandButton";
+import { DataTable } from "../ui/DataTable";
+export function ReportsPage(){const {agent}=useSession();const trips=useRecords("trips");const zones=useRecords("zones");const store=useSlice<ReportsBook>("reportOps",emptyReports());const today=stockholmDay(new Date().toISOString());const [filter,setFilter]=useState<ReportFilter>({from:today.slice(0,7)+"-01",to:today,zone:"",status:""});const [notice,setNotice]=useState("");const result=reportRows(trips.data??[],filter);const prepared=reportExport(store.value,trips.data??[],filter,agent?.id??"",crypto.randomUUID());const jobs=store.value.jobs.filter(j=>j.actor===agent?.id);
+return <><div className="page-heading"><div><h2>Reports</h2><p>Scoped trip records by creation date in Europe/Stockholm. CSV excludes personal details and guards formula cells. Simulation export snapshots expire after 15 minutes.</p></div></div><p role="status">{notice}</p>{trips.error?<p role="alert">{trips.error.message}</p>:null}<div className="field-grid"><label>From<input type="date" value={filter.from} onChange={e=>setFilter({...filter,from:e.target.value})}/></label><label>To<input type="date" value={filter.to} onChange={e=>setFilter({...filter,to:e.target.value})}/></label><label>Report zone<select value={filter.zone} onChange={e=>setFilter({...filter,zone:e.target.value})}><option value="">All permitted zones</option>{zones.data?.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}</select></label><label>Trip status<select value={filter.status} onChange={e=>setFilter({...filter,status:e.target.value})}><option value="">All statuses</option>{Array.from(new Set(trips.data?.map(t=>t.status))).map(s=><option key={s}>{s}</option>)}</select></label></div><p role="alert">{result.error}</p><p>{result.rows.length} trips · {result.undated} records excluded because their creation date is unavailable.</p><DataTable head={["Trip","Zone","Status","Fare öre"]} rows={result.rows.map(r=>[r.id,r.zoneId,r.status,String(r.fareOre??0)])}/><CommandButton command="admin.report.export" targetId="trip-report" sliceKey="reportOps" value={prepared.book} expectedSliceRev={store.value.draftRev} confirmTarget={false} disabled={trips.isLoading||store.loading||Boolean(result.error)} onDone={()=>setNotice("Export snapshot ready.")}>Create CSV export</CommandButton><ul aria-label="Report exports">{jobs.map(j=><li key={j.id}>{j.createdAt} · {j.rows} rows · {j.state} · expires {j.expiresAt} {Date.parse(j.expiresAt)>Date.now()?<a className="secondary-btn" download={`movera-${j.id}.csv`} href={`data:text/csv;charset=utf-8,${encodeURIComponent(j.csv)}`}>Download CSV</a>:"Expired"}</li>)}</ul></>;
 }

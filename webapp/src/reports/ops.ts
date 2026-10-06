@@ -1,0 +1,9 @@
+import type { DemoRecord } from "../api/seed.ts";
+import {toCsv} from "./csv.ts";
+export type ReportFilter={from:string;to:string;zone:string;status:string};
+export type ExportJob={id:string;actor:string;createdAt:string;expiresAt:string;filter:ReportFilter;rows:number;csv:string;state:"ready"};
+export type ReportsBook={draftRev:number;jobs:ExportJob[]};
+export function emptyReports():ReportsBook{return {draftRev:1,jobs:[]};}
+export function stockholmDay(value:string):string {const d=new Date(value);if(!Number.isFinite(d.getTime()))return "";return new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Stockholm",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);}
+export function reportRows(rows:readonly DemoRecord[],f:ReportFilter):{rows:DemoRecord[];error?:string;undated:number}{if(!/^\d{4}-\d{2}-\d{2}$/.test(f.from)||!/^\d{4}-\d{2}-\d{2}$/.test(f.to)||f.from>f.to)return {rows:[],undated:0,error:"Choose a valid ordered date range."};return {undated:rows.filter(r=>!r.createdAt).length,rows:rows.filter(r=>{const day=r.createdAt?stockholmDay(r.createdAt):"";return day>=f.from&&day<=f.to&&(!f.zone||r.zoneId===f.zone)&&(!f.status||r.status===f.status);})};}
+export function reportExport(book:ReportsBook,rows:readonly DemoRecord[],filter:ReportFilter,actor:string,id:string):{book:ReportsBook;error?:string}{const selected=reportRows(rows,filter);if(selected.error)return {book,error:selected.error};if(book.jobs.some(j=>j.id===id))return {book};const csv=toCsv([["Trip","Stockholm date","Zone","Status","Fare öre"],...selected.rows.map(r=>[r.id,stockholmDay(r.createdAt!),r.zoneId,r.status,String(r.fareOre??0)])]);const job:ExportJob={id,actor,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+15*60000).toISOString(),filter:{...filter},rows:selected.rows.length,csv,state:"ready"};return {book:{draftRev:book.draftRev+1,jobs:[job,...book.jobs].slice(0,50)}};}

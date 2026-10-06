@@ -1,3 +1,4 @@
+import { emptyReports, reportExport, type ReportsBook } from "../reports/ops.ts";
 import { emptyGrowth, saveGrowthRule, redeemGrowth, moderateGrowth, growthReviews, type GrowthBook } from "../growth/ops.ts";
 import { emptyStudio, changeStudio, studioSlot, type StudioBook } from "../content/studio.ts";
 import { emptyCampaigns, changeCampaign, type CampaignBook } from "../messages/ops.ts";
@@ -380,6 +381,18 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         }
         if (result.error) reject(422,result.error);
         raw = { ...raw, sliceKey: "growthOps", value: result.book };
+      }
+
+      if (raw.action === "admin.report.export") {
+        const book = (db.slices.reportOps ?? emptyReports()) as ReportsBook;
+        const proposed = raw.value as ReportsBook | undefined;
+        const job = proposed?.jobs[0];
+        if (!job || job.actor !== raw.actorId) reject(422,"Invalid export request.");
+        const visible = db.trips.filter(r=>scopeAllowed(actorScope,r.zoneId) && (!raw.scope || raw.scope === "all" || r.zoneId === raw.scope));
+        if (job!.filter.zone && !scopeAllowed(actorScope,job!.filter.zone)) reject(403,"Report zone is outside your scope.");
+        const result = reportExport(book,visible,job!.filter,raw.actorId,job!.id);
+        if (result.error) reject(422,result.error);
+        raw = { ...raw, sliceKey: "reportOps", value: result.book };
       }
 
       const injectedStatus = faultStatus(fault);

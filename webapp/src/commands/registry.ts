@@ -39,6 +39,7 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.studio.save", label: "Save content draft", reason: true, permission: "settings.edit" },
   { id: "admin.studio.publish", label: "Publish content", reason: true, permission: "settings.publish" },
   { id: "admin.studio.rollback", label: "Roll back content", reason: true, permission: "settings.publish" },
+  { id: "admin.report.export", label: "Create scoped report export", reason: true, permission: "overview.read" },
   { id: "admin.content.slot", label: "Choose content slot", reason: false, permission: "settings.read" },
   { id: "admin.content.publish", label: "Publish content", reason: true, permission: "settings.publish" },
   { id: "admin.content.rollback", label: "Roll back content", reason: true, permission: "settings.publish" },
