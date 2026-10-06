@@ -472,21 +472,46 @@ export type ZoneImpact = {
 };
 
 export function activityPoints(): ActivityPoint[] {
-  return [
+  const points: ActivityPoint[] = [
     { id: "drv-1", kind: "driver", name: "Erik Lind", lat: 59.335, lng: 18.06, online: true },
-    { id: "drv-2", kind: "driver", name: "Sara Berg", lat: 59.31, lng: 18.06, online: true },
+    { id: "drv-2", kind: "driver", name: "Sara Berg", lat: 59.31, lng: 18.06, online: true, stale: true },
     { id: "drv-3", kind: "driver", name: "Noah Ek", lat: 59.34, lng: 18.1, online: true },
     { id: "drv-4", kind: "driver", name: "Maja Holm", lat: 59.332, lng: 18.02, online: false },
     { id: "drv-5", kind: "driver", name: "Lars Dahl", lat: 59.355, lng: 18.05, online: true },
     { id: "drv-6", kind: "driver", name: "Ingrid Sand", lat: 59.335, lng: 17.93, online: true },
     { id: "trip-1", kind: "trip", name: "T0001", lat: 59.336, lng: 18.064, online: true },
     { id: "trip-2", kind: "trip", name: "T0008", lat: 59.338, lng: 18.095, online: true },
-    { id: "trip-3", kind: "trip", name: "T0014", lat: 59.648, lng: 17.91, online: true },
+    { id: "trip-3", kind: "trip", name: "T0014", lat: 59.648, lng: 17.91, online: true, stale: true },
     { id: "res-1", kind: "trip", name: "B0003", lat: 59.348, lng: 18.04, online: true },
+    { id: "req-1", kind: "request", name: "Open request 1", lat: 59.337, lng: 18.08, online: true },
+    { id: "req-2", kind: "request", name: "Open request 2", lat: 59.316, lng: 18.07, online: true },
     { id: "q-1", kind: "queue", name: "Queue 1", lat: 59.64, lng: 17.9, online: true },
     { id: "q-2", kind: "queue", name: "Queue 2", lat: 59.655, lng: 17.93, online: true },
     { id: "q-3", kind: "queue", name: "Queue 3", lat: 59.358, lng: 17.85, online: true },
   ];
+  for (let index = 0; index < 18; index += 1) {
+    points.push({
+      id: `d1-${index}`,
+      kind: "demand_hour",
+      name: "Demand last hour",
+      lat: 59.31 + (index % 6) * 0.012,
+      lng: 18.02 + Math.floor(index / 6) * 0.03,
+      online: true,
+      weight: 1 + (index % 4),
+    });
+  }
+  for (let index = 0; index < 24; index += 1) {
+    points.push({
+      id: `d7-${index}`,
+      kind: "demand_7d",
+      name: "Demand 7 days",
+      lat: 59.29 + (index % 8) * 0.015,
+      lng: 17.98 + Math.floor(index / 8) * 0.045,
+      online: true,
+      weight: 1 + (index % 5),
+    });
+  }
+  return points;
 }
 
 function countInside(zones: ZoneShape[], kind: ActivityPoint["kind"]): number {
