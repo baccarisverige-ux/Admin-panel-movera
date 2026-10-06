@@ -470,7 +470,7 @@ export function ConfigPage() {
           </label>
           <label>
             Preview app
-            <select value={context.app ?? "rider"} onChange={(event) => setContext((current) => ({ ...current, app: event.target.value as "rider" | "driver" }))}>
+            <select aria-label="Preview app" value={context.app ?? "rider"} onChange={(event) => setContext((current) => ({ ...current, app: event.target.value as "rider" | "driver" }))}>
               <option value="rider">Rider</option>
               <option value="driver">Driver</option>
             </select>
