@@ -12,7 +12,7 @@ type TabsProps = {
 };
 
 export function tabIdFromLabel(label: string): string {
-  return label.toLowerCase().replace(/s+/g, "-");
+  return label.toLowerCase().replace(/\s+/g, "-");
 }
 
 function asItems(tabs: TabsProps["tabs"]): TabItem[] {
@@ -24,16 +24,14 @@ function asItems(tabs: TabsProps["tabs"]): TabItem[] {
 export function Tabs({ tabs, activeId, onChange }: TabsProps) {
   const items = asItems(tabs);
   return (
-    <div className="tabs" role="tablist">
+    <div className="tabs">
       {items.map((tab) => (
         <button
           data-command="admin.tabs.select"
           key={tab.id}
           type="button"
-          role="tab"
-          aria-selected={tab.id === activeId}
+          aria-pressed={tab.id === activeId}
           aria-controls={`tabpanel-${tab.id}`}
-          id={`tab-${tab.id}`}
           className={tab.id === activeId ? "active" : undefined}
           data-tab={tab.id}
           onClick={() => onChange(tab.id)}
@@ -57,9 +55,7 @@ export function TabPanel({ id, activeId, children }: TabPanelProps) {
     <div
       className={active ? "tab-panel active" : "tab-panel"}
       data-tab-panel={id}
-      role="tabpanel"
       id={`tabpanel-${id}`}
-      aria-labelledby={`tab-${id}`}
       hidden={!active}
     >
       {children}
