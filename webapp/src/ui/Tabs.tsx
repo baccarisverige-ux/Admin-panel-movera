@@ -29,13 +29,21 @@ export function Tabs({ tabs, activeId, onChange }: TabsProps) {
   }
 
   return (
-    <div className="tabs">
+    <div className="tabs" role="tablist" aria-label="Record sections">
       {items.map((tab) => (
         <button
           data-command="admin.tabs.select"
           key={tab.id}
           type="button"
-          aria-pressed={tab.id === activeId}
+          role="tab"
+          id={`tab-${tab.id}`}
+          tabIndex={tab.id === activeId ? 0 : -1}
+          aria-selected={tab.id === activeId}
+          onKeyDown={(event) => {
+            const index=items.findIndex(x=>x.id===tab.id);
+            const next=event.key==="ArrowRight"?(index+1)%items.length:event.key==="ArrowLeft"?(index+items.length-1)%items.length:event.key==="Home"?0:event.key==="End"?items.length-1:-1;
+            if(next<0)return;event.preventDefault();selectTab(items[next].id);document.getElementById(`tab-${items[next].id}`)?.focus();
+          }}
           aria-controls={`tabpanel-${tab.id}`}
           className={tab.id === activeId ? "active" : undefined}
           data-tab={tab.id}
@@ -59,6 +67,8 @@ export function TabPanel({ id, activeId, children }: TabPanelProps) {
   return (
     <div
       className={active ? "tab-panel active" : "tab-panel"}
+      role="tabpanel"
+      aria-labelledby={`tab-${id}`}
       data-tab-panel={id}
       id={`tabpanel-${id}`}
       hidden={!active}

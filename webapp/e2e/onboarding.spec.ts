@@ -31,12 +31,12 @@ test("onboarding approves documents and activates a driver", async ({ page }) =>
   await page.getByRole("cell", { name: "D0001" }).click();
   await expect(page).toHaveURL(/\/drivers\/D0001$/);
   await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
-  await page.getByRole("button", { name: "Documents" }).click();
+  await page.getByRole("tab", { name: "Documents" }).click();
   await expect(page).toHaveURL(/tab=documents/);
   const documents = page.locator('#tabpanel-documents');
   await expect(documents).toHaveClass(/active/);
   await expect(documents).not.toHaveAttribute('hidden', '');
   await expect(page.getByText("driver_license · latest review needed", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Vehicles" }).click();
+  await page.getByRole("tab", { name: "Vehicles" }).click();
   await expect(page.getByText(/No vehicle linked|ABC 123|MVR/)).toBeVisible();
 });

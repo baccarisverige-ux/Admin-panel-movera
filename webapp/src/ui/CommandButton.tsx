@@ -1,3 +1,4 @@
+import { useDialogFocus } from "./useDialogFocus";
 import { useState, type ReactNode } from "react";
 import { useCommands } from "../api/hooks";
 import type { CommandResult } from "../api/create";
@@ -70,6 +71,7 @@ export function CommandButton({
   const [reason, setReason] = useState(ACTION_REASONS[0]);
   const [typed, setTyped] = useState("");
   const mustType = confirmTarget ? (targetId ?? "") : "";
+  const dialogRoot=useDialogFocus(open,()=>setOpen(false));
   const confirmed = mustType.length === 0 || typed === mustType;
 
   function fire(chosen: string) {
@@ -106,7 +108,8 @@ export function CommandButton({
         aria-label={ariaLabel}
         disabled={disabled || commands.busy || commands.phase === "submitting" || !spec || denied}
         title={title ?? disabledReason}
-        onClick={() => {
+        onClick={(event) => {
+          event.currentTarget.focus();
           if (!spec) return;
           if (spec.reason) setOpen(true);
           else fire("No person affected");
@@ -116,7 +119,7 @@ export function CommandButton({
       </button>
       {commands.message ? <p className="state-line">{commands.message}</p> : null}
       {open ? (
-        <div className="modal open" role="presentation">
+        <div ref={dialogRoot} tabIndex={-1} className="modal open" role="dialog" aria-modal="true" aria-label={spec?.label}>
           <form
             className="modal-card"
             onSubmit={(event) => {
@@ -134,7 +137,7 @@ export function CommandButton({
             <p>This acts on {targetId ?? spec?.label}.</p>
             <label>
               Reason
-              <select value={reason} onChange={(event) => setReason(event.target.value as typeof reason)}>
+              <select aria-label="Reason" value={reason} onChange={(event) => setReason(event.target.value as typeof reason)}>
                 {ACTION_REASONS.map((item) => (
                   <option key={item}>{item}</option>
                 ))}

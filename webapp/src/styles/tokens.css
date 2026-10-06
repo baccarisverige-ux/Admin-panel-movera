@@ -1469,3 +1469,22 @@ img { max-width: 100%; }
     scroll-behavior: auto !important
   }
 }
+
+fieldset { min-width: 0; border: 0; padding: 0; margin: 0; }
+.panel, .field-grid > label, .stat-card { min-width: 0; overflow-wrap: anywhere; }
+.panel textarea { width: 100%; min-height: 88px; resize: vertical; }
+.panel pre { max-width: 100%; overflow: auto; }
+.modal-card { max-height: calc(100dvh - 32px); overflow: auto; }
+:focus-visible { outline: 3px solid #147a52; outline-offset: 3px; }
+[role="tabpanel"][hidden] { display: none !important; }
+@media (max-width: 430px) { .field-grid { grid-template-columns: minmax(0, 1fr); } .panel input, .panel select { max-width: 100%; } }
+
+@media (max-width: 1180px) {
+  .topbar { height: auto; min-height: 76px; flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+  .topbar > div:not(.topbar-actions) { flex: 1; min-width: 0; }
+  .topbar-actions { width: 100%; min-width: 0; flex-wrap: wrap; gap: 8px; }
+  .topbar-actions > select { max-width: 100%; }
+  .topbar .admin-profile { display: flex; width: 100%; min-width: 0; flex-wrap: wrap; }
+  .topbar .admin-profile > div:nth-child(2) { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .admin-profile span { overflow-wrap: anywhere; }
+}
