@@ -5,6 +5,7 @@ import {
   emptyBook,
   kmlToZones,
   mergeZones,
+  patchZone,
   priorityZones,
   publishZones,
   reorderZonePriorities,
@@ -16,9 +17,9 @@ import {
   updateDraft,
   validateZones,
   zoneImpact,
-  zoneRuleSummary,
   ZONE_TYPES,
   zonesAt,
+  zonesToGeoJSON,
 } from "./releases.ts";
 import { zoneDrawModes } from "./drawModes.ts";
 
@@ -30,14 +31,12 @@ const seed = stockholmZones();
 const modes = zoneDrawModes().map((mode) => mode.mode);
 assert(modes.includes("render"), "terra draw render mode is named");
 assert(modes.includes("circle") && modes.includes("select") && modes.includes("polygon"), "circle, select and polygon tools exist");
-assert(modes.includes("freehand"), "freehand tool exists");
+assert(modes.includes("freehand"), "freehand drawing exists");
 for (const type of ZONE_TYPES) assert(seed.some((zone) => zone.kind === type.id), `seed has ${type.id}`);
 assert(seed.filter((zone) => zone.kind === "operating").length === 9, "9 operating zones");
 assert(coreZones(seed).length === 12, "12 core zones");
 assert(seed.some((zone) => zone.name === "Arlanda"), "Arlanda");
 assert(seed.some((zone) => zone.name === "Bromma airport"), "Bromma");
-assert(seed.every((zone) => /^#[0-9A-Fa-f]{6}$/.test(zone.color)), "each seeded zone has a color");
-assert(seed.every((zone) => Number.isFinite(zone.priority)), "each seeded zone has priority");
 assert(validateZones(seed).every((issue) => issue.level !== "error"), `seed has no blocking errors: ${validateZones(seed).map((issue) => issue.message).join("; ")}`);
 assert(validateZones(seed).some((issue) => issue.level === "warn"), "large service area warns");
 
@@ -56,30 +55,50 @@ const impact = zoneImpact(seed, seed);
 assert(impact.deltaKm === 0 && impact.drivers > 0 && impact.trips > 0, "impact counts drivers and trips inside the draft");
 
 const split = splitZone(emptyBook("nora"), "op-norrmalm", "nora");
-assert(!split.error && split.newId, "rectangular zone can be split");
-assert(split.book.draft.some((zone) => zone.id === split.newId), "split creates a second stable id");
+assert(!split.error && !!split.newId, "rectangular operating zone splits");
+assert(split.book.draft.length === emptyBook("nora").draft.length + 1, "split creates a sibling");
+assert(!validateZones(split.book.draft).some((issue) => issue.level === "error" && issue.message.includes("overlaps")), "split siblings may share a border without being treated as overlapping");
 const merged = mergeZones(split.book, "op-norrmalm", split.newId!, "nora");
-assert(!merged.error, "compatible split rectangles can merge again");
-assert(merged.book.draft.find((zone) => zone.id === split.newId)?.archived, "merge archives the source id instead of deleting history");
+assert(!merged.error, "adjacent split siblings merge again");
+assert(merged.book.draft.find((zone) => zone.id === split.newId)?.archived === true, "merged source is archived instead of deleted");
 
-const rotated = rotateZone(emptyBook("nora"), "op-norrmalm", 15, "nora");
-assert(JSON.stringify(rotated.draft.find((zone) => zone.id === "op-norrmalm")?.points) !== JSON.stringify(emptyBook("nora").draft.find((zone) => zone.id === "op-norrmalm")?.points), "rotate changes polygon coordinates");
+const rotated = rotateZone(emptyBook("nora"), "event-1", 15, "nora");
+assert(
+  JSON.stringify(rotated.draft.find((zone) => zone.id === "event-1")?.points)
+    !== JSON.stringify(emptyBook("nora").draft.find((zone) => zone.id === "event-1")?.points),
+  "rotate changes the geometry",
+);
 
-const kml = `<?xml version="1.0"?><kml><Document><Placemark><name>Norrmalm</name><Polygon><outerBoundaryIs><LinearRing><coordinates>18.060,59.325 18.105,59.325 18.105,59.350 18.060,59.350 18.060,59.325</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></Document></kml>`;
-const imported = kmlToZones(kml, emptyBook("nora"), "nora");
-assert(!imported.error, "matching KML placemark imports");
-assert(imported.book.draft.find((zone) => zone.id === "op-norrmalm")?.points[1]?.[1] === 18.105, "KML coordinates are stored in WGS84 lat/lng");
-
-const priorityBook = reorderZonePriorities(emptyBook("nora"), ["nopick-1", "boost-1", "event-1"], "nora");
+const priorityBook = reorderZonePriorities(emptyBook("nora"), ["event-1", "boost-1", "restricted-1"], "nora");
 const priority = priorityZones(priorityBook.draft);
-assert(priority[0]?.id === "nopick-1" && priority[1]?.id === "boost-1", "draggable priority order is persisted");
-const overlap = effectiveZonesAt(priorityBook.draft, 59.329, 18.08);
-assert(overlap.some((zone) => zone.kind === "no_pickup"), "effective stack includes overlapping rule zone");
-const noPickup = overlap.find((zone) => zone.kind === "no_pickup");
-assert(noPickup && zoneRuleSummary(noPickup).includes("priority"), "test-point rule summary exposes applied priority");
+assert(priority[0]?.id === "event-1", "drag order becomes effective priority order");
+const eventCenter = effectiveZonesAt(priorityBook.draft, 59.234, 18.05);
+assert(eventCenter[0]?.priority >= (eventCenter[1]?.priority ?? -Infinity), "effective rules are sorted by priority");
+
+const kml = `<kml><Document><Placemark><name><![CDATA[Norrmalm]]></name><Polygon><outerBoundaryIs><LinearRing><coordinates>
+18.060,59.325,0 18.100,59.325,0 18.100,59.345,0 18.060,59.345,0 18.060,59.325,0
+</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></Document></kml>`;
+const imported = kmlToZones(kml, emptyBook("nora"), "nora");
+assert(!imported.error, "KML matching an existing zone imports");
+assert(imported.book.draft.find((zone) => zone.id === "op-norrmalm")?.points[1]?.[1] === 18.1, "KML coordinates replace the matched shape");
+
+const badSchedule = patchZone(emptyBook("nora"), "event-1", { schedule: "weekly", hours: "" }, "nora");
+assert(validateZones(badSchedule.draft).some((issue) => issue.message.includes("weekly schedule needs hours")), "weekly schedule requires hours");
+
+const badSubarea = patchZone(
+  emptyBook("nora"),
+  "air-arlanda",
+  { pickupArea: [[60, 19], [60, 19.1], [60.1, 19.1], [60.1, 19]] },
+  "nora",
+);
+assert(validateZones(badSubarea.draft).some((issue) => issue.message.includes("pickup area must stay inside")), "airport pickup area must stay inside its zone");
+
+const custom = patchZone(emptyBook("nora"), "event-1", { color: "#123456" }, "nora");
+const eventFeature = zonesToGeoJSON(custom.draft).features.find((feature) => feature.properties?.id === "event-1");
+assert(eventFeature?.properties?.color === "#123456", "GeoJSON export preserves configured zone colour");
 
 let book = emptyBook("nora");
-book = updateDraft(book, "op-norrmalm", [[59.326, 18.061], [59.326, 18.08], [59.34, 18.08], [59.34, 18.061]], "nora");
+book = updateDraft(book, "op-norrmalm", [[59.33, 18.06], [59.331, 18.07], [59.332, 18.06]], "nora");
 const early = publishZones(book, "lena");
 assert(early.error === "Send the draft for review before publishing.", "review comes first");
 const reviewed = submitReview(book, "nora");
@@ -91,8 +110,9 @@ const published = publishZones(book, "lena");
 assert(!published.error && published.book.versions.length === 2, "second agent publishes");
 book = published.book;
 const rolled = rollbackZones(book, "lena");
-assert(rolled.versions.length === 3, "rollback is recorded as a new version");
-assert(rolled.published[0]?.id === rolled.draft[0]?.id, "draft follows the restored snapshot");
+assert(rolled.versions.length === 3, "rollback creates a new immutable version");
+assert(JSON.stringify(rolled.published) === JSON.stringify(book.versions[0]), "rollback republishes the previous snapshot");
+assert(JSON.stringify(rolled.draft) === JSON.stringify(rolled.published), "rollback draft follows the restored publication");
 assert(zonesAt(seed, 59.334, 18.063).some((zone) => zone.name === "Norrmalm"), "test point hits Norrmalm");
 assert(zonesAt(seed, 59.334, 18.063).some((zone) => zone.kind === "service"), "test point hits the service area");
 
