@@ -2,7 +2,16 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useSession } from "../auth/SessionContext";
 import { zoneStore, useZoneUi } from "../zones/bookStore";
-import { RIDE_CATEGORIES, zoneAreaKm, zoneStatus, zoneTypeLabel, type ZoneShape } from "../zones/releases";
+import {
+  RIDE_CATEGORIES,
+  RIDE_OPTIONS,
+  ZONE_PAYMENT_METHODS,
+  ZONE_TYPES,
+  zoneAreaKm,
+  zoneStatus,
+  zoneTypeLabel,
+  type ZoneShape,
+} from "../zones/releases";
 import { PageHeading } from "../ui/PageHeading";
 import { CommandButton } from "../ui/CommandButton";
 import { TabPanel, Tabs } from "../ui/Tabs";
@@ -29,6 +38,7 @@ export function ZoneDetailPage() {
   const [pickupLat, setPickupLat] = useState("59.649");
   const [pickupLng, setPickupLng] = useState("17.930");
   const [pickupNotes, setPickupNotes] = useState("");
+  const [pickupPhoto, setPickupPhoto] = useState("");
   const zone = ui.book.draft.find((item) => item.id === zoneId);
 
   function save(patch: Partial<ZoneShape>) {
@@ -56,13 +66,36 @@ export function ZoneDetailPage() {
       <article className="panel">
         <TabPanel id="shape" activeId={tab}>
           <p className="state-line">Points: {zone.points.length}. Holes: {zone.holes.length}. Area: {zoneAreaKm(zone).toFixed(2)} km².</p>
-          <p className="state-line">Parent: {zone.parentId ?? "none"}. Draw the outline, cut a hole, or edit points on the zones map.</p>
+          <div className="field-grid">
+            <TextField label="Name" value={zone.name} onCommit={(name) => save({ name })} />
+            <TextField label="Code" value={zone.code} onCommit={(code) => save({ code })} />
+            <label>
+              Type
+              <select value={zone.kind} onChange={(event) => save({ kind: event.target.value as ZoneShape["kind"] })}>
+                {ZONE_TYPES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
+            </label>
+            <label>
+              Parent
+              <select value={zone.parentId ?? ""} onChange={(event) => save({ parentId: event.target.value || null })}>
+                <option value="">No parent</option>
+                {ui.book.draft.filter((item) => item.id !== zone.id && !item.archived).map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Colour
+              <input type="color" value={zone.color} onChange={(event) => save({ color: event.target.value })} />
+            </label>
+            <TextField label="Priority" value={String(zone.priority)} onCommit={(value) => save({ priority: Number(value) || 0 })} type="number" />
+            <TextField label="Notes" value={zone.notes} onCommit={(notes) => save({ notes })} />
+          </div>
+          <p className="state-line">Draw, freehand, rotate, merge, split, snap, cut holes and edit points from the map workspace.</p>
           <Link to="/zones">Edit shape on the map</Link>
         </TabPanel>
         <TabPanel id="settings" activeId={tab}>
           <div className="field-grid">
-            <TextField label="Name" value={zone.name} onCommit={(name) => save({ name })} />
-            <TextField label="Notes" value={zone.notes} onCommit={(notes) => save({ notes })} />
             <TextField label="Minimum app version" value={zone.minAppVersion} onCommit={(minAppVersion) => save({ minAppVersion })} />
             <TextField label="Suspended until" value={zone.suspendedUntil} onCommit={(suspendedUntil) => save({ suspendedUntil })} />
             <TextField label="Suspend reason" value={zone.suspendReason} onCommit={(suspendReason) => save({ suspendReason })} />
@@ -70,6 +103,7 @@ export function ZoneDetailPage() {
           <label className="check-row"><input type="checkbox" checked={zone.active} onChange={(event) => save({ active: event.target.checked })} /> Active</label>
           <label className="check-row"><input type="checkbox" checked={zone.cash} onChange={(event) => save({ cash: event.target.checked })} /> Cash allowed</label>
           <label className="check-row"><input type="checkbox" checked={zone.pinRequired} onChange={(event) => save({ pinRequired: event.target.checked })} /> PIN required</label>
+          <h4>Categories</h4>
           <div className="actions">
             {RIDE_CATEGORIES.map((category) => (
               <label key={category} className="check-row">
@@ -82,6 +116,38 @@ export function ZoneDetailPage() {
                   }}
                 />
                 {category}
+              </label>
+            ))}
+          </div>
+          <h4>Ride options</h4>
+          <div className="actions">
+            {RIDE_OPTIONS.map((option) => (
+              <label key={option} className="check-row">
+                <input
+                  type="checkbox"
+                  checked={zone.options.includes(option)}
+                  onChange={(event) => {
+                    const options = event.target.checked ? [...zone.options, option] : zone.options.filter((item) => item !== option);
+                    save({ options });
+                  }}
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+          <h4>Payment methods</h4>
+          <div className="actions">
+            {ZONE_PAYMENT_METHODS.map((method) => (
+              <label key={method} className="check-row">
+                <input
+                  type="checkbox"
+                  checked={zone.paymentMethods.includes(method)}
+                  onChange={(event) => {
+                    const paymentMethods = event.target.checked ? [...zone.paymentMethods, method] : zone.paymentMethods.filter((item) => item !== method);
+                    save({ paymentMethods });
+                  }}
+                />
+                {method}
               </label>
             ))}
           </div>
@@ -106,7 +172,10 @@ export function ZoneDetailPage() {
         <TabPanel id="pickup-points" activeId={tab}>
           <ul>
             {zone.pickups.length === 0 ? <li>No pickup points yet.</li> : zone.pickups.map((pickup) => (
-              <li key={pickup.id}>{pickup.name} · {pickup.lat.toFixed(5)}, {pickup.lng.toFixed(5)} · {pickup.instructions}</li>
+              <li key={pickup.id}>
+                {pickup.name} · {pickup.lat.toFixed(5)}, {pickup.lng.toFixed(5)} · {pickup.instructions}
+                {pickup.photoUrl ? ` · photo ${pickup.photoUrl}` : ""}
+              </li>
             ))}
           </ul>
           <div className="field-grid">
@@ -125,6 +194,10 @@ export function ZoneDetailPage() {
             <label>
               Pickup instructions
               <input value={pickupNotes} onChange={(event) => setPickupNotes(event.target.value)} />
+            </label>
+            <label>
+              Pickup photo URL
+              <input value={pickupPhoto} onChange={(event) => setPickupPhoto(event.target.value)} />
             </label>
           </div>
           <CommandButton
@@ -146,6 +219,10 @@ export function ZoneDetailPage() {
           >
             Add pickup
           </CommandButton>
+          <label className="check-row">
+            <input type="checkbox" checked={zone.pickupOnly} onChange={(event) => save({ pickupOnly: event.target.checked })} />
+            Only these pickup points
+          </label>
         </TabPanel>
         <TabPanel id="airport" activeId={tab}>
           <label className="check-row"><input type="checkbox" checked={zone.queueOn} onChange={(event) => save({ queueOn: event.target.checked })} /> Queue on</label>
@@ -153,6 +230,26 @@ export function ZoneDetailPage() {
             <TextField label="Max queue minutes" value={String(zone.maxQueueMin)} onCommit={(value) => save({ maxQueueMin: Number(value) || 0 })} />
             <TextField label="Queue fee öre" value={String(zone.queueFeeOre)} onCommit={(value) => save({ queueFeeOre: Number(value) || 0 })} />
             <TextField label="Terminals" value={zone.terminals} onCommit={(terminals) => save({ terminals })} />
+            <label>Queue polygon points<input readOnly value={zone.queuePolygon.length} /></label>
+            <label>Pickup area points<input readOnly value={zone.pickupArea.length} /></label>
+          </div>
+          <div className="actions">
+            <CommandButton
+              command="admin.zone.copyQueue"
+              className="secondary-btn"
+              type="button"
+              onDone={() => save({ queuePolygon: zone.points.map((point) => [...point] as [number, number]) })}
+            >
+              Use zone shape as queue polygon
+            </CommandButton>
+            <CommandButton
+              command="admin.zone.copyPickupArea"
+              className="secondary-btn"
+              type="button"
+              onDone={() => save({ pickupArea: zone.points.map((point) => [...point] as [number, number]) })}
+            >
+              Use zone shape as pickup area
+            </CommandButton>
           </div>
         </TabPanel>
         <TabPanel id="schedule" activeId={tab}>
