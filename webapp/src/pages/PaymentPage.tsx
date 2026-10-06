@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router";
-import { useCommands, useRecords } from "../api/hooks";
+import { useApprovals, useCommands, useRecords } from "../api/hooks";
 import { formatOre } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
 import { paymentTimeline, refundRows } from "../payments/ledger";
@@ -9,6 +9,7 @@ const REFUND_LIMIT_ORE = 20_000;
 export function PaymentPage() {
   const { id = "" } = useParams();
   const payments = useRecords("payments", null);
+  const approvals = useApprovals();
   const commands = useCommands();
   const row = payments.data?.find((item) => item.id === id);
   if (payments.isLoading) return <p className="state-line">Loading payment.</p>;
@@ -23,16 +24,33 @@ export function PaymentPage() {
       </div>
     );
   }
+
   const amount = row.fareOre ?? 0;
   const needsSecond = amount >= REFUND_LIMIT_ORE && row.status === "captured";
+  const pendingApproval = (approvals.data ?? []).find((item) => item.targetId === row.id && item.action === "admin.payment.refund" && item.status === "pending");
   const blocked = row.status === "refunded"
     ? "Already refunded."
     : row.status !== "captured"
       ? "Refund is only available after capture."
-      : needsSecond
-        ? "200 kr or more needs a second agent."
+      : pendingApproval
+        ? `Pending second-agent approval ${pendingApproval.id}.`
         : null;
   const matches = refundRows(payments.data ?? [], row.id);
+  const operationKey = `refund-${row.id}`;
+
+  function refund() {
+    if (blocked) return;
+    void commands.run("admin.payment.refund", {
+      reason: "Safety review",
+      targetId: row.id,
+      collection: "payments",
+      before: row.status,
+      after: needsSecond ? "pending approval" : "refunded",
+      patch: { status: "refunded" },
+      amountOre: amount,
+      idempotencyKey: operationKey,
+    });
+  }
 
   return (
     <>
@@ -43,55 +61,45 @@ export function PaymentPage() {
         </div>
         <Link to="/payments">Back to payments</Link>
       </div>
+
       <article className="panel" data-testid="payment-timeline">
         <h3>Timeline</h3>
         <ol className="version-list">
           {paymentTimeline(row.status).map((step) => <li key={step}>{step}</li>)}
         </ol>
       </article>
+
       <article className="panel">
         <h3>Refund</h3>
-        <p data-testid="refund-block">{blocked ?? "Refund is allowed. A double click still writes one ledger row."}</p>
+        <p data-testid="refund-block">
+          {blocked ?? (needsSecond
+            ? "Refund request is allowed. Because it is 200 kr or more, the payment stays captured until a second authorised agent approves it."
+            : "Refund is allowed. A double click still writes one ledger row.")}
+        </p>
         <p data-testid="refund-count">{matches.length}</p>
+
         <button
           data-command="admin.payment.refund"
           className="primary-btn"
           type="button"
-          disabled={!!blocked || commands.phase === "submitting"}
-          title={blocked ?? "Refund this payment"}
-          onClick={() => {
-            if (blocked) return;
-            void commands.run("admin.payment.refund", {
-              reason: "Safety review",
-              targetId: row.id,
-              collection: "payments",
-              before: row.status,
-              after: "refunded",
-              patch: { status: "refunded" },
-            });
-          }}
+          disabled={Boolean(blocked) || commands.phase === "submitting"}
+          title={blocked ?? (needsSecond ? "Request second-agent approval" : "Refund this payment")}
+          onClick={refund}
         >
-          Refund payment
+          {needsSecond ? "Request refund approval" : "Refund payment"}
         </button>
+
         <button
           data-command="admin.payment.refund"
           className="secondary-btn"
           type="button"
-          disabled={commands.phase === "submitting"}
-          onClick={() => {
-            if (row.status === "refunded" || row.status !== "captured" || needsSecond) return;
-            void commands.run("admin.payment.refund", {
-              reason: "Safety review",
-              targetId: row.id,
-              collection: "payments",
-              before: row.status,
-              after: "refunded",
-              patch: { status: "refunded" },
-            });
-          }}
+          disabled={commands.phase === "submitting" || Boolean(pendingApproval)}
+          onClick={refund}
         >
           Retry refund
         </button>
+
+        {pendingApproval ? <p><Link to="/audit">Open approval queue</Link></p> : null}
         {commands.message ? <p className="state-line">{commands.message}</p> : null}
       </article>
     </>
