@@ -1,3 +1,5 @@
+import { emptySupport, supportChange, ticketOps, type SupportBook } from "../support/ops.ts";
+import { AGENTS, canUseZone } from "../auth/permissions.ts";
 import { emptySafety, safetyAction, validateSafety, type SafetyBook } from "../safety/ops.ts";
 import { can, type AgentScope, type Role } from "../auth/permissions.ts";
 import { commandById } from "../commands/registry.ts";
@@ -310,6 +312,24 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         if (error) reject(422, error);
         const book = (db.slices.safetyOps ?? emptySafety()) as SafetyBook;
         raw = { ...raw, sliceKey: "safetyOps", value: { ...book, draftRev: book.draftRev + 1, policies: { ...book.policies, [raw.targetId]: policy } } };
+      }
+
+      if (raw.action.startsWith("admin.support.")) {
+        const row = db.tickets.find(r => r.id === raw.targetId);
+        if (!row) reject(404, "Ticket not found.");
+        const book = (db.slices.supportOps ?? emptySupport()) as SupportBook;
+        const proposed = raw.value as SupportBook | undefined;
+        const kind = raw.action.split(".").at(-1) as "claim" | "assign" | "reply" | "note" | "draft" | "metadata";
+        const ops = proposed?.tickets[raw.targetId];
+        const line = ops?.messages.at(-1);
+        const owner = kind === "assign" ? ops?.owner ?? undefined : undefined;
+        if (owner && !AGENTS.some(a => a.id === owner && a.active && can(a.role, "support.reply") && canUseZone(a, row!.zoneId))) reject(422, "Agent is not eligible for this ticket.");
+        const text = kind === "draft" ? proposed?.drafts[`${raw.actorId}:${raw.targetId}`] ?? "" : line?.text ?? "";
+        const current = ticketOps(book,row!);
+        if (kind === "metadata" && (!ops || !["normal", "urgent"].includes(ops.priority) || !["sv", "en"].includes(ops.language))) reject(422, "Invalid ticket metadata.");
+        const result = supportChange(book,row!,raw.actorId,kind,text,line?.id ?? idempotencyKey,owner,line?.attachment,kind === "metadata" ? { ...current, priority: ops!.priority, language: ops!.language, tags: ops!.tags } : undefined);
+        if (result.error) reject(422,result.error);
+        raw = { ...raw, sliceKey: "supportOps", value: result.book };
       }
 
       const injectedStatus = faultStatus(fault);

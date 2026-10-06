@@ -1,0 +1,3 @@
+import { test } from "node:test";import assert from "node:assert/strict";import {emptySupport,supportChange} from "./ops.ts";
+const row={id:"S1",name:"Rider",phone:"",zoneId:"Z001",status:"open"};
+test("support retry is once and threads stay isolated",()=>{let b=supportChange(emptySupport(),row,"a","claim","","claim").book;b=supportChange(b,row,"a","reply","Hello","key").book;assert.equal(supportChange(b,row,"a","reply","Hello","key").book.tickets.S1.messages.length,1);assert.ok(supportChange(b,row,"b","reply","wrong","other").error);b=supportChange(b,{...row,id:"S2"},"a","note","private","n").book;assert.equal(b.tickets.S1.messages.length,1);assert.equal(b.tickets.S2.messages[0].delivery,"private");});
