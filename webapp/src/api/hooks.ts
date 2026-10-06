@@ -282,3 +282,6 @@ export type { Campaign, CampaignBook } from "../messages/ops.ts";
 
 export { STUDIO_SLOTS, emptyStudio, studioSlot, changeStudio } from "../content/studio.ts";
 export type { StudioBook, StudioText } from "../content/studio.ts";
+
+export { emptyGrowth, newGrowthRule, saveGrowthRule, redeemGrowth, moderateGrowth, growthReviews } from "../growth/ops.ts";
+export type { GrowthBook, GrowthRule } from "../growth/ops.ts";

@@ -1,68 +1,10 @@
 import { useState } from "react";
-import { averageStars, BONUSES, hideReview, useRecords, type Review } from "../api/hooks";
-import { redeemReferral, type Referral } from "../growth/referral";
+import { emptyGrowth,newGrowthRule,saveGrowthRule,redeemGrowth,moderateGrowth,growthReviews,useRecords,useSlice,type GrowthBook,type GrowthRule } from "../api/hooks";
+import { useSession } from "../auth/SessionContext";
+import { can } from "../auth/permissions";
 import { CommandButton } from "../ui/CommandButton";
-
-const SEED: Review[] = [
-  { id: "V1", stars: 5, text: "Smooth ride", hidden: false, hideReason: null },
-  { id: "V2", stars: 1, text: "Driver was late", hidden: false, hideReason: null },
-];
-
-export function GrowthPage() {
-  const [reviews, setReviews] = useState(SEED);
-  const [notice, setNotice] = useState(`Bonuses: ${BONUSES.map((bonus) => bonus.id).join(", ")}.`);
-  const [code, setCode] = useState<Referral>({ code: "SARA20", ownerId: "R9", uses: 0, cap: 2 });
-  const [rider, setRider] = useState("R1");
-  const bonuses = useRecords("bonuses", null);
-
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h2>Growth</h2>
-          <p>Average of visible reviews: {averageStars(reviews).toFixed(1)}. Bonuses in the demo: {bonuses.data?.length ?? "…"}.</p>
-        </div>
-      </div>
-      <p className="state-line">{notice}</p>
-      <article className="panel">
-        <h3>Referral {code.code}</h3>
-        <p>
-          Owner {code.ownerId}. Uses {code.uses} of {code.cap}.
-        </p>
-        <label>
-          Rider
-          <input value={rider} onChange={(event) => setRider(event.target.value)} />
-        </label>
-        <CommandButton command="admin.growth.redeem" className="secondary-btn"
-          type="button" onDone={() => {
-            const result = redeemReferral(code, rider);
-            if (result.error) setNotice(result.error);
-            else {
-              setCode(result.referral);
-              setNotice(`${rider} used ${code.code}.`);
-            }
-          }}>
-          Redeem
-        </CommandButton>
-      </article>
-      {reviews.map((review) => (
-        <article className="panel" key={review.id}>
-          <p>
-            {review.stars} · {review.text} {review.hidden ? `(hidden: ${review.hideReason})` : ""}
-          </p>
-          <CommandButton command="admin.growth.hide" className="secondary-btn"
-            type="button" onDone={() => {
-              const result = hideReview(review, "Not about the trip");
-              if (result.error) setNotice(result.error);
-              else {
-                setReviews(reviews.map((item) => (item.id === review.id ? result.review : item)));
-                setNotice("Hidden. The original text is kept and the average is recomputed.");
-              }
-            }}>
-            Hide
-          </CommandButton>
-        </article>
-      ))}
-    </>
-  );
+export function GrowthPage(){const {agent}=useSession();const store=useSlice<GrowthBook>("growthOps",emptyGrowth());const zones=useRecords("zones");const riders=useRecords("riders");const drivers=useRecords("drivers");const trips=useRecords("trips");const bonuses=useRecords("bonuses");const [id,setId]=useState("");const [draft,setDraft]=useState<GrowthRule|null>(null);const [person,setPerson]=useState("");const [reason,setReason]=useState("");const [discounted,setDiscounted]=useState(false);const [notice,setNotice]=useState("");const rule=draft??store.value.rules.find(r=>r.id===id);const people=rule?.kind==="bonus"?drivers.data:riders.data;const chosen=people?.find(r=>r.id===person);const reviews=growthReviews(trips.data??[]);const visible=reviews.filter(r=>!store.value.moderation[r.id]?.at(-1)?.hidden);const editable=Boolean(agent&&can(agent.role,"settings.publish"));function patch(v:Partial<GrowthRule>){if(rule)setDraft({...rule,...v});}
+return <><div className="page-heading"><div><h2>Growth</h2><p>Versioned rules and immutable reward ledger. Simulation only; no money is paid.</p></div></div><p role="status">{notice}</p><p>Available bonus records: {bonuses.data?.map(b=>b.id).join(", ")}</p><button data-command="admin.message.useText" className="primary-btn" disabled={!editable||!zones.data?.length} onClick={()=>{const key=crypto.randomUUID();setId(key);setDraft(newGrowthRule(key,zones.data![0].id));}}>New growth rule</button><label>Growth rule<select value={id} onChange={e=>{setId(e.target.value);setDraft(null);setPerson("");}}><option value="">Select rule</option>{store.value.rules.map(r=><option key={r.id} value={r.id}>{r.id} · {r.kind}</option>)}</select></label>
+{rule?<article className="panel"><h3>{rule.id} · version {rule.version}</h3><fieldset disabled={!editable||store.loading}><div className="field-grid"><label>Rule kind<select value={rule.kind} onChange={e=>patch({kind:e.target.value as GrowthRule["kind"]})}>{["promo","bonus","referral"].map(x=><option key={x}>{x}</option>)}</select></label><label>Rule zone<select value={rule.zone} onChange={e=>patch({zone:e.target.value})}>{zones.data?.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}</select></label>{([["budgetOre","Budget öre"],["rewardOre","Reward öre"],["cap","Per-person cap"],["targetTrips","Bonus trip target"]] as const).map(([key,label])=><label key={key}>{label}<input type="number" min="1" value={rule[key]} onChange={e=>patch({[key]:Number(e.target.value)})}/></label>)}<label>Referral owner ID<input value={rule.ownerId} onChange={e=>patch({ownerId:e.target.value})}/></label><label>Starts at<input type="datetime-local" value={rule.startAt} onChange={e=>patch({startAt:e.target.value})}/></label><label>Ends at<input type="datetime-local" value={rule.endAt} onChange={e=>patch({endAt:e.target.value})}/></label><label><input type="checkbox" checked={rule.stacks} onChange={e=>patch({stacks:e.target.checked})}/>Allow stacking</label><label><input type="checkbox" checked={rule.enabled} onChange={e=>patch({enabled:e.target.checked})}/>Enabled</label></div></fieldset><CommandButton command="admin.growthOps.save" targetId={rule.id} scope={rule.zone} sliceKey="growthOps" value={saveGrowthRule(store.value,rule).book} expectedSliceRev={store.value.draftRev} confirmTarget={false} disabled={store.loading||Boolean(saveGrowthRule(store.value,rule).error)} title={saveGrowthRule(store.value,rule).error} onDone={()=>{setDraft(null);setNotice("Growth rule saved.");}}>Save growth rule</CommandButton><p>Spent öre: {store.value.ledger.filter(x=>x.ruleId===rule.id).reduce((n,x)=>n+x.amountOre,0)}</p><label>Reward recipient<select value={person} onChange={e=>setPerson(e.target.value)}><option value="">Select person</option>{people?.filter(r=>r.zoneId===rule.zone).map(r=><option key={r.id} value={r.id}>{r.id} · {r.name}</option>)}</select></label><label><input type="checkbox" checked={discounted} onChange={e=>setDiscounted(e.target.checked)}/>Already discounted</label>{chosen?(()=>{const result=redeemGrowth(store.value,rule.id,chosen,crypto.randomUUID(),discounted,trips.data??[]);return <><p role="alert">{result.error}</p><CommandButton command="admin.growthOps.redeem" targetId={rule.id} scope={rule.zone} sliceKey="growthOps" value={result.book} expectedSliceRev={store.value.draftRev} patch={{discounted}} confirmTarget={false} disabled={store.loading||Boolean(draft)||Boolean(result.error)} onDone={()=>setNotice("Reward recorded in simulation.")}>Commit reward</CommandButton></>;})():null}</article>:null}
+<article className="panel"><h3>Two-way reviews</h3><p>Visible average: {visible.length?(visible.reduce((n,r)=>n+r.stars,0)/visible.length).toFixed(1):"No reviews"}</p><label>Moderation reason<input value={reason} onChange={e=>setReason(e.target.value)}/></label>{reviews.map(r=>{const last=store.value.moderation[r.id]?.at(-1);const result=moderateGrowth(store.value,r.id,!last?.hidden,reason,agent?.id??"");return <section key={r.id}><p>{r.tripId} · {r.direction} · {r.stars} · {r.text} · {last?.hidden?"Hidden":"Visible"}</p><CommandButton command="admin.growthOps.moderate" targetId={r.id} scope={r.zone} sliceKey="growthOps" value={result.book} expectedSliceRev={store.value.draftRev} confirmTarget={false} disabled={store.loading||Boolean(result.error)} onDone={()=>setNotice("Moderation saved; original retained.")}>{last?.hidden?"Restore":"Hide"}</CommandButton><ul>{store.value.moderation[r.id]?.map((m,i)=><li key={i}>{m.at} · {m.actor} · {m.hidden?"hide":"restore"} · {m.reason}</li>)}</ul></section>;})}</article><article className="panel"><h3>Reward ledger</h3><ul>{store.value.ledger.map(x=><li key={x.key}>{x.ruleId} · {x.personId} · {x.amountOre} öre · {x.at}</li>)}</ul></article></>;
 }

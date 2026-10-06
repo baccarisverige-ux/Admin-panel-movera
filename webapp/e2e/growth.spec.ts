@@ -1,22 +1,2 @@
-import { expect, test, type Page } from "@playwright/test";
-
-async function signIn(page: Page) {
-  await page.goto("/");
-  await page.getByLabel("Email").fill("nora@movera.se");
-  await page.getByLabel("Password").fill("movera");
-  await page.getByLabel("6-digit code").fill("123456");
-  await page.getByRole("button", { name: "Sign in" }).click();
-}
-
-async function confirm(page: Page) {
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
-}
-
-test("reviews and bonuses stay on the growth screens", async ({ page }) => {
-  await signIn(page);
-  await page.getByRole("link", { name: "Promotions", exact: true }).click();
-  await expect(page.getByText("ARN120")).toBeVisible();
-  await page.getByRole("button", { name: "Hide" }).first().click();
-  await confirm(page);
-  await expect(page.getByText(/Hidden/)).toBeVisible();
-});
+import {expect,test} from "@playwright/test";
+test("R16 review moderation persists with original text",async({page})=>{await page.addInitScript(()=>{localStorage.setItem("movera-admin-session","nora");localStorage.setItem("movera-admin-activity",String(Date.now()));});await page.goto("/promotions");await page.getByLabel("Moderation reason").fill("Not about the trip");await page.getByRole("button",{name:"Hide",exact:true}).first().click();await page.locator(".modal.open").getByRole("button",{name:"Confirm"}).click();await expect(page.getByText("Moderation saved; original retained.")).toBeVisible();await page.reload();await expect(page.getByRole("button",{name:"Restore",exact:true}).first()).toBeVisible();await expect(page.getByText(/Simulated rider review/).first()).toBeVisible();});
