@@ -268,6 +268,7 @@ export function OnboardingPage() {
             className="primary-btn"
             type="button"
             targetId={driver.id}
+            confirmTarget={false}
             entityState={driver.status}
             scope={driver.zoneId}
             before={driver.status}
