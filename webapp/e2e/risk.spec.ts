@@ -8,11 +8,11 @@ async function signIn(page: Page) {
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-test("risk shows the unconfirmed safety thresholds", async ({ page }) => {
+test("risk exposes validated per-zone simulation controls", async ({ page }) => {
   await signIn(page);
   await page.getByRole("link", { name: "Risk", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Risk" })).toBeVisible();
-  await expect(page.getByLabel("Impossible travel")).toHaveValue("55 m/s");
+  await expect(page.getByLabel("Impossible travel (m/s)")).toHaveValue("55");
   await expect(page.getByLabel("Trusted contacts")).toHaveValue("5");
-  await expect(page.getByLabel("Driving hours")).toHaveValue("none");
+  await expect(page.getByLabel("Daily driving hours")).toHaveValue("0");
 });

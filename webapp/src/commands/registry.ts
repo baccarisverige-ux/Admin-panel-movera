@@ -106,6 +106,8 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.reservation.return", label: "Change return ride", reason: true, permission: "trips.intervene" },
   { id: "admin.reservation.savePolicy", label: "Save reservation policy", reason: true, permission: "trips.intervene" },
   { id: "admin.reservation.cancel", label: "Cancel reservation", reason: true, permission: "trips.intervene" },
+  { id: "admin.safetyOps.save", label: "Save safety policy", reason: true, permission: "safety.edit" },
+  { id: "admin.safety.contact", label: "Log contact attempt", reason: true, permission: "safety.edit" },
   { id: "admin.safety.take", label: "Take incident", reason: true, permission: "safety.edit" },
   { id: "admin.safety.resolve", label: "Resolve incident", reason: true, permission: "safety.edit" },
   { id: "admin.support.claim", label: "Claim ticket", reason: false, permission: "support.reply" },
@@ -226,6 +228,9 @@ const OWNER_BY_DOMAIN: Record<string, string> = {
 };
 
 const ALLOWED_STATES: Record<string, readonly string[]> = {
+  "admin.safety.take": ["queued"],
+  "admin.safety.contact": ["taken"],
+  "admin.safety.resolve": ["taken"],
   "admin.trip.cancel": ["searching", "accepted", "arrived", "in_trip"],
   "admin.trip.offer": ["requested", "searching"],
   "admin.trip.reassign": ["accepted", "driver_to_pickup", "arrived"],
