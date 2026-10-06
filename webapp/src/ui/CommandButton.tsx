@@ -97,7 +97,7 @@ export function CommandButton({
         className={className}
         type={type}
         aria-label={ariaLabel}
-        disabled={disabled || commands.phase === "submitting" || !spec || denied}
+        disabled={disabled || commands.busy || commands.phase === "submitting" || !spec || denied}
         title={title ?? disabledReason}
         onClick={() => {
           if (!spec) return;
