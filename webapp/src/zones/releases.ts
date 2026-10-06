@@ -228,6 +228,42 @@ export function emptyBook(authorId = "nora"): ZoneBook {
   return { authorId, status: "draft", draft: seed, published: cloneZones(seed), versions: [cloneZones(seed)] };
 }
 
+function normalizePickup(raw: Partial<PickupPoint>): PickupPoint {
+  return {
+    id: raw.id ?? `pin-${Math.random().toString(16).slice(2)}`,
+    name: raw.name ?? "Pickup",
+    lat: Number(raw.lat) || 0,
+    lng: Number(raw.lng) || 0,
+    instructions: raw.instructions ?? "",
+    photoUrl: raw.photoUrl ?? "",
+  };
+}
+
+function normalizeZone(raw: ZoneShape): ZoneShape {
+  return zone({
+    ...raw,
+    color: raw.color ?? ZONE_COLOR[raw.kind],
+    priority: Number.isFinite(raw.priority) ? raw.priority : DEFAULT_PRIORITY[raw.kind],
+    options: Array.isArray(raw.options) ? raw.options : [...RIDE_OPTIONS],
+    paymentMethods: Array.isArray(raw.paymentMethods) ? raw.paymentMethods : [...ZONE_PAYMENT_METHODS],
+    pickupOnly: raw.pickupOnly ?? false,
+    pickups: (raw.pickups ?? []).map((pickup) => normalizePickup(pickup)),
+    queuePolygon: raw.queuePolygon ?? (raw.kind === "airport" ? [...raw.points] : []),
+    pickupArea: raw.pickupArea ?? [],
+  });
+}
+
+export function normalizeZoneBook(raw: ZoneBook): ZoneBook {
+  const normalize = (zones: ZoneShape[]) => zones.map((item) => normalizeZone(item));
+  return {
+    ...raw,
+    status: raw.status === "in_review" ? "in_review" : "draft",
+    draft: normalize(raw.draft ?? []),
+    published: normalize(raw.published ?? []),
+    versions: (raw.versions ?? []).map((version) => normalize(version)),
+  };
+}
+
 export function updateDraft(book: ZoneBook, zoneId: string, points: [number, number][], authorId: string): ZoneBook {
   return setOuter(book, zoneId, points, authorId, false);
 }
@@ -412,11 +448,18 @@ export function publishZones(book: ZoneBook, actorId: string): { book: ZoneBook;
   return { book: { ...book, authorId: actorId, status: "draft", published: snapshot, versions: [...book.versions, snapshot] } };
 }
 
-export function rollbackZones(book: ZoneBook): ZoneBook {
+export function rollbackZones(book: ZoneBook, actorId = book.authorId): ZoneBook {
   if (book.versions.length < 2) return book;
-  const versions = book.versions.slice(0, -1);
-  const published = versions[versions.length - 1] ?? [];
-  return { ...book, status: "draft", versions, published: cloneZones(published), draft: cloneZones(published) };
+  const previous = book.versions[book.versions.length - 2] ?? [];
+  const snapshot = cloneZones(previous);
+  return {
+    ...book,
+    authorId: actorId,
+    status: "draft",
+    published: snapshot,
+    draft: cloneZones(snapshot),
+    versions: [...book.versions, cloneZones(snapshot)],
+  };
 }
 
 export type ZoneImpact = {
@@ -523,6 +566,218 @@ export function geoJSONToZones(raw: string, book: ZoneBook, authorId: string): {
       target.holes = rings.slice(1).map((ring) => ring.slice(0, -1).map(([lng, lat]) => [lat ?? 0, lng ?? 0]));
     }
   }
+  return { book: { ...book, authorId, status: "draft", draft } };
+}
+
+
+type RectBounds = { south: number; west: number; north: number; east: number };
+
+function rectBounds(points: [number, number][]): RectBounds | null {
+  if (points.length !== 4) return null;
+  const lats = [...new Set(points.map(([lat]) => Number(lat.toFixed(8))))].sort((a, b) => a - b);
+  const lngs = [...new Set(points.map(([, lng]) => Number(lng.toFixed(8))))].sort((a, b) => a - b);
+  if (lats.length !== 2 || lngs.length !== 2) return null;
+  const combos = new Set(points.map(([lat, lng]) => `${Number(lat.toFixed(8))}:${Number(lng.toFixed(8))}`));
+  for (const lat of lats) for (const lng of lngs) if (!combos.has(`${lat}:${lng}`)) return null;
+  return { south: lats[0]!, north: lats[1]!, west: lngs[0]!, east: lngs[1]! };
+}
+
+export function splitZone(book: ZoneBook, zoneId: string, authorId: string): { book: ZoneBook; newId?: string; error?: string } {
+  const source = book.draft.find((item) => item.id === zoneId);
+  if (!source || source.kind === "pickup") return { book, error: "Select a polygon zone to split." };
+  const bounds = rectBounds(source.points);
+  if (!bounds) return { book, error: "Split currently requires a rectangular zone. Use Edit points to make the boundary rectangular first." };
+  const latSpan = bounds.north - bounds.south;
+  const lngSpan = bounds.east - bounds.west;
+  const splitVertical = lngSpan >= latSpan;
+  const newId = `${source.id}-split-${book.draft.filter((item) => item.id.startsWith(`${source.id}-split-`)).length + 1}`;
+  const first = splitVertical
+    ? rect(bounds.south, bounds.west, bounds.north, (bounds.west + bounds.east) / 2)
+    : rect(bounds.south, bounds.west, (bounds.south + bounds.north) / 2, bounds.east);
+  const second = splitVertical
+    ? rect(bounds.south, (bounds.west + bounds.east) / 2, bounds.north, bounds.east)
+    : rect((bounds.south + bounds.north) / 2, bounds.west, bounds.north, bounds.east);
+  const sibling = normalizeZone({
+    ...source,
+    id: newId,
+    code: `${source.code}-B`,
+    name: `${source.name} B`,
+    points: second,
+    holes: [],
+    pickups: [],
+  });
+  return {
+    newId,
+    book: {
+      ...book,
+      authorId,
+      status: "draft",
+      draft: [
+        ...book.draft.map((item) => item.id === source.id ? { ...item, name: `${source.name} A`, code: `${source.code}-A`, points: first, holes: [] } : item),
+        sibling,
+      ],
+    },
+  };
+}
+
+export function mergeZones(book: ZoneBook, targetId: string, sourceId: string, authorId: string): { book: ZoneBook; error?: string } {
+  if (targetId === sourceId) return { book, error: "Choose two different zones." };
+  const target = book.draft.find((item) => item.id === targetId);
+  const source = book.draft.find((item) => item.id === sourceId);
+  if (!target || !source || target.kind === "pickup" || source.kind === "pickup") return { book, error: "Both merge targets must be polygon zones." };
+  if (target.kind !== source.kind) return { book, error: "Merge requires zones of the same type." };
+  const a = rectBounds(target.points);
+  const b = rectBounds(source.points);
+  if (!a || !b) return { book, error: "Merge currently requires rectangular zones." };
+  const combined = {
+    south: Math.min(a.south, b.south),
+    west: Math.min(a.west, b.west),
+    north: Math.max(a.north, b.north),
+    east: Math.max(a.east, b.east),
+  };
+  const areaA = (a.north - a.south) * (a.east - a.west);
+  const areaB = (b.north - b.south) * (b.east - b.west);
+  const overlap = Math.max(0, Math.min(a.north, b.north) - Math.max(a.south, b.south))
+    * Math.max(0, Math.min(a.east, b.east) - Math.max(a.west, b.west));
+  const unionArea = areaA + areaB - overlap;
+  const combinedArea = (combined.north - combined.south) * (combined.east - combined.west);
+  if (Math.abs(unionArea - combinedArea) > 1e-8) {
+    return { book, error: "These rectangles do not form one rectangle. Edit the boundaries before merging." };
+  }
+  return {
+    book: {
+      ...book,
+      authorId,
+      status: "draft",
+      draft: book.draft.map((item) => {
+        if (item.id === target.id) {
+          return {
+            ...item,
+            points: rect(combined.south, combined.west, combined.north, combined.east),
+            holes: [],
+            priority: Math.max(target.priority, source.priority),
+            notes: [target.notes, `Merged from ${source.name} (${source.id})`].filter(Boolean).join(" · "),
+          };
+        }
+        if (item.id === source.id) return { ...item, archived: true, active: false };
+        return item;
+      }),
+    },
+  };
+}
+
+function rotatePoints(points: [number, number][], degrees: number): [number, number][] {
+  if (points.length === 0) return points;
+  const centerLat = points.reduce((sum, [lat]) => sum + lat, 0) / points.length;
+  const centerLng = points.reduce((sum, [, lng]) => sum + lng, 0) / points.length;
+  const radians = degrees * Math.PI / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return points.map(([lat, lng]) => {
+    const y = lat - centerLat;
+    const x = (lng - centerLng) * Math.cos(centerLat * Math.PI / 180);
+    const rx = x * cos - y * sin;
+    const ry = x * sin + y * cos;
+    return [
+      Number((centerLat + ry).toFixed(6)),
+      Number((centerLng + rx / Math.cos(centerLat * Math.PI / 180)).toFixed(6)),
+    ];
+  });
+}
+
+export function rotateZone(book: ZoneBook, zoneId: string, degrees: number, authorId: string): ZoneBook {
+  const target = book.draft.find((item) => item.id === zoneId);
+  if (!target || target.kind === "pickup") return book;
+  return patchZone(book, zoneId, {
+    points: rotatePoints(target.points, degrees),
+    holes: target.holes.map((hole) => rotatePoints(hole, degrees)),
+    queuePolygon: rotatePoints(target.queuePolygon, degrees),
+    pickupArea: rotatePoints(target.pickupArea, degrees),
+  }, authorId);
+}
+
+export function priorityZones(zones: ZoneShape[]): ZoneShape[] {
+  return zones
+    .filter((item) => !item.archived && item.kind !== "service" && item.kind !== "operating" && item.kind !== "pickup")
+    .sort((left, right) => right.priority - left.priority || left.name.localeCompare(right.name));
+}
+
+export function reorderZonePriorities(book: ZoneBook, orderedIds: string[], authorId: string): ZoneBook {
+  const priorities = new Map(orderedIds.map((id, index) => [id, 1000 - index * 10]));
+  return {
+    ...book,
+    authorId,
+    status: "draft",
+    draft: book.draft.map((item) => priorities.has(item.id) ? { ...item, priority: priorities.get(item.id)! } : item),
+  };
+}
+
+export function effectiveZonesAt(zones: ZoneShape[], lat: number, lng: number): ZoneShape[] {
+  return zonesAt(zones, lat, lng).sort((left, right) => right.priority - left.priority);
+}
+
+export function zoneRuleSummary(zone: ZoneShape): string {
+  const fees = [zone.zoneFeeOre ? `zone fee ${(zone.zoneFeeOre / 100).toFixed(0)} kr` : "", zone.airportFeeOre ? `airport fee ${(zone.airportFeeOre / 100).toFixed(0)} kr` : ""].filter(Boolean);
+  return [
+    `price ${zone.priceSet}`,
+    fees.join(", "),
+    zone.boostRule ? `boost ${zone.boostRule}` : "",
+    zone.pickupOnly ? "pickup points only" : "",
+    zone.cash ? "cash allowed" : "cash off",
+    `priority ${zone.priority}`,
+  ].filter(Boolean).join(" · ");
+}
+
+function xmlText(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .trim();
+}
+
+function kmlCoordinates(raw: string): [number, number][] {
+  return raw
+    .trim()
+    .split(/\s+/)
+    .map((entry) => entry.split(",").map(Number))
+    .filter((parts) => Number.isFinite(parts[0]) && Number.isFinite(parts[1]))
+    .map(([lng, lat]) => [Number(lat.toFixed(6)), Number(lng.toFixed(6))] as [number, number]);
+}
+
+export function kmlToZones(raw: string, book: ZoneBook, authorId: string): { book: ZoneBook; error?: string } {
+  if (!/<kml[\s>]/i.test(raw) && !/<Placemark[\s>]/i.test(raw)) return { book, error: "That file is not KML." };
+  const placemarks = [...raw.matchAll(/<Placemark\b[^>]*>([\s\S]*?)<\/Placemark>/gi)];
+  if (placemarks.length === 0) return { book, error: "KML contains no placemarks." };
+  const draft = cloneZones(book.draft);
+  let changed = 0;
+  for (const match of placemarks) {
+    const body = match[1] ?? "";
+    const name = xmlText(/<name\b[^>]*>([\s\S]*?)<\/name>/i.exec(body)?.[1] ?? "");
+    const id = /<Data\s+name=["']id["'][^>]*>[\s\S]*?<value>([\s\S]*?)<\/value>/i.exec(body)?.[1]?.trim() ?? "";
+    const target = draft.find((item) => item.id === id || item.name === name);
+    if (!target) continue;
+    const coords = /<coordinates\b[^>]*>([\s\S]*?)<\/coordinates>/i.exec(body)?.[1];
+    if (!coords) continue;
+    const points = kmlCoordinates(coords);
+    if (/<Point\b/i.test(body)) {
+      if (points[0]) {
+        target.points = [points[0]];
+        changed += 1;
+      }
+      continue;
+    }
+    if (points.length >= 4) {
+      const first = points[0]!;
+      const last = points[points.length - 1]!;
+      target.points = first[0] === last[0] && first[1] === last[1] ? points.slice(0, -1) : points;
+      target.holes = [];
+      changed += 1;
+    }
+  }
+  if (changed === 0) return { book, error: "KML placemarks did not match an existing zone id or name." };
   return { book: { ...book, authorId, status: "draft", draft } };
 }
 
