@@ -9,7 +9,7 @@ import {ApiError} from "./httpClient.ts";
 export type ReadContext={actorId:string;role:Role;scope:AgentScope};
 export function scopedSlice<T>(key:string,value:T,db:DemoDb,context?:ReadContext):T{
  if(!context)return value;
- const permissions:Record<string,string>={safetyOps:"incidents.read",supportOps:"support.reply",campaignOps:"settings.read",studioOps:"settings.read",growthOps:"settings.read",reportOps:"overview.read"};
+ const permissions:Record<string,string>={safetyOps:"incidents.read",supportOps:"support.reply",campaignOps:"settings.read",studioOps:"settings.read",growthOps:"settings.read",reportOps:"overview.read",gateAOps:"system.read"};
  if(permissions[key]&&!can(context.role,permissions[key]))throw new ApiError(403,"Your role cannot read this workspace.");
  const allowed=(zone:string)=>context.scope.zones==="all"||context.scope.zones.includes(zone);
  const filter=<V>(map:Record<string,V>,test:(id:string)=>boolean)=>Object.fromEntries(Object.entries(map).filter(([id])=>test(id))) as Record<string,V>;
