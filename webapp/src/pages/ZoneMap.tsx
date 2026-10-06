@@ -117,12 +117,12 @@ export function ZoneMap() {
         </label>
         <CommandButton command="admin.zone.search" className="secondary-btn" type="button" onDone={() => zoneStore.search(address)}>Search address</CommandButton>
         <label className="check-row"><input type="checkbox" checked={ui.layers.drivers} onChange={() => zoneStore.toggleLayer("drivers")} />Online drivers</label>
-        <label className="check-row"><input type="checkbox" checked={ui.layers.trips} onChange={() => zoneStore.toggleLayer("trips")} />Drivers on trip</label>
+        <label className="check-row"><input type="checkbox" checked={ui.layers.trips} onChange={() => zoneStore.toggleLayer("trips")} />Trips</label>
         <label className="check-row"><input type="checkbox" checked={ui.layers.requests} onChange={() => zoneStore.toggleLayer("requests")} />Open requests</label>
         <label className="check-row"><input type="checkbox" checked={ui.layers.demandHour} onChange={() => zoneStore.toggleLayer("demandHour")} />Demand heatmap · last hour</label>
         <label className="check-row"><input type="checkbox" checked={ui.layers.demand7d} onChange={() => zoneStore.toggleLayer("demand7d")} />Demand heatmap · 7 days</label>
         <label className="check-row"><input type="checkbox" checked={ui.layers.pickups} onChange={() => zoneStore.toggleLayer("pickups")} />Pickup points</label>
-        <label className="check-row"><input type="checkbox" checked={ui.layers.queue} onChange={() => zoneStore.toggleLayer("queue")} />Airport queues</label>
+        <label className="check-row"><input type="checkbox" checked={ui.layers.queue} onChange={() => zoneStore.toggleLayer("queue")} />Airport queue</label>
         <label className="check-row"><input type="checkbox" checked={ui.layers.boosts} onChange={() => zoneStore.toggleLayer("boosts")} />Boosts</label>
         <label className="check-row"><input type="checkbox" checked={ui.layers.events} onChange={() => zoneStore.toggleLayer("events")} />Events</label>
       </div>
