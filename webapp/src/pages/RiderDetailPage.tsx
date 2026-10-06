@@ -45,7 +45,8 @@ export function RiderDetailPage() {
   const [promoLabel, setPromoLabel] = useState("");
 
   useEffect(() => {
-    if (!store.loading) setBook(store.value);
+    if (store.loading) return;
+    setBook((current) => store.value.draftRev >= current.draftRev ? store.value : current);
   }, [store.loading, store.value]);
 
   const rider = riders.data?.find((item) => item.id === riderId);
