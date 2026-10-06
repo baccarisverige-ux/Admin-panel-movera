@@ -133,7 +133,7 @@ export function PayoutsPage() {
             title={approved.error}
             onDone={() => {
               setBankDraft(null);
-              setNotice(`Bank details approved for ${driverId}.`);
+              setNotice("Bank details approved.");
             }}
           >
             Approve bank
