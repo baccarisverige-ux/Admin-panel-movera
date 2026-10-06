@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
-import { CommandButton } from "./CommandButton";
+import { useDialogFocus } from "./useDialogFocus";
 
 type ModalProps = {
   open: boolean;
@@ -9,6 +9,8 @@ type ModalProps = {
 };
 
 export function Modal({ open, title, onClose, children }: ModalProps) {
+  const root=useDialogFocus(open,onClose);
+  if(!open)return null;
   function onOverlayClick(event: MouseEvent<HTMLDivElement>) {
     if (event.target === event.currentTarget) onClose();
   }
@@ -19,10 +21,10 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
       onClick={onOverlayClick}
       role="presentation"
     >
-      <div className="modal-card" role="dialog" aria-modal="true" aria-label={title}>
-        <CommandButton command="admin.modal.close" type="button" className="modal-close"  aria-label="Close" onDone={onClose}>
+      <div ref={root} tabIndex={-1} className="modal-card" role="dialog" aria-modal="true" aria-label={title}>
+        <button data-command="admin.modal.close" type="button" className="modal-close"  aria-label="Close" onClick={onClose}>
           ×
-        </CommandButton>
+        </button>
         <h3>{title}</h3>
         {children}
       </div>

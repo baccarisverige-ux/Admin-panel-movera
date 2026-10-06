@@ -30,10 +30,10 @@ test("R6 onboarding activation persists into driver operations", async ({ page }
 
   await page.goto("/drivers/D0005");
   await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
-  await page.getByRole("button", { name: "Documents" }).click();
+  await page.getByRole("tab", { name: "Documents" }).click();
   await expect(page.getByRole("list", { name: "Driver documents" })).toContainText("driver_license · latest review approved");
 
-  await page.getByRole("button", { name: "Notes" }).click();
+  await page.getByRole("tab", { name: "Notes" }).click();
   await page.getByLabel("Private internal note").fill("R6 verification note");
   await page.getByRole("button", { name: "Save private note" }).click();
   await confirm(page);
@@ -74,7 +74,7 @@ test("R6 driver detail remains usable at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/drivers/D0001");
   await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
-  await page.getByRole("button", { name: "Documents" }).click();
+  await page.getByRole("tab", { name: "Documents" }).click();
   await expect(page.getByRole("list", { name: "Driver documents" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(2);

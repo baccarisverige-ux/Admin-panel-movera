@@ -103,7 +103,7 @@ test("R9 pricing history restores an older book as a new revision", async ({ pag
   await page.getByRole("button", { name: "Save booking controls" }).click();
   await expect(page.getByText(/pricing revision 3/)).toBeVisible();
 
-  await page.getByRole("button", { name: "History" }).click();
+  await page.getByRole("tab", { name: "History" }).click();
   const rev2 = page.getByRole("list", { name: "Pricing history" }).getByRole("listitem").filter({ hasText: "Revision 2" });
   await rev2.getByRole("button", { name: "restore" }).click();
   await confirm(page);

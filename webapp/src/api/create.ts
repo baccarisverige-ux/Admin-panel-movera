@@ -1,3 +1,4 @@
+import { scopedSlice, type ReadContext } from "./scopes.ts";
 import { emptyReports, reportExport, type ReportsBook } from "../reports/ops.ts";
 import { emptyGrowth, saveGrowthRule, redeemGrowth, moderateGrowth, growthReviews, type GrowthBook } from "../growth/ops.ts";
 import { emptyStudio, changeStudio, studioSlot, type StudioBook } from "../content/studio.ts";
@@ -78,7 +79,7 @@ export type AdminApi = {
   setFault: (fault: Fault) => Promise<void>;
   inbox: () => Promise<InboxItem[]>;
   freshness: () => Promise<string>;
-  readSlice: <T>(key: string, fallback: T) => Promise<T>;
+  readSlice: <T>(key: string, fallback: T, context?: ReadContext) => Promise<T>;
 };
 
 const DEMO_DELAY_MS = 200;
@@ -606,14 +607,14 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
       return loadDb().updatedAt;
     },
 
-    async readSlice(key, fallback) {
+    async readSlice(key, fallback, context) {
       const fault = readFault();
       await pause(delayMs, fault);
       if (fault === "empty") return fallback;
       const status = faultStatus(fault);
       if (status !== null) throw new ApiError(status, classifyStatus(status));
       const value = loadDb().slices[key];
-      return (value ?? fallback) as typeof fallback;
+      return scopedSlice(key,(value ?? fallback) as typeof fallback,loadDb(),context);
     },
   };
 }

@@ -16,7 +16,7 @@ test("a rider is found by id and the tabs are filled", async ({ page }) => {
   await page.getByLabel("Find rider").fill("R0001");
   await page.getByRole("cell", { name: "R0001", exact: true }).click();
   await expect(page).toHaveURL(/\/riders\/R0001$/);
-  await page.getByRole("button", { name: "Trips" }).click();
+  await page.getByRole("tab", { name: "Trips" }).click();
   await expect(page.locator("[data-tab-panel='trips']")).toContainText("T0001");
   await page.getByRole("button", { name: "Saved places" }).click();
   await expect(page.locator("[data-tab-panel='saved-places']")).toContainText("None are stored for this rider.");
