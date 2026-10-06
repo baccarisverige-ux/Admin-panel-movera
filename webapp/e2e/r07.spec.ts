@@ -56,9 +56,10 @@ test("R7 rider account wallet privacy promotion notes and sessions persist", asy
 
   await page.getByRole("button", { name: "Advance privacy" }).click();
   await confirm(page, "R0001");
-  await expect(page.getByText(/Privacy processing/)).toBeVisible();
+  await expect(page.getByText("Privacy request advanced.")).toBeVisible();
 
   await page.reload();
+  await expect(page.getByText(/Privacy processing/)).toBeVisible();
   await page.getByRole("button", { name: "Payments" }).click();
   await expect(page.getByRole("list", { name: "Rider wallet ledger" })).toContainText("125,00 kr");
   await page.getByRole("button", { name: "Promotions" }).click();
@@ -73,7 +74,8 @@ test("R7 finance can open rider wallet without sensitive reveal permission", asy
   await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
   await page.getByRole("button", { name: "Payments" }).click();
   await expect(page.getByRole("button", { name: "Credit wallet" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: /Reveal Phone/ })).toBeDisabled();
+  await expect(page.getByText("Phone: restricted")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reveal" })).toHaveCount(0);
 });
 
 test("R7 rider detail remains usable at 390px", async ({ page }) => {
