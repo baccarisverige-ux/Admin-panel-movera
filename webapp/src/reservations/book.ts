@@ -321,7 +321,7 @@ const STOCKHOLM = new Intl.DateTimeFormat("sv-SE", {
   hourCycle: "h23",
 });
 
-function localParts(iso: string): string {
+export function stockholmLocalValue(iso: string): string {
   const parts = Object.fromEntries(STOCKHOLM.formatToParts(new Date(iso)).map((item) => [item.type, item.value]));
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
@@ -340,7 +340,7 @@ export function stockholmLocalToIso(
   const naive = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
   const candidates = [60, 120]
     .map((offsetMinutes) => new Date(naive - offsetMinutes * 60_000).toISOString())
-    .filter((iso, index, all) => localParts(iso) === local && all.indexOf(iso) === index)
+    .filter((iso, index, all) => stockholmLocalValue(iso) === local && all.indexOf(iso) === index)
     .sort();
   if (candidates.length === 0) return { error: "That Stockholm local time does not exist because of the DST clock change." };
   const iso = disambiguation === "later" ? candidates[candidates.length - 1] : candidates[0];
