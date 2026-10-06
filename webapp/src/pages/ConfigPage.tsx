@@ -182,6 +182,9 @@ export function ConfigPage() {
           <label>Scheduled for<input readOnly value={preview.scheduledFor ?? "Now after approval"} /></label>
           <label>Expires at<input readOnly value={preview.expiresAt ?? "No expiry"} /></label>
         </div>
+        <p className="state-line" data-impact-scopes>
+          Affected scopes: {preview.scopes.join(", ")}.
+        </p>
         <p className="state-line">
           {preview.missingTranslations.length
             ? `Publish blocked: missing ${preview.missingTranslations.join(", ")}.`
