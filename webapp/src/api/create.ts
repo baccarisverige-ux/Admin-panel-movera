@@ -1,3 +1,4 @@
+import { emptyGrowth, saveGrowthRule, redeemGrowth, moderateGrowth, growthReviews, type GrowthBook } from "../growth/ops.ts";
 import { emptyStudio, changeStudio, studioSlot, type StudioBook } from "../content/studio.ts";
 import { emptyCampaigns, changeCampaign, type CampaignBook } from "../messages/ops.ts";
 import { emptySupport, supportChange, ticketOps, type SupportBook } from "../support/ops.ts";
@@ -354,6 +355,31 @@ export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
         const result = changeStudio(book,raw.targetId,draft,action,raw.actorId);
         if (result.error) reject(422,result.error);
         raw = { ...raw, sliceKey: "studioOps", value: result.book };
+      }
+
+      if (raw.action.startsWith("admin.growthOps.")) {
+        const book = (db.slices.growthOps ?? emptyGrowth()) as GrowthBook;
+        const proposed = raw.value as GrowthBook | undefined;
+        let result: { book: GrowthBook; error?: string };
+        if (raw.action.endsWith(".save")) {
+          const rule = proposed?.rules.find(r => r.id === raw.targetId);
+          if (!rule || !db.zones.some(z=>z.id===rule.zone) || !scopeAllowed(actorScope,rule.zone)) reject(422,"Invalid growth zone.");
+          if (rule!.ownerId && !db.riders.some(r=>r.id===rule!.ownerId)) reject(422,"Referral owner is not a rider.");
+          result = saveGrowthRule(book,rule!);
+        } else if (raw.action.endsWith(".redeem")) {
+          const reward = proposed?.ledger.at(-1);
+          const rule = book.rules.find(r=>r.id===raw.targetId);
+          const person = (rule?.kind === "bonus" ? db.drivers : db.riders).find(r=>r.id===reward?.personId);
+          if (!person || !rule || !scopeAllowed(actorScope,rule.zone)) reject(422,"Invalid reward recipient.");
+          result = redeemGrowth(book,raw.targetId,person!,reward!.key,Boolean(raw.patch?.discounted),db.trips);
+        } else {
+          const review = growthReviews(db.trips).find(r=>r.id===raw.targetId);
+          const decision = proposed?.moderation[raw.targetId]?.at(-1);
+          if (!review || !decision || !scopeAllowed(actorScope,review.zone)) reject(422,"Invalid review.");
+          result = moderateGrowth(book,raw.targetId,decision!.hidden,decision!.reason,raw.actorId);
+        }
+        if (result.error) reject(422,result.error);
+        raw = { ...raw, sliceKey: "growthOps", value: result.book };
       }
 
       const injectedStatus = faultStatus(fault);
