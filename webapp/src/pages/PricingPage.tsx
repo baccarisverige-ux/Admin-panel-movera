@@ -38,14 +38,6 @@ const PRICING_TABS = [
 
 type PricingTabId = (typeof PRICING_TABS)[number]["id"];
 
-function localValue(value: string): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return shifted.toISOString().slice(0, 16);
-}
-
 function isoValue(value: string): string {
   return value ? new Date(value).toISOString() : "";
 }
@@ -293,11 +285,11 @@ export function PricingPage() {
             </label>
             <label>
               Starts
-              <input aria-label="Schedule start" disabled={!canPublish} type="datetime-local" value={localValue(scheduleStart)} onChange={(event) => setScheduleStart(event.target.value)} />
+              <input aria-label="Schedule start" disabled={!canPublish} type="datetime-local" value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} />
             </label>
             <label>
               Ends
-              <input aria-label="Schedule end" disabled={!canPublish} type="datetime-local" value={localValue(scheduleEnd)} onChange={(event) => setScheduleEnd(event.target.value)} />
+              <input aria-label="Schedule end" disabled={!canPublish} type="datetime-local" value={scheduleEnd} onChange={(event) => setScheduleEnd(event.target.value)} />
             </label>
             <label className="check-row">
               <input aria-label="Schedule enabled" disabled={!canPublish} type="checkbox" checked={scheduleEnabled} onChange={(event) => setScheduleEnabled(event.target.checked)} />
