@@ -195,6 +195,19 @@ export function reservationCandidates(
   });
 }
 
+export function touchReservation(
+  book: ReservationBook,
+  record: DemoRecord,
+  actorId: string,
+  message: string,
+): ReservationBook {
+  const current = reservationOps(book, record);
+  return withOps(book, record, {
+    ...current,
+    activity: [`${message} · ${actorId}`, ...current.activity].slice(0, 40),
+  });
+}
+
 export function recordReservationContact(
   book: ReservationBook,
   record: DemoRecord,
