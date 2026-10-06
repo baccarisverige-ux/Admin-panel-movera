@@ -1,5 +1,6 @@
 import {
   TerraDrawCircleMode,
+  TerraDrawFreehandMode,
   TerraDrawPointMode,
   TerraDrawPolygonMode,
   TerraDrawRectangleMode,
@@ -20,14 +21,47 @@ export function zoneDrawModes() {
         pointWidth: 8,
       },
     }),
-    new TerraDrawPolygonMode(),
+    new TerraDrawPolygonMode({
+      snapping: {
+        toLine: true,
+        toCoordinate: true,
+      },
+    }),
     new TerraDrawRectangleMode(),
     new TerraDrawCircleMode(),
+    new TerraDrawFreehandMode(),
     new TerraDrawPointMode(),
     new TerraDrawSelectMode({
       flags: {
-        polygon: { feature: { draggable: true, coordinates: { midpoints: true, draggable: true, deletable: true } } },
-        rectangle: { feature: { draggable: true } },
+        polygon: {
+          feature: {
+            draggable: true,
+            rotateable: true,
+            coordinates: {
+              midpoints: true,
+              draggable: true,
+              deletable: true,
+              snappable: true,
+            },
+          },
+        },
+        rectangle: {
+          feature: {
+            draggable: true,
+            rotateable: true,
+          },
+        },
+        freehand: {
+          feature: {
+            draggable: true,
+            rotateable: true,
+            coordinates: {
+              draggable: true,
+              deletable: true,
+              snappable: true,
+            },
+          },
+        },
         point: { feature: { draggable: true } },
       },
     }),
