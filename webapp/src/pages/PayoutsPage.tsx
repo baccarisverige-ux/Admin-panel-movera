@@ -172,8 +172,10 @@ export function PayoutsPage() {
             expectedSliceRev={finance.draftRev}
             sliceKey="finance"
             value={paid.book}
-            disabled={state.status === "paid" || Boolean(paid.error)}
-            title={state.status === "paid" ? "Already paid." : paid.error}
+            disabled={state.status === "paid"}
+            validationError={paid.error}
+            onValidationError={(message) => setNotice(message)}
+            title={state.status === "paid" ? "Already paid." : undefined}
             onDone={() => setNotice("Payout marked paid once. Reusing the operation key cannot pay it twice.")}
           >
             Mark paid
