@@ -159,8 +159,6 @@ function zone(input: Pick<ZoneShape, "id" | "code" | "name" | "kind" | "points">
     destinationMode: false,
     maxWaitMin: 5,
     queueOn: airport,
-    queuePolygon: input.points.length >= 3 ? [...input.points] : [],
-    pickupArea: [],
     maxQueueMin: airport ? 45 : 0,
     queueFeeOre: airport ? 4500 : 0,
     terminals: "",
