@@ -23,8 +23,8 @@ export { averageStars, BONUSES, hideReview } from "../growth/book.ts";
 export type { Review } from "../growth/book.ts";
 export { editContent, phonePreview, publishContent, rollbackContent } from "../content/book.ts";
 export type { ContentBook } from "../content/book.ts";
-export { approveConfig, configDiff, effectiveValue, emptyConfig, missingTranslations, normalizeConfig, publishConfig, rollbackConfig, REASON_GROUPS, setAppUpdate, setAppVersion, setEnvironment, setFeature, setMaxStops, setReason, setSchedule, setSwitch, setZoneOverride, submitConfigApproval } from "../config/book.ts";
-export type { ConfigBook } from "../config/book.ts";
+export { advanceConfigClock, approveConfig, configDiff, draftRevisionMatches, effectiveValue, emptyConfig, impactPreview, missingTranslations, normalizeConfig, publishConfig, removeOverride, rollbackConfig, REASON_GROUPS, setAppUpdate, setAppVersion, setEnvironment, setExpiry, setFeature, setMaxStops, setOverride, setReason, setSchedule, setSwitch, setZoneOverride, submitConfigApproval } from "../config/book.ts";
+export type { ConfigBook, EffectiveContext, FeatureKey, OverrideLevel, OverrideRule } from "../config/book.ts";
 
 export function useRecords(name: string, scope?: string | null) {
   const api = useAdminApi();
@@ -185,6 +185,7 @@ export function useCommands() {
         scope: extra.scope ?? params.get("scope") ?? "all",
         idempotencyKey,
         expectedRev,
+        expectedSliceRev: extra.expectedSliceRev,
         entityState: extra.entityState,
         amountOre: extra.amountOre,
         before: extra.before ?? "",
@@ -238,8 +239,9 @@ export function useSlice<T>(key: string, fallback: T) {
     value: query.data ?? fallback,
     loading: query.isLoading,
     message: command.message,
-    async save(value: T, meta: { targetId: string; reason: string; actorId: string; before: string; after: string }) {
-      await command.run({ ...meta, sliceKey: key, value });
+    refetch: query.refetch,
+    async save(value: T, meta: { targetId: string; reason: string; actorId: string; before: string; after: string; expectedSliceRev?: number }) {
+      return command.run({ ...meta, sliceKey: key, value });
     },
   };
 }

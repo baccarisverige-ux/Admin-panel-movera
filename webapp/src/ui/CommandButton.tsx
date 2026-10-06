@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useCommands } from "../api/hooks";
+import type { CommandResult } from "../api/create";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { ACTION_REASONS } from "../domain/labels";
@@ -19,8 +20,13 @@ type CommandButtonProps = {
   collection?: string;
   patch?: Record<string, string | number | boolean | null>;
   scope?: string;
+  expectedRev?: number;
+  expectedSliceRev?: number;
+  sliceKey?: string;
+  value?: unknown;
+  confirmTarget?: boolean;
   storeReason?: boolean;
-  onDone?: () => void;
+  onDone?: (result?: CommandResult) => void;
   children: ReactNode;
   "aria-label"?: string;
 };
@@ -39,6 +45,11 @@ export function CommandButton({
   collection,
   patch,
   scope,
+  expectedRev,
+  expectedSliceRev,
+  sliceKey,
+  value,
+  confirmTarget = true,
   storeReason,
   onDone,
   children,
@@ -52,7 +63,7 @@ export function CommandButton({
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState(ACTION_REASONS[0]);
   const [typed, setTyped] = useState("");
-  const mustType = targetId ?? "";
+  const mustType = confirmTarget ? (targetId ?? "") : "";
   const confirmed = mustType.length === 0 || typed === mustType;
 
   function fire(chosen: string) {
@@ -70,8 +81,12 @@ export function CommandButton({
       collection,
       patch: patch ? { ...patch, ...(storeReason ? { notes: chosen } : {}) } : undefined,
       scope,
+      expectedRev,
+      expectedSliceRev,
+      sliceKey,
+      value,
     }).then((result) => {
-      if (result) onDone?.();
+      if (result) onDone?.(result);
     });
   }
 

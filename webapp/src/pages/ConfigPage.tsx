@@ -1,143 +1,541 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useSession } from "../auth/SessionContext";
 import {
+  advanceConfigClock,
   approveConfig,
   configDiff,
   effectiveValue,
   emptyConfig,
+  impactPreview,
   missingTranslations,
   normalizeConfig,
   publishConfig,
+  removeOverride,
   REASON_GROUPS,
   rollbackConfig,
   setAppUpdate,
   setAppVersion,
   setEnvironment,
+  setExpiry,
   setMaxStops,
+  setOverride,
   setReason,
   setSchedule,
   setSwitch,
   setZoneOverride,
   submitConfigApproval,
   useRecords,
+  useSlice,
   type ConfigBook,
+  type EffectiveContext,
+  type FeatureKey,
+  type OverrideLevel,
 } from "../api/hooks";
+import { CATEGORIES } from "../domain/contract";
 import { coreZones, stockholmZones } from "../zones/releases";
 import { CommandButton } from "../ui/CommandButton";
 
-const STORE_KEY = "movera-admin-config-v3";
-
-function load(): ConfigBook {
-  const raw = localStorage.getItem(STORE_KEY);
-  if (!raw) return emptyConfig();
-  try {
-    return normalizeConfig(JSON.parse(raw) as ConfigBook);
-  } catch {
-    return emptyConfig();
-  }
-}
+const LEVELS: OverrideLevel[] = ["market", "zone", "category", "app", "platform", "appVersion", "cohort"];
 
 function platformName(app: string, platform: string): string {
   return `${app === "rider" ? "Rider" : "Driver"} ${platform === "ios" ? "iOS" : "Android"}`;
 }
 
+function defaultTarget(level: OverrideLevel, zoneId: string, book: ConfigBook): string {
+  if (level === "market") return "SE-STO";
+  if (level === "zone") return zoneId;
+  if (level === "category") return "economy";
+  if (level === "app") return "rider";
+  if (level === "platform") return "ios";
+  if (level === "appVersion") return book.draft.versions.rider;
+  return "beta";
+}
+
+function targetOptions(level: OverrideLevel, book: ConfigBook): { value: string; label: string }[] {
+  if (level === "market") return [{ value: "SE-STO", label: "Stockholm market" }];
+  if (level === "zone") return coreZones(stockholmZones()).map((zone) => ({ value: zone.id, label: zone.name }));
+  if (level === "category") return CATEGORIES.map((item) => ({ value: item.id, label: item.label }));
+  if (level === "app") return [{ value: "rider", label: "Rider" }, { value: "driver", label: "Driver" }];
+  if (level === "platform") return [{ value: "ios", label: "iOS" }, { value: "android", label: "Android" }];
+  if (level === "appVersion") {
+    return [
+      { value: book.draft.versions.rider, label: `Rider ${book.draft.versions.rider}` },
+      { value: book.draft.versions.driver, label: `Driver ${book.draft.versions.driver}` },
+    ];
+  }
+  return [{ value: "beta", label: "beta" }, { value: "staff", label: "staff" }, { value: "new-riders", label: "new-riders" }];
+}
+
+function isoFromLocal(value: string): string | null {
+  return value ? new Date(value).toISOString() : null;
+}
+
+function localFromIso(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function sameBook(a: ConfigBook, b: ConfigBook): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function ConfigPage() {
   const { agent } = useSession();
-  const [book, setBook] = useState<ConfigBook>(() => load());
+  const store = useSlice<ConfigBook>("config", emptyConfig());
+  const persisted = useMemo(() => normalizeConfig(store.value), [store.value]);
+  const [book, setBook] = useState<ConfigBook>(() => emptyConfig());
   const [notice, setNotice] = useState("Draft is not live.");
   const [zoneId, setZoneId] = useState("op-norrmalm");
+  const [featureKey, setFeatureKey] = useState<FeatureKey>("wallet");
+  const [level, setLevel] = useState<OverrideLevel>("market");
+  const [target, setTarget] = useState("SE-STO");
+  const [overrideValue, setOverrideValue] = useState(true);
+  const [startsAt, setStartsAt] = useState("");
+  const [ruleExpiresAt, setRuleExpiresAt] = useState("");
+  const [context, setContext] = useState<EffectiveContext>({
+    market: "SE-STO",
+    zoneId: "op-norrmalm",
+    category: "economy",
+    app: "rider",
+    platform: "ios",
+    appVersion: "1.0.0",
+    cohort: "beta",
+  });
+
+  useEffect(() => {
+    if (store.loading) return;
+    const advanced = advanceConfigClock(persisted, new Date().toISOString());
+    setBook(advanced);
+
+    if (agent && !sameBook(advanced, persisted)) {
+      void store.save(advanced, {
+        targetId: "configuration",
+        reason: "Apply scheduled configuration lifecycle",
+        actorId: agent.id,
+        before: `config ${persisted.draftRev}`,
+        after: `config ${advanced.draftRev}`,
+        expectedSliceRev: persisted.draftRev,
+      }).then((result) => {
+        if (result) setNotice("Scheduled configuration lifecycle applied.");
+      });
+    }
+  }, [agent?.id, persisted, store.loading]);
+
+  const dirty = !sameBook(book, persisted);
   const missing = missingTranslations(book.draft.reasons);
   const staff = useRecords("staff", null);
   const diff = configDiff(book.published, book.draft);
   const zones = coreZones(stockholmZones());
-  const override = book.draft.zoneOverrides[zoneId] ?? {};
-  const reservations = effectiveValue(book.draft, "reservations", zoneId);
-  const wallet = effectiveValue(book.draft, "wallet", zoneId);
+  const legacyOverride = book.draft.zoneOverrides[zoneId] ?? {};
+  const preview = useMemo(() => impactPreview(book), [book]);
+  const reservations = effectiveValue(book.draft, "reservations", context);
+  const wallet = effectiveValue(book.draft, "wallet", context);
+  const options = targetOptions(level, book);
 
-  function save(next: ConfigBook, text: string) {
-    localStorage.setItem(STORE_KEY, JSON.stringify(next));
-    setBook(next);
+  function edit(build: (current: ConfigBook) => ConfigBook, text = "Unsaved draft changes.") {
+    setBook((current) => build(current));
     setNotice(text);
   }
+
+  function changeLevel(next: OverrideLevel) {
+    setLevel(next);
+    setTarget(defaultTarget(next, zoneId, book));
+  }
+
+  const review = agent ? submitConfigApproval(book, agent.id) : null;
+  const approval = agent ? approveConfig(book, agent.id) : null;
+  const publication = agent ? publishConfig(book, agent.id, new Date().toISOString()) : null;
+  const rollback = agent ? rollbackConfig(book, agent.id, new Date().toISOString()) : book;
+  const clocked = advanceConfigClock(book, new Date().toISOString());
+  const clockChanged = !sameBook(clocked, book);
+
+  if (store.loading) return <p className="state-line">Loading configuration.</p>;
 
   return (
     <>
       <div className="page-heading">
         <div>
           <h2>Configuration</h2>
-          <p>Version {book.rev}. Status {book.status}. Rider {book.published.versions.rider}. Driver {book.published.versions.driver}. Staff {staff.data?.length ?? "…"}. Languages: Swedish and English. Luxury is not a feature.</p>
+          <p>
+            Published version {book.rev}. Config revision {book.draftRev}. Status {book.status}. Rider {book.published.versions.rider}.
+            Driver {book.published.versions.driver}. Staff {staff.data?.length ?? "…"}. Languages: Swedish and English.
+          </p>
         </div>
         <Link to="/confirm">Open to confirm</Link>
       </div>
-      <p className="state-line">{notice}{missing.length > 0 ? ` Missing translation: ${missing.join(", ")}.` : ""}</p>
-      <article className="panel">
-        <h3>Version diff</h3>
+
+      <p className="state-line" data-config-dirty={dirty ? "yes" : "no"}>
+        {notice}
+        {store.message ? ` ${store.message}` : ""}
+        {missing.length > 0 ? ` Missing translation: ${missing.join(", ")}.` : ""}
+        {dirty ? " Unsaved changes." : " Saved draft."}
+      </p>
+
+      <article className="panel" data-testid="config-impact">
+        <h3>Impact preview</h3>
+        <div className="field-grid">
+          <label>Changed items<input readOnly value={preview.changed} /></label>
+          <label>Affected scopes<input readOnly value={preview.scopes.join(", ")} /></label>
+          <label>Scheduled for<input readOnly value={preview.scheduledFor ?? "Now after approval"} /></label>
+          <label>Expires at<input readOnly value={preview.expiresAt ?? "No expiry"} /></label>
+        </div>
+        <p className="state-line" data-impact-scopes>
+          Affected scopes: {preview.scopes.join(", ")}.
+        </p>
+        <p className="state-line">
+          {preview.missingTranslations.length
+            ? `Publish blocked: missing ${preview.missingTranslations.join(", ")}.`
+            : "Translation coverage is complete."}
+        </p>
         <ul aria-label="Configuration diff">
           {diff.length === 0 ? <li>No unpublished changes.</li> : diff.map((line) => <li key={line}>{line}</li>)}
         </ul>
       </article>
+
+      <article className="panel">
+        <h3>Draft controls</h3>
+        <div className="actions">
+          <CommandButton
+            command="admin.config.save"
+            confirmTarget={false}
+            className="primary-btn"
+            type="button"
+            targetId="configuration"
+            before={`config ${persisted.draftRev}`}
+            after={`config ${book.draftRev}`}
+            disabled={!dirty}
+            title={dirty ? undefined : "No unsaved configuration changes."}
+            expectedSliceRev={persisted.draftRev}
+            sliceKey="config"
+            value={book}
+            onDone={() => setNotice("Draft saved through AdminApi.")}
+          >
+            Save draft
+          </CommandButton>
+          <button
+            data-command="admin.card.action"
+            className="secondary-btn"
+            type="button"
+            disabled={!dirty}
+            onClick={() => {
+              setBook(persisted);
+              setNotice("Unsaved draft changes discarded.");
+            }}
+          >
+            Discard unsaved
+          </button>
+        </div>
+      </article>
+
       <article className="panel">
         <h3>Features</h3>
         <p className="state-line">Rider app</p>
         {book.draft.switches.filter((item) => item.app === "rider").map((item) => (
           <label className="check-row" key={item.id}>
-            <input type="checkbox" checked={item.on} onChange={(event) => agent && save(setSwitch(book, item.id, event.target.checked, agent.id), "Draft saved. Not published.")} />
+            <input
+              type="checkbox"
+              checked={item.on}
+              onChange={(event) => agent && edit(
+                (current) => setSwitch(current, item.id, event.target.checked, agent.id),
+              )}
+            />
             {item.label}
           </label>
         ))}
         <p className="state-line">Driver app</p>
         {book.draft.switches.filter((item) => item.app === "driver").map((item) => (
           <label className="check-row" key={item.id}>
-            <input type="checkbox" checked={item.on} onChange={(event) => agent && save(setSwitch(book, item.id, event.target.checked, agent.id), "Draft saved. Not published.")} />
+            <input
+              type="checkbox"
+              checked={item.on}
+              onChange={(event) => agent && edit(
+                (current) => setSwitch(current, item.id, event.target.checked, agent.id),
+              )}
+            />
             {item.label}
           </label>
         ))}
       </article>
+
       <article className="panel">
-        <h3>App versions</h3>
+        <h3>App versions and lifecycle</h3>
         <div className="field-grid">
           <label>
             Rider app
-            <input defaultValue={book.draft.versions.rider} key={`rider-${book.draft.versions.rider}`} onBlur={(event) => agent && event.target.value !== book.draft.versions.rider && save(setAppVersion(book, "rider", event.target.value, agent.id), "Draft saved. Not published.")} />
+            <input
+              value={book.draft.versions.rider}
+              onChange={(event) => {
+                if (!agent) return;
+                edit((current) => setAppVersion(current, "rider", event.target.value, agent.id));
+                setContext((current) => ({ ...current, appVersion: event.target.value }));
+              }}
+            />
           </label>
           <label>
             Driver app
-            <input defaultValue={book.draft.versions.driver} key={`driver-${book.draft.versions.driver}`} onBlur={(event) => agent && event.target.value !== book.draft.versions.driver && save(setAppVersion(book, "driver", event.target.value, agent.id), "Draft saved. Not published.")} />
+            <input
+              value={book.draft.versions.driver}
+              onChange={(event) => agent && edit(
+                (current) => setAppVersion(current, "driver", event.target.value, agent.id),
+              )}
+            />
           </label>
+
           {book.draft.updates.map((item) => {
             const name = platformName(item.app, item.platform);
             return (
               <div key={`${item.app}-${item.platform}`}>
                 <label>
                   {name} minimum
-                  <input defaultValue={item.minimumVersion} key={`${name}-min-${item.minimumVersion}`} onBlur={(event) => agent && event.target.value !== item.minimumVersion && save(setAppUpdate(book, item.app, item.platform, { minimumVersion: event.target.value }, agent.id), "Draft saved. Not published.")} />
+                  <input
+                    value={item.minimumVersion}
+                    onChange={(event) => agent && edit(
+                      (current) => setAppUpdate(current, item.app, item.platform, { minimumVersion: event.target.value }, agent.id),
+                    )}
+                  />
                 </label>
                 <label>
                   {name} latest
-                  <input defaultValue={item.latestVersion} key={`${name}-latest-${item.latestVersion}`} onBlur={(event) => agent && event.target.value !== item.latestVersion && save(setAppUpdate(book, item.app, item.platform, { latestVersion: event.target.value }, agent.id), "Draft saved. Not published.")} />
+                  <input
+                    value={item.latestVersion}
+                    onChange={(event) => agent && edit(
+                      (current) => setAppUpdate(current, item.app, item.platform, { latestVersion: event.target.value }, agent.id),
+                    )}
+                  />
                 </label>
                 <label>
                   {name} message
-                  <input defaultValue={item.message} key={`${name}-msg-${item.message}`} onBlur={(event) => agent && event.target.value !== item.message && save(setAppUpdate(book, item.app, item.platform, { message: event.target.value }, agent.id), "Draft saved. Not published.")} />
+                  <input
+                    value={item.message}
+                    onChange={(event) => agent && edit(
+                      (current) => setAppUpdate(current, item.app, item.platform, { message: event.target.value }, agent.id),
+                    )}
+                  />
                 </label>
                 <label className="check-row">
-                  <input type="checkbox" checked={item.mandatory} onChange={(event) => agent && save(setAppUpdate(book, item.app, item.platform, { mandatory: event.target.checked }, agent.id), "Draft saved. Not published.")} />
+                  <input
+                    type="checkbox"
+                    checked={item.mandatory}
+                    onChange={(event) => agent && edit(
+                      (current) => setAppUpdate(current, item.app, item.platform, { mandatory: event.target.checked }, agent.id),
+                    )}
+                  />
                   {name} mandatory
                 </label>
               </div>
             );
           })}
+
           <label>
-            Schedule
-            <input type="datetime-local" value={book.draft.scheduleAt ? book.draft.scheduleAt.slice(0, 16) : ""} onChange={(event) => {
-              if (!agent) return;
-              const scheduleAt = event.target.value ? new Date(event.target.value).toISOString() : null;
-              save(setSchedule(book, scheduleAt, agent.id), scheduleAt ? "Scheduled. Not live until that time." : "Schedule cleared.");
-            }} />
+            Publish schedule
+            <input
+              aria-label="Publish schedule"
+              type="datetime-local"
+              value={localFromIso(book.draft.scheduleAt)}
+              onChange={(event) => {
+                if (!agent) return;
+                const scheduleAt = isoFromLocal(event.target.value);
+                edit((current) => setSchedule(current, scheduleAt, agent.id));
+              }}
+            />
+          </label>
+          <label>
+            Expiry
+            <input
+              aria-label="Configuration expiry"
+              type="datetime-local"
+              value={localFromIso(book.draft.expiresAt)}
+              onChange={(event) => {
+                if (!agent) return;
+                const expiresAt = isoFromLocal(event.target.value);
+                edit((current) => setExpiry(current, expiresAt, agent.id));
+              }}
+            />
           </label>
         </div>
       </article>
+
+      <article className="panel">
+        <h3>Advanced precedence overrides</h3>
+        <p className="state-line">Winning order: global → market → zone → category → app → platform → app version → cohort.</p>
+        <div className="field-grid">
+          <label>
+            Feature
+            <select aria-label="Override feature" value={featureKey} onChange={(event) => setFeatureKey(event.target.value as FeatureKey)}>
+              <option value="wallet">Wallet</option>
+              <option value="reservations">Reservations</option>
+            </select>
+          </label>
+          <label>
+            Level
+            <select aria-label="Override level" value={level} onChange={(event) => changeLevel(event.target.value as OverrideLevel)}>
+              {LEVELS.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            Target
+            <input aria-label="Override target" list="override-target-options" value={target} onChange={(event) => setTarget(event.target.value)} />
+            <datalist id="override-target-options">
+              {options.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </datalist>
+          </label>
+          <label>
+            Value
+            <select aria-label="Override value" value={overrideValue ? "on" : "off"} onChange={(event) => setOverrideValue(event.target.value === "on")}>
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+          <label>
+            Starts at
+            <input aria-label="Override starts at" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
+          </label>
+          <label>
+            Expires at
+            <input aria-label="Override expires at" type="datetime-local" value={ruleExpiresAt} onChange={(event) => setRuleExpiresAt(event.target.value)} />
+          </label>
+        </div>
+
+        <button
+          data-command="admin.card.action"
+          className="primary-btn"
+          type="button"
+          onClick={() => {
+            if (!agent || !target.trim()) return;
+            const id = `${featureKey}-${level}-${target.trim()}`;
+            edit((current) => setOverride(current, {
+              id,
+              key: featureKey,
+              level,
+              target: target.trim(),
+              value: overrideValue,
+              startsAt: isoFromLocal(startsAt),
+              expiresAt: isoFromLocal(ruleExpiresAt),
+            }, agent.id));
+            setNotice(`Override ${id} added to the unsaved draft.`);
+          }}
+        >
+          Add or replace override
+        </button>
+
+        {book.draft.overrides.length === 0 ? (
+          <p className="state-line">No advanced overrides in this draft.</p>
+        ) : (
+          <ul className="version-list" aria-label="Advanced overrides">
+            {book.draft.overrides.map((rule) => (
+              <li key={rule.id}>
+                <strong>{rule.key}</strong> · {rule.level}:{rule.target} · {rule.value ? "on" : "off"}
+                {rule.startsAt ? ` · starts ${rule.startsAt}` : ""}
+                {rule.expiresAt ? ` · expires ${rule.expiresAt}` : ""}
+                {" "}
+                <button
+                  data-command="admin.card.action"
+                  className="link-action"
+                  type="button"
+                  onClick={() => {
+                    if (!agent) return;
+                    edit((current) => removeOverride(current, rule.id, agent.id));
+                    setNotice(`Override ${rule.id} removed from the unsaved draft.`);
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+
+      <article className="panel">
+        <h3>Effective value viewer</h3>
+        <div className="field-grid">
+          <label>
+            Preview market
+            <input value={context.market ?? ""} onChange={(event) => setContext((current) => ({ ...current, market: event.target.value }))} />
+          </label>
+          <label>
+            Preview zone
+            <select value={context.zoneId ?? ""} onChange={(event) => setContext((current) => ({ ...current, zoneId: event.target.value }))}>
+              {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Preview category
+            <select value={context.category ?? "economy"} onChange={(event) => setContext((current) => ({ ...current, category: event.target.value }))}>
+              {CATEGORIES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Preview app
+            <select aria-label="Preview app" value={context.app ?? "rider"} onChange={(event) => setContext((current) => ({ ...current, app: event.target.value as "rider" | "driver" }))}>
+              <option value="rider">Rider</option>
+              <option value="driver">Driver</option>
+            </select>
+          </label>
+          <label>
+            Preview platform
+            <select value={context.platform ?? "ios"} onChange={(event) => setContext((current) => ({ ...current, platform: event.target.value as "ios" | "android" }))}>
+              <option value="ios">iOS</option>
+              <option value="android">Android</option>
+            </select>
+          </label>
+          <label>
+            Preview app version
+            <input value={context.appVersion ?? ""} onChange={(event) => setContext((current) => ({ ...current, appVersion: event.target.value }))} />
+          </label>
+          <label>
+            Preview cohort
+            <input value={context.cohort ?? ""} onChange={(event) => setContext((current) => ({ ...current, cohort: event.target.value }))} />
+          </label>
+        </div>
+        <p className="state-line" data-effective={reservations.level}>
+          Effective reservations: {reservations.value}. Winning level: {reservations.level}. {reservations.chain.join(" · ")}
+        </p>
+        <p className="state-line" data-testid="effective-precedence" data-effective-wallet={wallet.level}>
+          Effective wallet: {wallet.value}. Winning level: {wallet.level}. {wallet.chain.join(" · ")}
+        </p>
+      </article>
+
+      <article className="panel">
+        <h3>Legacy per-zone feature switches</h3>
+        <label>
+          Zone override
+          <select
+            aria-label="Zone override"
+            value={zoneId}
+            onChange={(event) => {
+              setZoneId(event.target.value);
+              if (level === "zone") setTarget(event.target.value);
+            }}
+          >
+            {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+          </select>
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={legacyOverride.reservations ?? book.draft.features.reservations}
+            onChange={(event) => agent && edit(
+              (current) => setZoneOverride(current, zoneId, "reservations", event.target.checked, agent.id),
+            )}
+          />
+          Reservations in this zone
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={legacyOverride.wallet ?? book.draft.features.wallet}
+            onChange={(event) => agent && edit(
+              (current) => setZoneOverride(current, zoneId, "wallet", event.target.checked, agent.id),
+            )}
+          />
+          Wallet in this zone
+        </label>
+      </article>
+
       <article className="panel">
         <h3>Reasons</h3>
         {REASON_GROUPS.map((group) => (
@@ -147,106 +545,200 @@ export function ConfigPage() {
               <div className="field-grid" key={reason.id}>
                 <label>
                   {reason.id} Swedish
-                  <input value={reason.sv} onChange={(event) => agent && save(setReason(book, reason.id, "sv", event.target.value, agent.id), "Draft saved. Not published.")} />
+                  <input value={reason.sv} onChange={(event) => agent && edit(
+                    (current) => setReason(current, reason.id, "sv", event.target.value, agent.id),
+                  )} />
                 </label>
                 <label>
                   {reason.id} English
-                  <input value={reason.en} onChange={(event) => agent && save(setReason(book, reason.id, "en", event.target.value, agent.id), "Draft saved. Not published.")} />
+                  <input value={reason.en} onChange={(event) => agent && edit(
+                    (current) => setReason(current, reason.id, "en", event.target.value, agent.id),
+                  )} />
                 </label>
               </div>
             ))}
           </details>
         ))}
       </article>
+
       <article className="panel">
         <h3>Booking rules</h3>
         <label>
           Max stops
-          <input type="number" min={0} value={book.draft.booking.maxStops} onChange={(event) => agent && save(setMaxStops(book, Number(event.target.value), agent.id), "Draft saved. Not published.")} />
+          <input
+            type="number"
+            min={0}
+            value={book.draft.booking.maxStops}
+            onChange={(event) => agent && edit(
+              (current) => setMaxStops(current, Number(event.target.value), agent.id),
+            )}
+          />
         </label>
       </article>
+
       <article className="panel">
         <h3>Environment (test only)</h3>
-        <label className="check-row">
-          <input type="checkbox" checked={book.draft.environment.simulatedArrival} onChange={(event) => agent && save(setEnvironment(book, "simulatedArrival", event.target.checked, agent.id), "Draft saved. Not published.")} />
-          Simulated arrival (test only)
-        </label>
-        <label className="check-row">
-          <input type="checkbox" checked={book.draft.environment.skipActivation} onChange={(event) => agent && save(setEnvironment(book, "skipActivation", event.target.checked, agent.id), "Draft saved. Not published.")} />
-          Skip activation (test only)
-        </label>
-        <label className="check-row">
-          <input type="checkbox" checked={book.draft.environment.demoPopup} onChange={(event) => agent && save(setEnvironment(book, "demoPopup", event.target.checked, agent.id), "Draft saved. Not published.")} />
-          Demo popup (test only)
-        </label>
-        <label className="check-row">
-          <input type="checkbox" checked={book.draft.environment.demoHint} onChange={(event) => agent && save(setEnvironment(book, "demoHint", event.target.checked, agent.id), "Draft saved. Not published.")} />
-          Demo hint (test only)
-        </label>
+        {([
+          ["simulatedArrival", "Simulated arrival (test only)"],
+          ["skipActivation", "Skip activation (test only)"],
+          ["demoPopup", "Demo popup (test only)"],
+          ["demoHint", "Demo hint (test only)"],
+        ] as const).map(([key, label]) => (
+          <label className="check-row" key={key}>
+            <input
+              type="checkbox"
+              checked={book.draft.environment[key]}
+              onChange={(event) => agent && edit(
+                (current) => setEnvironment(current, key, event.target.checked, agent.id),
+              )}
+            />
+            {label}
+          </label>
+        ))}
       </article>
+
       <article className="panel">
-        <h3>Effective value</h3>
-        <label>
-          Zone override
-          <select aria-label="Zone override" value={zoneId} onChange={(event) => setZoneId(event.target.value)}>
-            {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
-          </select>
-        </label>
-        <p className="state-line" data-effective={reservations.level}>Effective reservations: {reservations.value}. Winning level: {reservations.level}. {reservations.chain.join(" · ")}</p>
-        <p className="state-line" data-effective-wallet={wallet.level}>Effective wallet: {wallet.value}. Winning level: {wallet.level}. {wallet.chain.join(" · ")}</p>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={override.reservations ?? book.draft.features.reservations}
-            onChange={(event) => agent && save(setZoneOverride(book, zoneId, "reservations", event.target.checked, agent.id), "Zone override saved in the draft.")}
-          />
-          Reservations in this zone
-        </label>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={override.wallet ?? book.draft.features.wallet}
-            onChange={(event) => agent && save(setZoneOverride(book, zoneId, "wallet", event.target.checked, agent.id), "Zone override saved in the draft.")}
-          />
-          Wallet in this zone
-        </label>
+        <h3>Scheduled versions</h3>
+        {book.scheduled.length === 0 ? (
+          <p className="state-line">No scheduled configuration.</p>
+        ) : (
+          <ol className="version-list" aria-label="Scheduled configuration">
+            {book.scheduled.map((item) => (
+              <li key={item.rev}>
+                Version {item.rev} · effective {item.effectiveAt} · expires {item.expiresAt ?? "never"} · by {item.actorId}
+              </li>
+            ))}
+          </ol>
+        )}
       </article>
+
       <article className="panel">
         <h3>Publish history</h3>
         <ol aria-label="Publish history">
-          {book.publications.length === 0 ? <li>No publishes yet.</li> : book.publications.map((item) => (
-            <li key={item.rev}>Version {item.rev} by {item.actorId}: {item.diff.join("; ") || "no diff"}</li>
+          {book.publications.length === 0 ? <li>No publishes yet.</li> : book.publications.map((item, index) => (
+            <li key={`${item.rev}-${item.kind ?? "publish"}-${index}`}>
+              Version {item.rev} · {item.kind ?? "publish"} by {item.actorId}
+              {item.effectiveAt ? ` · effective ${item.effectiveAt}` : ""}
+              {item.expiresAt ? ` · expires ${item.expiresAt}` : ""}
+              {item.diff.length ? `: ${item.diff.join("; ")}` : ": no diff"}
+            </li>
           ))}
         </ol>
       </article>
+
       <article className="panel">
+        <h3>Review and publish</h3>
         <div className="actions">
-          <CommandButton command="admin.config.review" className="secondary-btn" type="button" onDone={() => {
-            if (!agent) return;
-            const result = submitConfigApproval(book, agent.id);
-            if (result.error) setNotice(result.error);
-            else save(result.book, "Sent for approval.");
-          }}>
+          <CommandButton
+            command="admin.config.review"
+            confirmTarget={false}
+            className="secondary-btn"
+            type="button"
+            targetId="configuration"
+            before={book.status}
+            after="in_review"
+            disabled={dirty || !review || !!review.error}
+            title={dirty ? "Save the draft first." : review?.error}
+            expectedSliceRev={persisted.draftRev}
+            sliceKey="config"
+            value={review?.book}
+            onDone={() => {
+              if (!review || review.error) return;
+              setBook(review.book);
+              setNotice("Sent for approval.");
+            }}
+          >
             Send for approval
           </CommandButton>
-          <CommandButton command="admin.config.approve" className="secondary-btn" type="button" onDone={() => {
-            if (!agent) return;
-            const result = approveConfig(book, agent.id);
-            if (result.error) setNotice(result.error);
-            else save(result.book, "Approved. A second agent can publish.");
-          }}>
+
+          <CommandButton
+            command="admin.config.approve"
+            confirmTarget={false}
+            className="secondary-btn"
+            type="button"
+            targetId="configuration"
+            before={book.status}
+            after="approved"
+            disabled={dirty || !approval || !!approval.error}
+            title={dirty ? "Save the draft first." : approval?.error}
+            expectedSliceRev={persisted.draftRev}
+            sliceKey="config"
+            value={approval?.book}
+            onDone={() => {
+              if (!approval || approval.error) return;
+              setBook(approval.book);
+              setNotice("Approved. A second agent can publish.");
+            }}
+          >
             Approve
           </CommandButton>
-          <CommandButton command="admin.config.publish" className="primary-btn" type="button" onDone={() => {
-            if (!agent) return;
-            const result = publishConfig(book, agent.id, new Date().toISOString());
-            if (result.error) setNotice(result.error);
-            else save(result.book, `Published version ${result.book.rev}.`);
-          }}>
+
+          <CommandButton
+            command="admin.config.publish"
+            confirmTarget={false}
+            className="primary-btn"
+            type="button"
+            targetId="configuration"
+            before={book.status}
+            after={book.draft.scheduleAt ? "scheduled" : "published"}
+            disabled={dirty || !publication || !!publication.error}
+            title={dirty ? "Save the draft first." : publication?.error}
+            expectedSliceRev={persisted.draftRev}
+            sliceKey="config"
+            value={publication?.book}
+            onDone={() => {
+              if (!publication || publication.error) return;
+              setBook(publication.book);
+              setNotice(
+                publication.scheduled
+                  ? `Scheduled configuration version ${publication.book.rev}.`
+                  : `Published version ${publication.book.rev}.`,
+              );
+            }}
+          >
             Publish
           </CommandButton>
-          <CommandButton command="admin.config.rollback" className="secondary-btn" type="button" onDone={() => save(rollbackConfig(book), "Rolled back.")}>
+
+          <CommandButton
+            command="admin.config.rollback"
+            confirmTarget={false}
+            className="secondary-btn"
+            type="button"
+            targetId="configuration"
+            before={`version ${book.rev}`}
+            after="previous snapshot as new version"
+            disabled={dirty || book.history.length < 2}
+            title={dirty ? "Discard or save unsaved changes first." : book.history.length < 2 ? "No previous published version exists." : undefined}
+            expectedSliceRev={persisted.draftRev}
+            sliceKey="config"
+            value={rollback}
+            onDone={() => {
+              setBook(rollback);
+              setNotice(`Rolled back as version ${rollback.rev}.`);
+            }}
+          >
             Roll back
+          </CommandButton>
+
+          <CommandButton
+            command="admin.config.save"
+            confirmTarget={false}
+            className="secondary-btn"
+            type="button"
+            targetId="configuration"
+            before={`config ${book.draftRev}`}
+            after={`config ${clocked.draftRev}`}
+            disabled={dirty || !clockChanged}
+            title={dirty ? "Save or discard unsaved changes first." : clockChanged ? undefined : "No schedule or expiry is due."}
+            expectedSliceRev={persisted.draftRev}
+            sliceKey="config"
+            value={clocked}
+            onDone={() => {
+              setBook(clocked);
+              setNotice("Due schedule or expiry applied.");
+            }}
+          >
+            Apply due schedule / expiry
           </CommandButton>
         </div>
       </article>

@@ -3,6 +3,29 @@ export type AppId = "rider" | "driver";
 export type PlatformId = "ios" | "android";
 export type ConfigStatus = "draft" | "in_review" | "approved";
 export type ReasonGroup = "driver_before" | "driver_during" | "rider_finding" | "rider_support";
+export type FeatureKey = "reservations" | "wallet";
+export type OverrideLevel = "market" | "zone" | "category" | "app" | "platform" | "appVersion" | "cohort";
+
+export type OverrideRule = {
+  id: string;
+  key: FeatureKey;
+  level: OverrideLevel;
+  target: string;
+  value: boolean;
+  startsAt?: string | null;
+  expiresAt?: string | null;
+};
+
+export type EffectiveContext = {
+  market?: string;
+  zoneId?: string;
+  category?: string;
+  app?: AppId;
+  platform?: PlatformId;
+  appVersion?: string;
+  cohort?: string;
+  nowIso?: string;
+};
 
 export type ReasonText = { id: string; group: ReasonGroup; sv: string; en: string };
 
@@ -29,22 +52,43 @@ export type ConfigDraft = {
   updates: AppUpdate[];
   reasons: ReasonText[];
   scheduleAt: string | null;
+  expiresAt: string | null;
   booking: { maxStops: number };
   environment: { simulatedArrival: boolean; skipActivation: boolean; demoPopup: boolean; demoHint: boolean };
   zoneOverrides: Record<string, { reservations?: boolean; wallet?: boolean }>;
+  overrides: OverrideRule[];
 };
 
-export type Publication = { rev: number; at: string; actorId: string; diff: string[] };
+export type Publication = {
+  rev: number;
+  at: string;
+  actorId: string;
+  diff: string[];
+  kind?: "publish" | "rollback" | "expired" | "scheduled";
+  effectiveAt?: string | null;
+  expiresAt?: string | null;
+};
+
+export type ScheduledConfig = {
+  rev: number;
+  actorId: string;
+  effectiveAt: string;
+  expiresAt: string | null;
+  snapshot: ConfigDraft;
+  diff: string[];
+};
 
 export type ConfigBook = {
   authorId: string;
   approverId: string | null;
   status: ConfigStatus;
   rev: number;
+  draftRev: number;
   draft: ConfigDraft;
   published: ConfigDraft;
   history: ConfigDraft[];
   publications: Publication[];
+  scheduled: ScheduledConfig[];
 };
 
 export const RIDER_SWITCHES: FeatureSwitch[] = [
@@ -135,9 +179,11 @@ function blankDraft(): ConfigDraft {
     ],
     reasons: REASONS.map((reason) => ({ ...reason })),
     scheduleAt: null,
+    expiresAt: null,
     booking: { maxStops: 3 },
     environment: { simulatedArrival: false, skipActivation: false, demoPopup: false, demoHint: false },
     zoneOverrides: {},
+    overrides: [],
   };
 }
 
@@ -149,10 +195,12 @@ export function emptyConfig(authorId = "nora"): ConfigBook {
     approverId: null,
     status: "draft",
     rev: 1,
+    draftRev: 1,
     draft,
     published,
     history: [JSON.parse(JSON.stringify(draft)) as ConfigDraft],
     publications: [],
+    scheduled: [],
   };
 }
 
@@ -170,6 +218,8 @@ export function normalizeConfig(raw: Partial<ConfigBook> | null | undefined): Co
     environment: { ...base.draft.environment, ...incoming?.environment },
     versions: { ...base.draft.versions, ...incoming?.versions },
     zoneOverrides: incoming?.zoneOverrides ?? {},
+    overrides: incoming?.overrides ?? [],
+    expiresAt: incoming?.expiresAt ?? null,
   });
   const status: ConfigStatus = raw.status === "in_review" || raw.status === "approved" ? raw.status : "draft";
   return {
@@ -178,10 +228,12 @@ export function normalizeConfig(raw: Partial<ConfigBook> | null | undefined): Co
     approverId: raw.approverId ?? null,
     status,
     rev: raw.rev || 1,
+    draftRev: raw.draftRev || 1,
     draft: mergeDraft(raw.draft),
     published: mergeDraft(raw.published),
-    history: raw.history?.length ? raw.history : base.history,
+    history: raw.history?.length ? raw.history.map((item) => mergeDraft(item)) : base.history,
     publications: raw.publications ?? [],
+    scheduled: raw.scheduled ?? [],
   };
 }
 
@@ -190,7 +242,14 @@ export function missingTranslations(reasons: readonly ReasonText[]): string[] {
 }
 
 function edited(book: ConfigBook, draft: ConfigDraft, authorId: string): ConfigBook {
-  return { ...book, authorId, approverId: null, status: "draft", draft };
+  return {
+    ...book,
+    authorId,
+    approverId: null,
+    status: "draft",
+    draftRev: book.draftRev + 1,
+    draft,
+  };
 }
 
 export function setFeature(book: ConfigBook, key: "reservations" | "wallet", value: boolean, authorId: string): ConfigBook {
@@ -224,6 +283,19 @@ export function setReason(book: ConfigBook, id: string, lang: Lang, text: string
 
 export function setSchedule(book: ConfigBook, scheduleAt: string | null, authorId: string): ConfigBook {
   return edited(book, { ...book.draft, scheduleAt }, authorId);
+}
+
+export function setExpiry(book: ConfigBook, expiresAt: string | null, authorId: string): ConfigBook {
+  return edited(book, { ...book.draft, expiresAt }, authorId);
+}
+
+export function setOverride(book: ConfigBook, rule: OverrideRule, authorId: string): ConfigBook {
+  const overrides = [...book.draft.overrides.filter((item) => item.id !== rule.id), { ...rule }];
+  return edited(book, { ...book.draft, overrides }, authorId);
+}
+
+export function removeOverride(book: ConfigBook, id: string, authorId: string): ConfigBook {
+  return edited(book, { ...book.draft, overrides: book.draft.overrides.filter((item) => item.id !== id) }, authorId);
 }
 
 export function setMaxStops(book: ConfigBook, maxStops: number, authorId: string): ConfigBook {
@@ -295,73 +367,275 @@ export function configDiff(published: ConfigDraft, draft: ConfigDraft): string[]
       lines.push(`Zone ${id} override changed`);
     }
   }
+  if (JSON.stringify(published.overrides ?? []) !== JSON.stringify(draft.overrides ?? [])) {
+    lines.push("Advanced precedence overrides changed");
+  }
+  if ((published.expiresAt ?? "") !== (draft.expiresAt ?? "")) {
+    lines.push(`Expiry ${published.expiresAt ?? "none"} → ${draft.expiresAt ?? "none"}`);
+  }
   return lines;
 }
 
-export function effectiveValue(draft: ConfigDraft, key: "wallet" | "reservations", zoneId: string): { value: string; level: string; chain: string[] } {
-  const global = draft.features[key];
-  const zone = draft.zoneOverrides[zoneId]?.[key];
-  const chain = [
-    `global ${onOff(global)}`,
-    "market not set",
-    zone === undefined ? "zone not set" : `zone ${onOff(zone)}`,
-    "category not set",
-    "app not set",
-    "platform not set",
-  ];
-  if (zone !== undefined) return { value: onOff(zone), level: "zone", chain };
-  return { value: onOff(global), level: "global", chain };
+const OVERRIDE_LEVELS: OverrideLevel[] = ["market", "zone", "category", "app", "platform", "appVersion", "cohort"];
+
+function targetFor(level: OverrideLevel, context: EffectiveContext): string | undefined {
+  if (level === "market") return context.market;
+  if (level === "zone") return context.zoneId;
+  if (level === "category") return context.category;
+  if (level === "app") return context.app;
+  if (level === "platform") return context.platform;
+  if (level === "appVersion") return context.appVersion;
+  return context.cohort;
+}
+
+function activeAt(rule: OverrideRule, nowIso: string): boolean {
+  if (rule.startsAt && rule.startsAt > nowIso) return false;
+  if (rule.expiresAt && rule.expiresAt <= nowIso) return false;
+  return true;
+}
+
+export function effectiveValue(
+  draft: ConfigDraft,
+  key: FeatureKey,
+  contextOrZone: EffectiveContext | string,
+): { value: string; level: string; chain: string[]; winnerId?: string } {
+  const context: EffectiveContext =
+    typeof contextOrZone === "string"
+      ? { market: "SE-STO", zoneId: contextOrZone }
+      : contextOrZone;
+  const nowIso = context.nowIso ?? new Date().toISOString();
+  let value = draft.features[key];
+  let level = "global";
+  let winnerId: string | undefined;
+  const chain = [`global ${onOff(value)}`];
+
+  for (const candidate of OVERRIDE_LEVELS) {
+    const target = targetFor(candidate, context);
+    const advanced = target
+      ? draft.overrides.filter(
+          (rule) => rule.key === key && rule.level === candidate && rule.target === target && activeAt(rule, nowIso),
+        )
+      : [];
+
+    let winner = advanced[advanced.length - 1];
+    if (candidate === "zone" && context.zoneId) {
+      const legacy = draft.zoneOverrides[context.zoneId]?.[key];
+      if (legacy !== undefined && !winner) {
+        winner = {
+          id: `legacy-zone-${context.zoneId}-${key}`,
+          key,
+          level: "zone",
+          target: context.zoneId,
+          value: legacy,
+        };
+      }
+    }
+
+    if (winner) {
+      value = winner.value;
+      level = candidate;
+      winnerId = winner.id;
+      chain.push(`${candidate} ${winner.target} ${onOff(winner.value)}`);
+    } else {
+      chain.push(`${candidate} not set`);
+    }
+  }
+
+  return { value: onOff(value), level, chain, winnerId };
+}
+
+export function impactPreview(book: ConfigBook): {
+  changed: number;
+  scopes: string[];
+  missingTranslations: string[];
+  scheduledFor: string | null;
+  expiresAt: string | null;
+} {
+  const diff = configDiff(book.published, book.draft);
+  const scopes = new Set<string>();
+  for (const zoneId of Object.keys(book.draft.zoneOverrides)) scopes.add(`zone:${zoneId}`);
+  for (const rule of book.draft.overrides) scopes.add(`${rule.level}:${rule.target}`);
+  if (scopes.size === 0) scopes.add("global");
+  return {
+    changed: diff.length,
+    scopes: [...scopes],
+    missingTranslations: missingTranslations(book.draft.reasons),
+    scheduledFor: book.draft.scheduleAt,
+    expiresAt: book.draft.expiresAt,
+  };
 }
 
 export function submitConfigApproval(book: ConfigBook, actorId: string): { book: ConfigBook; error?: string } {
   const missing = missingTranslations(book.draft.reasons);
   if (missing.length > 0) return { book, error: `Missing translation: ${missing.join(", ")}` };
-  return { book: { ...book, authorId: actorId, approverId: null, status: "in_review" } };
+  if (configDiff(book.published, book.draft).length === 0) return { book, error: "There is no unpublished change to review." };
+  return { book: { ...book, authorId: actorId, approverId: null, status: "in_review", draftRev: book.draftRev + 1 } };
 }
 
 export function approveConfig(book: ConfigBook, actorId: string): { book: ConfigBook; error?: string } {
   if (book.status !== "in_review") return { book, error: "Send the draft for approval first." };
   if (actorId === book.authorId) return { book, error: "A second agent must approve." };
-  return { book: { ...book, approverId: actorId, status: "approved" } };
+  return { book: { ...book, approverId: actorId, status: "approved", draftRev: book.draftRev + 1 } };
 }
 
-export function publishConfig(book: ConfigBook, actorId: string, nowIso: string): { book: ConfigBook; error?: string } {
+function cloneDraft(draft: ConfigDraft): ConfigDraft {
+  return JSON.parse(JSON.stringify(draft)) as ConfigDraft;
+}
+
+export function publishConfig(
+  book: ConfigBook,
+  actorId: string,
+  nowIso: string,
+): { book: ConfigBook; error?: string; scheduled?: boolean } {
   const missing = missingTranslations(book.draft.reasons);
   if (missing.length > 0) return { book, error: `Missing translation: ${missing.join(", ")}` };
   if (book.draft.features.luxury !== false) return { book, error: "luxury is not a feature." };
   if (actorId === book.authorId) return { book, error: "A second agent must publish." };
   if (book.status !== "approved") return { book, error: "Approve the draft before publishing." };
-  if (book.draft.scheduleAt && book.draft.scheduleAt > nowIso) {
-    return { book, error: `Scheduled for ${book.draft.scheduleAt}. Not live yet.` };
-  }
-  const snapshot = JSON.parse(JSON.stringify(book.draft)) as ConfigDraft;
+
+  const snapshot = cloneDraft(book.draft);
   const diff = configDiff(book.published, snapshot);
+  const nextRev = book.rev + 1;
+
+  if (snapshot.scheduleAt && snapshot.scheduleAt > nowIso) {
+    const scheduled: ScheduledConfig = {
+      rev: nextRev,
+      actorId,
+      effectiveAt: snapshot.scheduleAt,
+      expiresAt: snapshot.expiresAt,
+      snapshot,
+      diff,
+    };
+    return {
+      scheduled: true,
+      book: {
+        ...book,
+        authorId: actorId,
+        approverId: null,
+        status: "draft",
+        rev: nextRev,
+        draftRev: book.draftRev + 1,
+        draft: { ...snapshot, scheduleAt: null },
+        scheduled: [...book.scheduled, scheduled],
+        publications: [
+          ...book.publications,
+          {
+            rev: nextRev,
+            at: nowIso,
+            actorId,
+            diff,
+            kind: "scheduled",
+            effectiveAt: scheduled.effectiveAt,
+            expiresAt: scheduled.expiresAt,
+          },
+        ],
+      },
+    };
+  }
+
+  const live = { ...snapshot, scheduleAt: null };
   return {
     book: {
       ...book,
       authorId: actorId,
       approverId: null,
       status: "draft",
-      rev: book.rev + 1,
-      published: snapshot,
-      history: [...book.history, snapshot],
-      publications: [...book.publications, { rev: book.rev + 1, at: nowIso, actorId, diff }],
+      rev: nextRev,
+      draftRev: book.draftRev + 1,
+      draft: cloneDraft(live),
+      published: cloneDraft(live),
+      history: [...book.history, cloneDraft(live)],
+      publications: [
+        ...book.publications,
+        {
+          rev: nextRev,
+          at: nowIso,
+          actorId,
+          diff,
+          kind: "publish",
+          effectiveAt: nowIso,
+          expiresAt: live.expiresAt,
+        },
+      ],
     },
   };
 }
 
-export function rollbackConfig(book: ConfigBook): ConfigBook {
+export function rollbackConfig(
+  book: ConfigBook,
+  actorId = "system",
+  nowIso = new Date().toISOString(),
+  kind: "rollback" | "expired" = "rollback",
+): ConfigBook {
   if (book.history.length < 2) return book;
-  const history = book.history.slice(0, -1);
-  const published = history[history.length - 1]!;
+  const previous = cloneDraft(book.history[book.history.length - 2]!);
+  previous.scheduleAt = null;
+  const nextRev = book.rev + 1;
+  const diff = configDiff(book.published, previous);
   return {
     ...book,
-    history,
-    published,
-    draft: JSON.parse(JSON.stringify(published)) as ConfigDraft,
-    rev: book.rev + 1,
-    status: "draft",
+    authorId: actorId,
     approverId: null,
-    publications: book.publications.slice(0, -1),
+    status: "draft",
+    rev: nextRev,
+    draftRev: book.draftRev + 1,
+    published: cloneDraft(previous),
+    draft: cloneDraft(previous),
+    history: [...book.history, cloneDraft(previous)],
+    publications: [
+      ...book.publications,
+      {
+        rev: nextRev,
+        at: nowIso,
+        actorId,
+        diff,
+        kind,
+        effectiveAt: nowIso,
+        expiresAt: previous.expiresAt,
+      },
+    ],
   };
 }
+
+export function draftRevisionMatches(current: ConfigBook, expectedDraftRev: number): boolean {
+  return current.draftRev === expectedDraftRev;
+}
+
+export function advanceConfigClock(book: ConfigBook, nowIso: string): ConfigBook {
+  let next = book;
+  const due = [...next.scheduled]
+    .filter((item) => item.effectiveAt <= nowIso)
+    .sort((a, b) => a.effectiveAt.localeCompare(b.effectiveAt));
+
+  for (const scheduled of due) {
+    const snapshot = cloneDraft(scheduled.snapshot);
+    snapshot.scheduleAt = null;
+    next = {
+      ...next,
+      draftRev: next.draftRev + 1,
+      published: cloneDraft(snapshot),
+      draft: cloneDraft(snapshot),
+      history: [...next.history, cloneDraft(snapshot)],
+      scheduled: next.scheduled.filter((item) => item.rev !== scheduled.rev),
+      publications: [
+        ...next.publications,
+        {
+          rev: scheduled.rev,
+          at: nowIso,
+          actorId: scheduled.actorId,
+          diff: scheduled.diff,
+          kind: "publish",
+          effectiveAt: scheduled.effectiveAt,
+          expiresAt: scheduled.expiresAt,
+        },
+      ],
+    };
+  }
+
+  if (next.published.expiresAt && next.published.expiresAt <= nowIso && next.history.length >= 2) {
+    next = rollbackConfig(next, "system-expiry", nowIso, "expired");
+  }
+
+  return next;
+}
+
