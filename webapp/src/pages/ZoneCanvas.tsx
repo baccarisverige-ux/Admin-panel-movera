@@ -440,7 +440,8 @@ function GoogleDraw({ zones, selectedId, mode, layers, focus, selectionNonce, on
     const paint = () => {
       map.data.forEach((feature) => map.data.remove(feature));
       map.data.addGeoJson(zonesGeo(zonesRef.current, selectedRef.current, layers));
-      map.data.addGeoJson(activityGeo(layers));
+      map.data.addGeoJson(activityGeo(layers, false));
+      map.data.addGeoJson(activityGeo(layers, true));
       map.data.setStyle((feature) => ({
         fillColor: String(feature.getProperty("color") ?? (feature.getProperty("kind") === "request" ? "#D08A1E" : "#1FA463")),
         strokeColor: String(feature.getProperty("color") ?? "#111614"),
