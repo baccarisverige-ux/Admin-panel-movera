@@ -353,6 +353,41 @@ export function zoneAreaKm(zone: ZoneShape): number {
   return area(shape) / 1_000_000;
 }
 
+function orientation(a: [number, number], b: [number, number], c: [number, number]): number {
+  const value = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1]);
+  if (Math.abs(value) < 1e-12) return 0;
+  return value > 0 ? 1 : -1;
+}
+
+function properSegmentCross(a: [number, number], b: [number, number], c: [number, number], d: [number, number]): boolean {
+  const o1 = orientation(a, b, c);
+  const o2 = orientation(a, b, d);
+  const o3 = orientation(c, d, a);
+  const o4 = orientation(c, d, b);
+  return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
+}
+
+function polygonEdges(points: [number, number][]): Array<[[number, number], [number, number]]> {
+  return points.map((pointA, index) => [pointA, points[(index + 1) % points.length] ?? pointA]);
+}
+
+function polygonsOverlapArea(
+  left: ZoneShape,
+  right: ZoneShape,
+  leftShape: NonNullable<ReturnType<typeof asPolygon>>,
+  rightShape: NonNullable<ReturnType<typeof asPolygon>>,
+): boolean {
+  if (!booleanIntersects(leftShape, rightShape)) return false;
+  if (left.points.some(([lat, lng]) => booleanWithin(point([lng, lat]), rightShape))) return true;
+  if (right.points.some(([lat, lng]) => booleanWithin(point([lng, lat]), leftShape))) return true;
+  for (const [a, b] of polygonEdges(left.points)) {
+    for (const [c, d] of polygonEdges(right.points)) {
+      if (properSegmentCross(a, b, c, d)) return true;
+    }
+  }
+  return false;
+}
+
 export function validateZones(zones: ZoneShape[]): ZoneIssue[] {
   const issues: ZoneIssue[] = [];
   const live = zones.filter((item) => !item.archived);
@@ -383,6 +418,23 @@ export function validateZones(zones: ZoneShape[]): ZoneIssue[] {
         issues.push({ level: "error", zoneId: item.id, message: `${item.name} has a hole outside the shape.` });
       }
     }
+    for (const [label, boundary] of [["queue polygon", item.queuePolygon], ["pickup area", item.pickupArea]] as const) {
+      if (boundary.length === 0) continue;
+      if (boundary.length < 3) {
+        issues.push({ level: "error", zoneId: item.id, message: `${item.name} ${label} needs at least 3 points.` });
+        continue;
+      }
+      const child = polygon([closedRing(boundary)]);
+      if (kinks(child).features.length > 0 || !booleanWithin(child, shape)) {
+        issues.push({ level: "error", zoneId: item.id, message: `${item.name} ${label} must stay inside the zone.` });
+      }
+    }
+    if (item.schedule === "weekly" && !item.hours.trim()) {
+      issues.push({ level: "error", zoneId: item.id, message: `${item.name} weekly schedule needs hours.` });
+    }
+    if (item.schedule === "range" && (!item.from.trim() || !item.until.trim())) {
+      issues.push({ level: "error", zoneId: item.id, message: `${item.name} date range needs from and until.` });
+    }
     const squareKm = zoneAreaKm(item);
     if (item.kind === "service" && squareKm > 500) {
       issues.push({ level: "warn", zoneId: item.id, message: `${item.name} is the service area.` });
@@ -406,7 +458,7 @@ export function validateZones(zones: ZoneShape[]): ZoneIssue[] {
       const b = asPolygon(right, false);
       if (!a || !b || left.points.length < 3 || right.points.length < 3) continue;
       if (kinks(a).features.length > 0 || kinks(b).features.length > 0) continue;
-      if (booleanIntersects(a, b)) {
+      if (polygonsOverlapArea(left, right, a, b)) {
         issues.push({ level: "error", zoneId: left.id, message: `${left.name} overlaps ${right.name}. Operating zones cannot overlap.` });
       }
     }
@@ -544,7 +596,7 @@ export function zonesToGeoJSON(zones: ZoneShape[]): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const item of zones) {
     if (item.archived) continue;
-    const color = ZONE_COLOR[item.kind];
+    const color = item.color || ZONE_COLOR[item.kind];
     if (item.kind === "pickup") {
       const [lat, lng] = item.points[0] ?? [59.33, 18.06];
       features.push({ type: "Feature", properties: { id: item.id, name: item.name, kind: item.kind, color }, geometry: { type: "Point", coordinates: [lng, lat] } });
