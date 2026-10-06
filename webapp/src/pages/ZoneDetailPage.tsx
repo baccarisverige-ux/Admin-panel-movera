@@ -212,9 +212,11 @@ export function ZoneDetailPage() {
                 lat: Number(pickupLat) || 0,
                 lng: Number(pickupLng) || 0,
                 instructions: pickupNotes,
-                photoUrl: "",
+                photoUrl: pickupPhoto.trim(),
               }, agent.id);
               setPickupName("");
+              setPickupNotes("");
+              setPickupPhoto("");
             }}
           >
             Add pickup
