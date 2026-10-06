@@ -276,3 +276,6 @@ export type { SafetyBook, SafetyPolicy } from "../safety/ops.ts";
 
 export { emptySupport, ticketOps, supportChange } from "../support/ops.ts";
 export type { SupportBook, TicketOps } from "../support/ops.ts";
+
+export { emptyCampaigns, newCampaign, validateCampaign, campaignAudience, changeCampaign } from "../messages/ops.ts";
+export type { Campaign, CampaignBook } from "../messages/ops.ts";
