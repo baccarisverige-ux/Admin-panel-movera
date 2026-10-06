@@ -73,7 +73,7 @@ assert(imported.book.draft.find((zone) => zone.id === "op-norrmalm")?.points[1]?
 const priorityBook = reorderZonePriorities(emptyBook("nora"), ["nopick-1", "boost-1", "event-1"], "nora");
 const priority = priorityZones(priorityBook.draft);
 assert(priority[0]?.id === "nopick-1" && priority[1]?.id === "boost-1", "draggable priority order is persisted");
-const overlap = effectiveZonesAt(priorityBook.draft, 59.334, 18.08);
+const overlap = effectiveZonesAt(priorityBook.draft, 59.329, 18.08);
 assert(overlap.some((zone) => zone.kind === "no_pickup"), "effective stack includes overlapping rule zone");
 const noPickup = overlap.find((zone) => zone.kind === "no_pickup");
 assert(noPickup && zoneRuleSummary(noPickup).includes("priority"), "test-point rule summary exposes applied priority");
