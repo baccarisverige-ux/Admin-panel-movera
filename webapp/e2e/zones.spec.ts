@@ -130,7 +130,7 @@ test("A05 draw Östermalm, cut a hole, add Arlanda pickups, review, publish, rel
 
   await page.getByRole("cell", { name: "Arlanda" }).click();
   await expect(page).toHaveURL(/air-arlanda/);
-  await page.getByRole("button", { name: "Pickup points" }).click();
+  await page.getByRole("tab", { name: "Pickup points" }).click();
   await expect(page.getByLabel("Pickup name")).toBeVisible();
   await page.getByLabel("Pickup name").fill("Terminal 2 door");
   await page.getByLabel("Pickup latitude").fill("59.651");
@@ -186,10 +186,10 @@ test("norrmalm row opens the zone with one Greater Stockholm area", async ({ pag
   await page.getByRole("link", { name: "Norrmalm", exact: true }).click();
   await expect(page).toHaveURL(/\/zones\/op-norrmalm$/);
   await expect(page.locator("[data-zone-status]")).toContainText("Status: Published");
-  await page.getByRole("button", { name: "Dispatch" }).click();
+  await page.getByRole("tab", { name: "Dispatch" }).click();
   await expect(page.getByLabel("Offer seconds")).toBeVisible();
-  await page.getByRole("button", { name: "Pricing" }).click();
+  await page.getByRole("tab", { name: "Pricing" }).click();
   await expect(page.getByLabel("Zone fee öre")).toBeVisible();
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Settings" }).click();
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Norrmalm");
 });
