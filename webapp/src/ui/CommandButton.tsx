@@ -108,7 +108,8 @@ export function CommandButton({
         aria-label={ariaLabel}
         disabled={disabled || commands.busy || commands.phase === "submitting" || !spec || denied}
         title={title ?? disabledReason}
-        onClick={() => {
+        onClick={(event) => {
+          event.currentTarget.focus();
           if (!spec) return;
           if (spec.reason) setOpen(true);
           else fire("No person affected");
@@ -136,7 +137,7 @@ export function CommandButton({
             <p>This acts on {targetId ?? spec?.label}.</p>
             <label>
               Reason
-              <select value={reason} onChange={(event) => setReason(event.target.value as typeof reason)}>
+              <select aria-label="Reason" value={reason} onChange={(event) => setReason(event.target.value as typeof reason)}>
                 {ACTION_REASONS.map((item) => (
                   <option key={item}>{item}</option>
                 ))}
