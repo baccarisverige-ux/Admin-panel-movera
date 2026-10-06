@@ -1,9 +1,11 @@
 import { formatOre } from "../domain/contract";
+import { useSession } from "../auth/SessionContext";
 import { useApprovals, useAudit, useRevision } from "../api/hooks";
 import { DataTable } from "../ui/DataTable";
 import { CommandButton } from "../ui/CommandButton";
 
 export function AuditPage() {
+  const { agent } = useSession();
   const audit = useAudit();
   const approvals = useApprovals();
   const revision = useRevision();
@@ -52,7 +54,7 @@ export function AuditPage() {
           <p className="state-line">No pending approvals.</p>
         ) : (
           <DataTable
-            head={["Approval", "Action", "Target", "Requested by", "Amount", "Reason", "Status"]}
+            head={["Approval", "Action", "Target", "Requested by", "Amount", "Reason", "Status", "Decision"]}
             rowIds={pending.map((item) => item.id)}
             rows={pending.map((item) => [
               item.id,
@@ -62,6 +64,34 @@ export function AuditPage() {
               formatOre(item.amountOre),
               item.reason,
               item.status,
+              <div className="actions" key={`${item.id}-decision`}>
+                <CommandButton
+                  command="admin.approval.approve"
+                  className="secondary-btn"
+                  type="button"
+                  targetId={item.id}
+                  confirmTarget={false}
+                  before="pending"
+                  after="approved"
+                  disabled={item.requestedBy === agent?.id}
+                  title={item.requestedBy === agent?.id ? "The requester cannot approve their own action." : undefined}
+                >
+                  Approve
+                </CommandButton>
+                <CommandButton
+                  command="admin.approval.reject"
+                  className="secondary-btn"
+                  type="button"
+                  targetId={item.id}
+                  confirmTarget={false}
+                  before="pending"
+                  after="rejected"
+                  disabled={item.requestedBy === agent?.id}
+                  title={item.requestedBy === agent?.id ? "The requester cannot decide their own action." : undefined}
+                >
+                  Reject
+                </CommandButton>
+              </div>,
             ])}
           />
         )}

@@ -186,6 +186,82 @@ assert(large.status === "pending_approval", "large refund waits for approval");
 assert((await api.approvals()).filter((row) => row.targetId === "PAY0002" && row.status === "pending").length === 1, "one approval row created");
 const paymentAfterApprovalRequest = (await api.list("payments", null)).find((row) => row.id === "PAY0002");
 assert(paymentAfterApprovalRequest?.status === "captured", "pending approval does not mutate the payment");
+const pendingApproval = (await api.approvals()).find((row) => row.targetId === "PAY0002" && row.status === "pending");
+assert(pendingApproval, "pending approval can be decided");
+
+const requesterDecisionRev = await api.revision();
+await expectStatus(
+  api.command({
+    action: "admin.approval.approve",
+    targetId: pendingApproval!.id,
+    reason: "Second-person review",
+    actorId: "astrid",
+    actorRole: "finance",
+    actorScope: ALL,
+    idempotencyKey: "self-approval-denied",
+    expectedRev: requesterDecisionRev,
+    before: "pending",
+    after: "approved",
+  }),
+  403,
+  "requester cannot self-approve",
+);
+
+const decisionRev = await api.revision();
+const decision = await api.command({
+  action: "admin.approval.approve",
+  targetId: pendingApproval!.id,
+  reason: "Verified duplicate charge evidence",
+  actorId: "lena",
+  actorRole: "ops",
+  actorScope: ALL,
+  idempotencyKey: "second-agent-approval",
+  expectedRev: decisionRev,
+  before: "pending",
+  after: "approved",
+});
+assert(decision.status === "committed", "second authorised agent can approve");
+const approvedPayment = (await api.list("payments", null)).find((row) => row.id === "PAY0002");
+assert(approvedPayment?.status === "refunded", "approved refund mutates the payment once");
+const approvedRow = (await api.approvals()).find((row) => row.id === pendingApproval!.id);
+assert(approvedRow?.status === "approved" && approvedRow.decidedBy === "lena", "approval records the decision agent");
+
+await api.reset();
+const rejectRequestRev = await api.revision();
+const rejectRequest = await api.command({
+  action: "admin.payment.refund",
+  targetId: "PAY0200",
+  reason: "Large refund under review",
+  actorId: "astrid",
+  actorRole: "finance",
+  actorScope: ALL,
+  idempotencyKey: "large-refund-reject-case",
+  expectedRev: rejectRequestRev,
+  collection: "payments",
+  patch: { status: "refunded" },
+  before: "captured",
+  after: "refunded",
+  amountOre: 25_000,
+});
+assert(rejectRequest.status === "pending_approval", "second large refund also waits for approval");
+const rejectApproval = (await api.approvals()).find((row) => row.targetId === "PAY0200" && row.status === "pending");
+assert(rejectApproval, "rejection case has a pending approval");
+const rejectDecisionRev = await api.revision();
+await api.command({
+  action: "admin.approval.reject",
+  targetId: rejectApproval!.id,
+  reason: "Evidence did not support the refund",
+  actorId: "lena",
+  actorRole: "ops",
+  actorScope: ALL,
+  idempotencyKey: "second-agent-rejection",
+  expectedRev: rejectDecisionRev,
+  before: "pending",
+  after: "rejected",
+});
+const rejectedPayment = (await api.list("payments", null)).find((row) => row.id === "PAY0200");
+assert(rejectedPayment?.status === "captured", "rejected refund leaves the captured payment untouched");
+assert((await api.approvals()).find((row) => row.id === rejectApproval!.id)?.status === "rejected", "approval row records rejection");
 
 await api.reset();
 const transientRev = await api.revision();

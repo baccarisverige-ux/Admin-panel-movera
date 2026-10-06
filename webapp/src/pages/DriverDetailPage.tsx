@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { useAudit, useRecords, useSlice } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
 import { DRIVER_DOCUMENTS, type DocStatus, type Vehicle } from "../drivers/gate";
@@ -27,6 +27,7 @@ const CATEGORIES: Vehicle["category"][] = ["economy", "comfort", "premium", "pri
 
 export function DriverDetailPage() {
   const { driverId = "" } = useParams();
+  const [params, setParams] = useSearchParams();
   const { agent } = useSession();
   const drivers = useRecords("drivers", null);
   const vehicles = useRecords("vehicles", null);
@@ -37,7 +38,7 @@ export function DriverDetailPage() {
   const incidents = useRecords("incidents", null);
   const audit = useAudit();
   const store = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
-  const [tab, setTab] = useState("overview");
+  const tab = params.get("tab") ?? "overview";
   const [reviewNote, setReviewNote] = useState("");
   const [privateNote, setPrivateNote] = useState("");
   const [notice, setNotice] = useState("");
@@ -126,7 +127,15 @@ export function DriverDetailPage() {
 
       <p className="state-line">{notice} {store.message}</p>
 
-      <Tabs tabs={TABS} activeId={tab} onChange={setTab} />
+      <Tabs
+        tabs={TABS}
+        activeId={tab}
+        onChange={(id) => {
+          const next = new URLSearchParams(params);
+          next.set("tab", id);
+          setParams(next);
+        }}
+      />
       <article className="panel">
         <TabPanel id="overview" activeId={tab}>
           <p>

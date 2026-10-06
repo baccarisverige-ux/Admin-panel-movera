@@ -17,6 +17,8 @@ export { publicIncident, resolveIncident, takeIncident } from "../safety/book.ts
 export type { Incident } from "../safety/book.ts";
 export { markPaid, PAYMENT_METHODS, setMethod } from "../payments/book.ts";
 export type { BankAccount, PaymentMethod, Payout } from "../payments/book.ts";
+export { bankReview, bankValidation, defaultBankReview, defaultFinanceBook, defaultMethodPolicy, issueWalletVoucher, markPayoutPaid, normalizeFinanceBook, paymentPolicy, paymentPolicyKey, payoutState, reviewBank, runReconciliation, savePaymentPolicy, voidWalletVoucher, WALLET_TOP_UPS_ORE } from "../payments/finance.ts";
+export type { BankReview, FinanceBook, PaymentPolicyContext, PayoutState, ReconciliationInput, ReconciliationRun, WalletVoucher } from "../payments/finance.ts";
 export { assignReservation, cancelReservation, needsDriverSoon } from "../reservations/book.ts";
 export type { Reservation } from "../reservations/book.ts";
 export { averageStars, BONUSES, hideReview } from "../growth/book.ts";
