@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useRecords } from "../api/hooks";
+import { useSession } from "../auth/SessionContext";
 import { DataTable } from "../ui/DataTable";
 import { SensitiveValue } from "../ui/SensitiveValue";
 
@@ -14,9 +15,13 @@ const VIEWS = [
 
 export function DriversPage() {
   const navigate = useNavigate();
+  const { agent } = useSession();
   const drivers = useRecords("drivers", null);
   const [view, setView] = useState<(typeof VIEWS)[number]["id"]>("all");
-  const rows = (drivers.data ?? []).filter((driver) => view === "all" || driver.status === view);
+  const rows = (drivers.data ?? []).filter((driver) => {
+    if (agent?.scope.fleetPartnerId && driver.fleetId !== agent.scope.fleetPartnerId) return false;
+    return view === "all" || driver.status === view;
+  });
 
   return (
     <>
