@@ -21,18 +21,12 @@ import { accountOk, bicOk, clearingBank, ibanOk } from "../payments/ledger";
 import { CommandButton } from "../ui/CommandButton";
 import { DataTable } from "../ui/DataTable";
 
-const ZONES = [
-  ["Z001", "Norrmalm"],
-  ["Z002", "Södermalm"],
-  ["Z003", "Östermalm"],
-  ["ARN", "Arlanda"],
-  ["BMA", "Bromma airport"],
-] as const;
-
 export function PaymentsPage() {
   const navigate = useNavigate();
   const { agent } = useSession();
   const payments = useRecords("payments", null);
+  const zones = useRecords("zones", null);
+  const riders = useRecords("riders", null);
   const refunds = useRecords("refunds", null);
   const wallet = useRecords("wallet", null);
   const payouts = useRecords("payouts", null);
@@ -73,9 +67,11 @@ export function PaymentsPage() {
   const walletOre = seededWalletOre + voucherWalletOre;
   const bankName = clearingBank(clearing);
 
+  const voucherRiderExists = Boolean((riders.data ?? []).some((rider) => rider.id === voucherRider.trim()));
   const voucher = agent
     ? issueWalletVoucher(finance, voucherRider, voucherAmountOre, agent.id, voucherReason, new Date().toISOString())
     : { book: finance, error: "Sign in again." };
+  const voucherError = voucherRiderExists ? voucher.error : "Rider id was not found.";
   const reconciliation = agent
     ? runReconciliation(
         finance,
@@ -114,7 +110,7 @@ export function PaymentsPage() {
           <label>
             Zone
             <select aria-label="Method zone" value={zone} onChange={(event) => resetPolicyContext({ zoneId: event.target.value })}>
-              {ZONES.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              {(zones.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
           <label>
@@ -244,8 +240,8 @@ export function PaymentsPage() {
             expectedSliceRev={finance.draftRev}
             sliceKey="finance"
             value={voucher.book}
-            disabled={Boolean(voucher.error)}
-            title={voucher.error}
+            disabled={Boolean(voucherError)}
+            title={voucherError}
             onDone={() => setNotice(`Wallet voucher ${formatOre(voucherAmountOre)} posted for ${voucherRider}.`)}
           >
             Issue wallet voucher
