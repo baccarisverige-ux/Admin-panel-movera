@@ -1,0 +1,398 @@
+import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router";
+import {
+  emptyReservationBook,
+  normalizeReservationBook,
+  recordReservationContact,
+  recordReservationOffer,
+  reservationCandidates,
+  reservationOps,
+  reservationWarning,
+  scheduleReturnRide,
+  stockholmLabel,
+  stockholmLocalToIso,
+  stockholmLocalValue,
+  touchReservation,
+  unassignReservation,
+  useAudit,
+  useRecords,
+  useSlice,
+  type ReservationBook,
+} from "../api/hooks";
+import { can } from "../auth/permissions";
+import { useSession } from "../auth/SessionContext";
+import { statusLabel } from "../domain/labels";
+import { CommandButton } from "../ui/CommandButton";
+import { SensitiveValue } from "../ui/SensitiveValue";
+
+export function ReservationDetailPage() {
+  const { id = "" } = useParams();
+  const { agent } = useSession();
+  const reservations = useRecords("reservations", null);
+  const drivers = useRecords("drivers", null);
+  const vehicles = useRecords("vehicles", null);
+  const riders = useRecords("riders", null);
+  const audit = useAudit();
+  const store = useSlice<ReservationBook>("reservationOps", emptyReservationBook());
+  const book = useMemo(() => normalizeReservationBook(store.value), [store.value]);
+  const record = reservations.data?.find((item) => item.id === id);
+  const [driverId, setDriverId] = useState("");
+  const [contactChannel, setContactChannel] = useState<"call" | "sms">("sms");
+  const [contactNote, setContactNote] = useState("");
+  const [returnLocal, setReturnLocal] = useState("");
+  const [returnDisambiguation, setReturnDisambiguation] = useState<"earlier" | "later">("earlier");
+  const [notice, setNotice] = useState("");
+
+  if (reservations.isLoading || drivers.isLoading || vehicles.isLoading || store.loading) {
+    return <p className="state-line">Loading reservation.</p>;
+  }
+  if (!record) {
+    return (
+      <div className="page-heading">
+        <div>
+          <h2>Reservation not found</h2>
+          <p>The reservation is outside your active scope or does not exist.</p>
+          <Link to="/reservations">Back to reservations</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const ops = reservationOps(book, record);
+  const candidates = reservationCandidates(record, ops, drivers.data ?? [], vehicles.data ?? []);
+  const chosen = candidates.some((item) => item.id === driverId) ? driverId : candidates[0]?.id ?? "";
+  const rider = (riders.data ?? []).find((item) => item.phone === record.phone);
+  const nowIso = new Date().toISOString();
+  const warning = reservationWarning(record, ops, nowIso);
+  const canIntervene = Boolean(agent && can(agent.role, "trips.intervene"));
+  const pickupFuture = Date.parse(ops.pickupAt) > Date.parse(nowIso);
+  const isOpen = ["waiting", "booked", "assigned"].includes(record.status);
+  const canOffer = canIntervene && pickupFuture && ["waiting", "booked"].includes(record.status) && candidates.length > 0;
+  const canAssign = canIntervene && pickupFuture && ["waiting", "booked"].includes(record.status) && candidates.length > 0;
+  const canUnassign = canIntervene && record.status === "assigned" && Boolean(record.driverId);
+  const canCancel = canIntervene && ["waiting", "booked", "assigned"].includes(record.status);
+
+  const contactPrepared = recordReservationContact(
+    book,
+    record,
+    agent?.id ?? "",
+    contactChannel,
+    contactNote,
+    new Date().toISOString(),
+  );
+  const offerPrepared = chosen
+    ? recordReservationOffer(book, record, chosen, agent?.id ?? "", "offered", new Date().toISOString())
+    : book;
+  const assignPrepared = chosen
+    ? recordReservationOffer(book, record, chosen, agent?.id ?? "", "accepted", new Date().toISOString())
+    : book;
+  const unassignPrepared = touchReservation(book, record, agent?.id ?? "", `Driver ${record.driverId ?? "none"} unassigned`);
+  const cancelPrepared = touchReservation(book, record, agent?.id ?? "", "Reservation cancelled");
+
+  const shownReturnLocal = returnLocal || (ops.returnPickupAt ? stockholmLocalValue(ops.returnPickupAt) : "");
+  const parsedReturn = shownReturnLocal
+    ? stockholmLocalToIso(shownReturnLocal, returnDisambiguation)
+    : { iso: undefined, error: undefined, ambiguous: false };
+  const returnPrepared = scheduleReturnRide(book, record, parsedReturn.iso ?? null, agent?.id ?? "");
+  const removeReturnPrepared = scheduleReturnRide(book, record, null, agent?.id ?? "");
+  const reservationAudits = (audit.data ?? []).filter((item) => item.targetId === record.id).slice(0, 30);
+
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <h2>Reservation {record.id}</h2>
+          <p>
+            {record.name} · {statusLabel(record.status)} · {ops.category ?? "economy"} · {record.zoneId} · policy {ops.policy.version}
+          </p>
+        </div>
+        <Link to="/reservations">Back to reservations</Link>
+      </div>
+
+      <p className="state-line">
+        {warning ? `Attention: ${warning}` : "Reservation timing is within policy."}
+        {notice ? ` ${notice}` : ""} {store.message}
+      </p>
+
+      <div className="split">
+        <article className="panel" data-testid="reservation-summary">
+          <h3>Schedule</h3>
+          <p>Pickup {stockholmLabel(ops.pickupAt)} · Europe/Stockholm.</p>
+          <p>Return {ops.returnPickupAt ? stockholmLabel(ops.returnPickupAt) : "Not scheduled"}.</p>
+          <p>Driver {record.driverId ?? "Unassigned"}.</p>
+          <p>
+            Rider {rider ? <Link to={`/riders/${rider.id}`}>{rider.name}</Link> : record.name}
+            {" · "}
+            <SensitiveValue value={record.phone} permission="riders.viewSensitive" command="admin.rider.revealSensitive" targetId={rider?.id ?? record.id} label="Phone" />
+          </p>
+        </article>
+
+        <article className="panel" data-testid="reservation-policy-snapshot">
+          <h3>Policy snapshot · {ops.policy.version}</h3>
+          <ul className="version-list">
+            <li>Booking horizon {ops.policy.bookingHorizonDays} days</li>
+            <li>Assignment lead {ops.policy.assignmentLeadMinutes} min</li>
+            <li>Give-up {ops.policy.giveUpMinutes} min</li>
+            <li>Included waiting {ops.policy.includedWaitingMinutes} min</li>
+            <li>Free cancel after accept {ops.policy.freeCancelAfterAcceptMinutes} min</li>
+          </ul>
+          <p className="state-line">This snapshot does not change when the current reservation policy is updated.</p>
+        </article>
+      </div>
+
+      <article className="panel" data-testid="reservation-dispatch">
+        <h3>Driver assignment</h3>
+        <label>
+          Eligible driver
+          <select
+            aria-label="Reservation driver"
+            value={chosen}
+            disabled={!canIntervene || candidates.length === 0 || !isOpen || !pickupFuture}
+            onChange={(event) => setDriverId(event.target.value)}
+          >
+            {candidates.length === 0 ? <option value="">No eligible driver</option> : null}
+            {candidates.map((driver) => {
+              const vehicle = (vehicles.data ?? []).find((item) => item.driverId === driver.id);
+              return <option key={driver.id} value={driver.id}>{driver.name} · {driver.id} · {vehicle?.plate ?? "vehicle"}</option>;
+            })}
+          </select>
+        </label>
+        <p className="state-line">
+          Candidates require an active driver and an eligible vehicle matching category {ops.category ?? "economy"}.
+        </p>
+        <div className="actions">
+          <CommandButton
+            command="admin.reservation.offer"
+            className="secondary-btn"
+            type="button"
+            targetId={record.id}
+            confirmTarget={false}
+            entityState={record.status}
+            scope={record.zoneId}
+            before={record.driverId ?? "unassigned"}
+            after={chosen ? `offered to ${chosen}` : "no driver"}
+            expectedSliceRev={book.draftRev}
+            sliceKey="reservationOps"
+            value={offerPrepared}
+            disabled={!canOffer}
+            title={!canOffer ? (!canIntervene ? "Your role is read-only." : !pickupFuture ? "Pickup time has already passed." : candidates.length === 0 ? "No eligible driver." : "Reservation cannot be offered in this state.") : undefined}
+            onDone={() => setNotice(`Offer logged for ${chosen}.`)}
+          >
+            Offer to driver
+          </CommandButton>
+
+          <CommandButton
+            command="admin.reservation.assign"
+            className="primary-btn"
+            type="button"
+            targetId={record.id}
+            confirmTarget={false}
+            entityState={record.status}
+            scope={record.zoneId}
+            collection="reservations"
+            patch={{ driverId: chosen, status: "assigned" }}
+            before={record.driverId ?? "unassigned"}
+            after={chosen}
+            expectedSliceRev={book.draftRev}
+            sliceKey="reservationOps"
+            value={assignPrepared}
+            disabled={!canAssign}
+            title={!canAssign ? (!canIntervene ? "Your role is read-only." : !pickupFuture ? "Pickup time has already passed." : candidates.length === 0 ? "No eligible driver." : "Reservation cannot be assigned in this state.") : undefined}
+            onDone={() => setNotice(`Assigned ${chosen}.`)}
+          >
+            Assign driver
+          </CommandButton>
+
+          <CommandButton
+            command="admin.reservation.unassign"
+            className="secondary-btn"
+            type="button"
+            targetId={record.id}
+            confirmTarget={false}
+            entityState={record.status}
+            scope={record.zoneId}
+            collection="reservations"
+            patch={unassignReservation(record)}
+            before={record.driverId ?? "unassigned"}
+            after="unassigned"
+            expectedSliceRev={book.draftRev}
+            sliceKey="reservationOps"
+            value={unassignPrepared}
+            disabled={!canUnassign}
+            title={!canUnassign ? "Only an assigned reservation can be unassigned." : undefined}
+            onDone={() => setNotice("Driver unassigned. Reservation returned to waiting.")}
+          >
+            Unassign
+          </CommandButton>
+        </div>
+
+        <h4>Offer history</h4>
+        {ops.offers.length === 0 ? <p className="state-line">No offer has been logged yet.</p> : (
+          <ol className="version-list" aria-label="Reservation offer history">
+            {ops.offers.map((item) => <li key={item.id}>{item.at} · {item.driverId} · {item.result} · {item.actorId}</li>)}
+          </ol>
+        )}
+      </article>
+
+      <article className="panel" data-testid="reservation-contact">
+        <h3>Contact rider</h3>
+        <div className="field-grid">
+          <label>
+            Channel
+            <select aria-label="Contact channel" value={contactChannel} onChange={(event) => setContactChannel(event.target.value as "call" | "sms")}>
+              <option value="sms">SMS</option>
+              <option value="call">Call</option>
+            </select>
+          </label>
+          <label>
+            Contact note
+            <input aria-label="Contact note" value={contactNote} onChange={(event) => setContactNote(event.target.value)} />
+          </label>
+        </div>
+        <CommandButton
+          command="admin.reservation.contact"
+          className="secondary-btn"
+          type="button"
+          targetId={record.id}
+          confirmTarget={false}
+          entityState={record.status}
+          scope={record.zoneId}
+          before={`${ops.contacts.length} contacts`}
+          after={`${contactChannel} contact`}
+          expectedSliceRev={book.draftRev}
+          sliceKey="reservationOps"
+          value={contactPrepared.book}
+          disabled={!canIntervene || !isOpen || Boolean(contactPrepared.error)}
+          title={contactPrepared.error ?? (!isOpen ? "Cancelled/completed reservations cannot be contacted from dispatch." : undefined)}
+          onDone={() => {
+            setNotice(`${contactChannel.toUpperCase()} contact logged.`);
+            setContactNote("");
+          }}
+        >
+          Log contact
+        </CommandButton>
+
+        {ops.contacts.length === 0 ? <p className="state-line">No contact attempt has been logged.</p> : (
+          <ol className="version-list" aria-label="Reservation contacts">
+            {ops.contacts.map((item) => <li key={item.id}>{item.at} · {item.channel} · {item.actorId} · {item.note}</li>)}
+          </ol>
+        )}
+      </article>
+
+      <article className="panel" data-testid="reservation-return">
+        <h3>Return ride</h3>
+        <p>Return scheduling is stored as an absolute instant and displayed in Europe/Stockholm.</p>
+        <div className="field-grid">
+          <label>
+            Return pickup
+            <input
+              aria-label="Return pickup"
+              type="datetime-local"
+              value={shownReturnLocal}
+              onChange={(event) => setReturnLocal(event.target.value)}
+              disabled={!canIntervene || !isOpen}
+            />
+          </label>
+          <label>
+            Repeated DST hour
+            <select
+              aria-label="DST disambiguation"
+              value={returnDisambiguation}
+              onChange={(event) => setReturnDisambiguation(event.target.value as "earlier" | "later")}
+              disabled={!canIntervene || !parsedReturn.ambiguous}
+            >
+              <option value="earlier">Earlier occurrence</option>
+              <option value="later">Later occurrence</option>
+            </select>
+          </label>
+        </div>
+        {parsedReturn.error ? <p className="state-line">{parsedReturn.error}</p> : null}
+        {parsedReturn.ambiguous ? <p className="state-line">This Stockholm local time occurs twice because the DST clock moves back. Choose which occurrence is intended.</p> : null}
+        <div className="actions">
+          <CommandButton
+            command="admin.reservation.return"
+            className="primary-btn"
+            type="button"
+            targetId={record.id}
+            confirmTarget={false}
+            entityState={record.status}
+            scope={record.zoneId}
+            before={ops.returnPickupAt ?? "none"}
+            after={parsedReturn.iso ?? "invalid"}
+            expectedSliceRev={book.draftRev}
+            sliceKey="reservationOps"
+            value={returnPrepared.book}
+            disabled={!canIntervene || !isOpen || !shownReturnLocal || Boolean(parsedReturn.error) || Boolean(returnPrepared.error)}
+            title={parsedReturn.error ?? returnPrepared.error}
+            onDone={() => {
+              setReturnLocal("");
+              setNotice("Return ride saved with Stockholm DST validation.");
+            }}
+          >
+            Save return ride
+          </CommandButton>
+          <CommandButton
+            command="admin.reservation.return"
+            className="secondary-btn"
+            type="button"
+            targetId={record.id}
+            confirmTarget={false}
+            entityState={record.status}
+            scope={record.zoneId}
+            before={ops.returnPickupAt ?? "none"}
+            after="none"
+            expectedSliceRev={book.draftRev}
+            sliceKey="reservationOps"
+            value={removeReturnPrepared.book}
+            disabled={!canIntervene || !isOpen || !ops.returnPickupAt}
+            onDone={() => {
+              setReturnLocal("");
+              setNotice("Return ride removed.");
+            }}
+          >
+            Remove return
+          </CommandButton>
+        </div>
+      </article>
+
+      <article className="panel" data-testid="reservation-cancel">
+        <h3>Cancellation</h3>
+        <p>Policy snapshot {ops.policy.version} stays attached after cancellation.</p>
+        <CommandButton
+          command="admin.reservation.cancel"
+          className="secondary-btn"
+          type="button"
+          targetId={record.id}
+          entityState={record.status}
+          scope={record.zoneId}
+          collection="reservations"
+          patch={{ status: "cancelled" }}
+          before={record.status}
+          after="cancelled"
+          expectedSliceRev={book.draftRev}
+          sliceKey="reservationOps"
+          value={cancelPrepared}
+          disabled={!canCancel}
+          title={!canCancel ? "Reservation is already terminal." : undefined}
+          storeReason
+          onDone={() => setNotice(`Reservation cancelled. Policy ${ops.policy.version} remains on the booking.`)}
+        >
+          Cancel reservation
+        </CommandButton>
+      </article>
+
+      <article className="panel" data-testid="reservation-activity">
+        <h3>Activity and audit</h3>
+        <ul className="version-list">
+          {ops.activity.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+        </ul>
+        <h4>Command audit</h4>
+        {reservationAudits.length === 0 ? <p className="state-line">No audited reservation command yet.</p> : (
+          <ul aria-label="Reservation audit" className="version-list">
+            {reservationAudits.map((item) => <li key={item.id}>{item.at} · {item.action} · {item.result} · {item.actorId} · {item.reason}</li>)}
+          </ul>
+        )}
+      </article>
+    </>
+  );
+}

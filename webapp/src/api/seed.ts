@@ -30,6 +30,9 @@ export type DemoRecord = {
   waitingMin?: number;
   previousStatus?: string;
   notes?: string;
+  pickupAt?: string;
+  returnAt?: string | null;
+  policyVersion?: string;
 };
 
 export type AuditRow = {
@@ -181,14 +184,21 @@ export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
     driverId: index % 4 === 0 ? null : drivers[index % drivers.length].id,
     fareOre: 4900 + (index % 40) * 100,
   }));
-  const reservations = Array.from({ length: 40 }, (_, index) => ({
-    id: `B${String(index + 1).padStart(3, "0")}`,
-    name: riders[index].name,
-    phone: riders[index].phone,
-    zoneId: zoneId(index),
-    status: index % 5 === 0 ? "waiting" : "assigned",
-    driverId: index % 5 === 0 ? null : drivers[index % drivers.length].id,
-  }));
+  const reservations = Array.from({ length: 40 }, (_, index) => {
+    const pickupAt = new Date(Date.parse(now) + (20 + index * 45) * 60_000).toISOString();
+    return {
+      id: `B${String(index + 1).padStart(3, "0")}`,
+      name: riders[index].name,
+      phone: riders[index].phone,
+      zoneId: zoneId(index),
+      status: index % 11 === 0 ? "cancelled" : index % 5 === 0 ? "waiting" : index % 7 === 0 ? "booked" : "assigned",
+      driverId: index % 5 === 0 || index % 7 === 0 || index % 11 === 0 ? null : drivers[index % drivers.length].id,
+      category: vehicleCategories[index % vehicleCategories.length],
+      pickupAt,
+      returnAt: index % 8 === 0 ? new Date(Date.parse(pickupAt) + 8 * 60 * 60_000).toISOString() : null,
+      policyVersion: index < 20 ? "res-2" : "res-1",
+    };
+  });
   const tickets = Array.from({ length: 35 }, (_, index) => ({
     id: `S${String(index + 1).padStart(3, "0")}`,
     name: riders[index].name,

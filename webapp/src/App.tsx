@@ -28,6 +28,7 @@ import { PayoutsPage } from "./pages/PayoutsPage";
 import { PricingPage } from "./pages/PricingPage";
 import { RecordPage } from "./pages/RecordPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { ReservationDetailPage } from "./pages/ReservationDetailPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
 import { RiderDetailPage } from "./pages/RiderDetailPage";
 import { RidersPage } from "./pages/RidersPage";
@@ -139,7 +140,7 @@ function Authed() {
         <Route path="trips" element={<Screen id="trips" />} />
         <Route path="trips/:tripId" element={<TripPage />} />
         <Route path="reservations" element={<Screen id="reservations" />} />
-        <Route path="reservations/:id" element={<RecordPage label="Reservation" list="/reservations" />} />
+        <Route path="reservations/:id" element={<ReservationDetailPage />} />
         <Route path="live" element={<Screen id="live" />} />
         <Route path="drivers" element={<Screen id="drivers" />} />
         <Route path="drivers/:driverId" element={<DriverDetailPage />} />

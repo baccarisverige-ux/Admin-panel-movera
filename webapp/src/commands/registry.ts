@@ -100,6 +100,11 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.pricing.cancelCategory", label: "Cancel new category", reason: false, permission: "settings.read" },
   { id: "admin.pricing.createCategory", label: "Create category", reason: true, permission: "settings.publish" },
   { id: "admin.reservation.assign", label: "Assign reservation", reason: true, permission: "trips.intervene" },
+  { id: "admin.reservation.offer", label: "Offer reservation", reason: true, permission: "trips.intervene" },
+  { id: "admin.reservation.unassign", label: "Unassign reservation", reason: true, permission: "trips.intervene" },
+  { id: "admin.reservation.contact", label: "Log reservation contact", reason: true, permission: "trips.intervene" },
+  { id: "admin.reservation.return", label: "Change return ride", reason: true, permission: "trips.intervene" },
+  { id: "admin.reservation.savePolicy", label: "Save reservation policy", reason: true, permission: "trips.intervene" },
   { id: "admin.reservation.cancel", label: "Cancel reservation", reason: true, permission: "trips.intervene" },
   { id: "admin.safety.take", label: "Take incident", reason: true, permission: "safety.edit" },
   { id: "admin.safety.resolve", label: "Resolve incident", reason: true, permission: "safety.edit" },
@@ -234,6 +239,10 @@ const ALLOWED_STATES: Record<string, readonly string[]> = {
   "admin.vehicle.hold": ["eligible", "ineligible"],
   "admin.vehicle.activate": ["on_hold", "ineligible"],
   "admin.reservation.assign": ["waiting", "booked"],
+  "admin.reservation.offer": ["waiting", "booked"],
+  "admin.reservation.unassign": ["assigned"],
+  "admin.reservation.contact": ["waiting", "booked", "assigned"],
+  "admin.reservation.return": ["waiting", "booked", "assigned"],
   "admin.reservation.cancel": ["waiting", "booked", "assigned"],
 };
 
