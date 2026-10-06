@@ -281,7 +281,6 @@ export function scheduleReturnRide(
 export function saveReservationPolicy(
   book: ReservationBook,
   next: ReservationPolicy,
-  actorId: string,
 ): { book: ReservationBook; error?: string } {
   const integers: [string, number, number, number][] = [
     ["Booking horizon", next.bookingHorizonDays, 1, 30],
