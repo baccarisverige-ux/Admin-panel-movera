@@ -78,6 +78,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     "riders.read",
     "riders.viewSensitive",
     "riders.block",
+    "riders.promotions",
     "zones.read",
     "zones.edit",
     "zones.publish",
