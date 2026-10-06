@@ -31,6 +31,7 @@ export type DemoRecord = {
   previousStatus?: string;
   notes?: string;
   pickupAt?: string;
+  createdAt?: string;
   returnAt?: string | null;
   policyVersion?: string;
 };
@@ -183,6 +184,7 @@ export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
     status: TRIP_STATUSES[index % TRIP_STATUSES.length],
     driverId: index % 4 === 0 ? null : drivers[index % drivers.length].id,
     fareOre: 4900 + (index % 40) * 100,
+    createdAt: new Date(Date.parse(now) - (index % 30) * 86400000).toISOString(),
   }));
   const reservations = Array.from({ length: 40 }, (_, index) => {
     const pickupAt = new Date(Date.parse(now) + (20 + index * 45) * 60_000).toISOString();
