@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useAudit, useRecords, useSlice } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
@@ -35,6 +35,7 @@ export function RiderDetailPage() {
   const bonuses = useRecords("bonuses", null);
   const audit = useAudit();
   const store = useSlice<RiderOpsBook>("riderOps", emptyRiderOpsBook());
+  const [book, setBook] = useState<RiderOpsBook>(() => emptyRiderOpsBook());
   const [tab, setTab] = useState("trips");
   const [notice, setNotice] = useState("Wallet credit cannot exceed 500 kr per adjustment. Saved places are read-only.");
   const [accountReason, setAccountReason] = useState("");
@@ -42,6 +43,10 @@ export function RiderDetailPage() {
   const [privateNote, setPrivateNote] = useState("");
   const [promoCode, setPromoCode] = useState("");
   const [promoLabel, setPromoLabel] = useState("");
+
+  useEffect(() => {
+    if (!store.loading) setBook(store.value);
+  }, [store.loading, store.value]);
 
   const rider = riders.data?.find((item) => item.id === riderId);
 
@@ -80,17 +85,18 @@ export function RiderDetailPage() {
   }
 
   const seed = { id: rider.id, name: rider.name, status: rider.status, tripId: rider.tripId, fareOre: rider.fareOre };
-  const ops = riderOps(store.value, seed);
+  const ops = riderOps(book, seed);
   const activeSessions = ops.sessions.filter((session) => session.active);
   const walletAmountOre = Math.round(Number(walletKr) * 100);
-  const credit = creditRiderWallet(store.value, seed, walletAmountOre, agent?.id ?? "", "Manual admin wallet credit");
-  const privacyNext = advanceRiderPrivacy(store.value, seed, agent?.id ?? "");
-  const sessionsNext = revokeRiderSessions(store.value, seed, agent?.id ?? "");
-  const noteNext = setRiderNote(store.value, seed, privateNote, agent?.id ?? "");
-  const promotion = addRiderPromotion(store.value, seed, promoCode, promoLabel, agent?.id ?? "");
+  const credit = creditRiderWallet(book, seed, walletAmountOre, agent?.id ?? "", "Manual admin wallet credit");
+  const privacyNext = advanceRiderPrivacy(book, seed, agent?.id ?? "");
+  const sessionsNext = revokeRiderSessions(book, seed, agent?.id ?? "");
+  const noteNext = setRiderNote(book, seed, privateNote, agent?.id ?? "");
+  const promotion = addRiderPromotion(book, seed, promoCode, promoLabel, agent?.id ?? "");
   const riderAudits = (audit.data ?? []).filter((item) => item.targetId === rider.id).slice(0, 30);
 
-  function settle(text: string, after?: () => void) {
+  function settle(next: RiderOpsBook, text: string, after?: () => void) {
+    setBook(next);
     void store.refetch().then(() => {
       after?.();
       setNotice(text);
@@ -131,10 +137,10 @@ export function RiderDetailPage() {
               before={rider.status}
               after="active"
               patch={{ status: "active" }}
-              expectedSliceRev={store.value.draftRev}
+              expectedSliceRev={book.draftRev}
               sliceKey="riderOps"
-              value={setRiderAccountReason(store.value, seed, "active", accountReason || "Manual unblock", agent?.id ?? "")}
-              onDone={() => settle("Rider unblocked.", () => setAccountReason(""))}
+              value={setRiderAccountReason(book, seed, "active", accountReason || "Manual unblock", agent?.id ?? "")}
+              onDone={() => settle(setRiderAccountReason(book, seed, "active", accountReason || "Manual unblock", agent?.id ?? ""), "Rider unblocked.", () => setAccountReason(""))}
             >
               Unblock
             </CommandButton>
@@ -149,10 +155,10 @@ export function RiderDetailPage() {
               before={rider.status}
               after="blocked"
               patch={{ status: "blocked" }}
-              expectedSliceRev={store.value.draftRev}
+              expectedSliceRev={book.draftRev}
               sliceKey="riderOps"
-              value={setRiderAccountReason(store.value, seed, "blocked", accountReason || "Manual block", agent?.id ?? "")}
-              onDone={() => settle("Rider blocked.", () => setAccountReason(""))}
+              value={setRiderAccountReason(book, seed, "blocked", accountReason || "Manual block", agent?.id ?? "")}
+              onDone={() => settle(setRiderAccountReason(book, seed, "blocked", accountReason || "Manual block", agent?.id ?? ""), "Rider blocked.", () => setAccountReason(""))}
             >
               Block
             </CommandButton>
@@ -166,12 +172,12 @@ export function RiderDetailPage() {
             scope={rider.zoneId}
             before={`${activeSessions.length} active sessions`}
             after="0 active sessions"
-            expectedSliceRev={store.value.draftRev}
+            expectedSliceRev={book.draftRev}
             sliceKey="riderOps"
             value={sessionsNext}
             disabled={activeSessions.length === 0}
             title={activeSessions.length === 0 ? "No active rider session remains." : undefined}
-            onDone={() => settle("Signed out of every active rider session.")}
+            onDone={() => settle(sessionsNext, "Signed out of every active rider session.")}
           >
             Sign out all sessions
           </CommandButton>
@@ -183,12 +189,12 @@ export function RiderDetailPage() {
             scope={rider.zoneId}
             before={ops.privacy}
             after={riderOps(privacyNext, seed).privacy}
-            expectedSliceRev={store.value.draftRev}
+            expectedSliceRev={book.draftRev}
             sliceKey="riderOps"
             value={privacyNext}
             disabled={ops.privacy === "done"}
             title={ops.privacy === "done" ? "Privacy request is already complete." : undefined}
-            onDone={() => settle("Privacy request advanced.")}
+            onDone={() => settle(privacyNext, "Privacy request advanced.")}
           >
             Advance privacy
           </CommandButton>
@@ -237,12 +243,12 @@ export function RiderDetailPage() {
             amountOre={walletAmountOre}
             before={formatOre(ops.walletOre)}
             after={credit.error ? "invalid" : formatOre(riderOps(credit.book, seed).walletOre)}
-            expectedSliceRev={store.value.draftRev}
+            expectedSliceRev={book.draftRev}
             sliceKey="riderOps"
             value={credit.book}
             disabled={Boolean(credit.error)}
             title={credit.error}
-            onDone={() => settle(`Credited ${formatOre(walletAmountOre)}. The ceiling is 500 kr per adjustment.`)}
+            onDone={() => settle(credit.book, `Credited ${formatOre(walletAmountOre)}. The ceiling is 500 kr per adjustment.`)}
           >
             Credit wallet
           </CommandButton>
@@ -287,12 +293,12 @@ export function RiderDetailPage() {
             scope={rider.zoneId}
             before={`${ops.promotions.filter((item) => item.status === "active").length} active promotions`}
             after={promoCode.trim().toUpperCase() || "promotion"}
-            expectedSliceRev={store.value.draftRev}
+            expectedSliceRev={book.draftRev}
             sliceKey="riderOps"
             value={promotion.book}
             disabled={Boolean(promotion.error)}
             title={promotion.error}
-            onDone={() => settle(`Promotion ${promoCode.trim().toUpperCase()} added.`, () => {
+            onDone={() => settle(promotion.book, `Promotion ${promoCode.trim().toUpperCase()} added.`, () => {
               setPromoCode("");
               setPromoLabel("");
             })}
@@ -314,10 +320,10 @@ export function RiderDetailPage() {
                       scope={rider.zoneId}
                       before="active"
                       after="expired"
-                      expectedSliceRev={store.value.draftRev}
+                      expectedSliceRev={book.draftRev}
                       sliceKey="riderOps"
-                      value={removeRiderPromotion(store.value, seed, item.code, agent?.id ?? "")}
-                      onDone={() => settle(`Promotion ${item.code} removed.`)}
+                      value={removeRiderPromotion(book, seed, item.code, agent?.id ?? "")}
+                      onDone={() => settle(removeRiderPromotion(book, seed, item.code, agent?.id ?? ""), `Promotion ${item.code} removed.`)}
                     >
                       remove
                     </CommandButton>
@@ -365,11 +371,11 @@ export function RiderDetailPage() {
             scope={rider.zoneId}
             before={ops.privateNote || "empty"}
             after={privateNote || "empty"}
-            expectedSliceRev={store.value.draftRev}
+            expectedSliceRev={book.draftRev}
             sliceKey="riderOps"
             value={noteNext}
             disabled={!privateNote.trim()}
-            onDone={() => settle("Private rider note saved.", () => setPrivateNote(""))}
+            onDone={() => settle(noteNext, "Private rider note saved.", () => setPrivateNote(""))}
           >
             Save private note
           </CommandButton>
