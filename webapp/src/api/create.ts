@@ -1,8 +1,21 @@
+import { can, type AgentScope, type Role } from "../auth/permissions.ts";
+import { commandById } from "../commands/registry.ts";
 import { catalogFor, type CatalogEntry } from "../data/catalog.ts";
 import { CURRENCY, TIME_ZONE } from "../domain/contract.ts";
-import { addAudit, assertWritable, findHit, loadDb, pause, readFault, resetDb, rowsFor, writeFault, type Fault } from "./demoStore.ts";
-import { ApiError, apiRequest } from "./httpClient.ts";
-import type { DemoDb, DemoRecord, InboxItem, ZoneScope } from "./seed.ts";
+import {
+  addAudit,
+  findHit,
+  loadDb,
+  pause,
+  readFault,
+  resetDb,
+  rowsFor,
+  saveDb,
+  writeFault,
+  type Fault,
+} from "./demoStore.ts";
+import { ApiError, apiRequest, classifyStatus } from "./httpClient.ts";
+import type { ApprovalRow, AuditRow, DemoDb, DemoRecord, InboxItem, OperationRow, ZoneScope } from "./seed.ts";
 
 export type ApiEnv = {
   PROD: boolean;
@@ -19,10 +32,25 @@ export type CommandInput = {
   actorId: string;
   before: string;
   after: string;
+  actorRole?: Role;
+  actorScope?: AgentScope;
+  scope?: string;
+  idempotencyKey?: string;
+  expectedRev?: number;
+  entityState?: string;
+  amountOre?: number;
   sliceKey?: string;
   value?: unknown;
   collection?: string;
   patch?: Record<string, string | number | boolean | null>;
+};
+
+export type CommandResult = {
+  message: string;
+  db: DemoDb;
+  operationId: string;
+  status: "committed" | "pending_approval";
+  rev: number;
 };
 
 export type AdminApi = {
@@ -32,7 +60,11 @@ export type AdminApi = {
   page: (pageId: string) => Promise<PageResult>;
   list: (name: string, scope: ZoneScope) => Promise<DemoRecord[]>;
   search: (query: string, scope: ZoneScope) => Promise<{ kind: string; id: string; label: string; path: string }[]>;
-  command: (input: CommandInput) => Promise<{ message: string; db: DemoDb }>;
+  command: (input: CommandInput) => Promise<CommandResult>;
+  revision: () => Promise<number>;
+  audit: () => Promise<AuditRow[]>;
+  approvals: () => Promise<ApprovalRow[]>;
+  operation: (idempotencyKey: string, actorId: string) => Promise<OperationRow | null>;
   reset: () => Promise<DemoDb>;
   getFault: () => Promise<Fault>;
   setFault: (fault: Fault) => Promise<void>;
@@ -42,80 +74,377 @@ export type AdminApi = {
 };
 
 const DEMO_DELAY_MS = 200;
+const DEFAULT_SCOPE: AgentScope = { zones: "all", market: "SE-STO" };
+
+const TARGET_COLLECTIONS = [
+  "drivers",
+  "riders",
+  "vehicles",
+  "fleets",
+  "trips",
+  "reservations",
+  "tickets",
+  "incidents",
+  "payments",
+  "refunds",
+  "payouts",
+  "wallet",
+  "templates",
+  "banners",
+  "events",
+  "bonuses",
+  "staff",
+] as const;
+
+type TargetCollection = (typeof TARGET_COLLECTIONS)[number];
 
 function unsupported(): never {
   throw new ApiError(0, "Admin API is not connected.");
+}
+
+function operationKey(actorId: string, idempotencyKey: string): string {
+  return `${actorId}:${idempotencyKey}`;
+}
+
+function makeOperationId(actorId: string, idempotencyKey: string): string {
+  const compact = idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 36);
+  return `op-${actorId}-${compact || "command"}`;
+}
+
+function targetRecord(db: DemoDb, targetId: string, collection?: string): DemoRecord | null {
+  if (collection && TARGET_COLLECTIONS.includes(collection as TargetCollection)) {
+    return db[collection as TargetCollection].find((row) => row.id === targetId) ?? null;
+  }
+  for (const key of TARGET_COLLECTIONS) {
+    const row = db[key].find((item) => item.id === targetId);
+    if (row) return row;
+  }
+  return null;
+}
+
+function resolveTargetScope(db: DemoDb, input: CommandInput): string {
+  const record = targetRecord(db, input.targetId, input.collection);
+  if (record?.zoneId) return record.zoneId;
+  if (db.zones.some((zone) => zone.id === input.targetId)) return input.targetId;
+  return input.scope ?? "all";
+}
+
+function resolveTargetState(db: DemoDb, input: CommandInput): string | undefined {
+  return input.entityState ?? targetRecord(db, input.targetId, input.collection)?.status;
+}
+
+function scopeAllowed(actorScope: AgentScope, scope: string): boolean {
+  if (!scope || scope === "all") return true;
+  return actorScope.zones === "all" || actorScope.zones.includes(scope);
+}
+
+function faultStatus(fault: Fault): number | null {
+  if (fault === "none" || fault === "slow" || fault === "empty") return null;
+  if (fault === "offline") return 0;
+  return Number(fault);
+}
+
+function rejectionResult(status: number): AuditRow["result"] {
+  if (status === 403) return "denied";
+  if (status === 409) return "conflict";
+  return "rejected";
+}
+
+function replayOperation(db: DemoDb, operation: OperationRow): CommandResult {
+  if (operation.status === "rejected") throw new ApiError(operation.httpStatus, operation.message);
+  return {
+    message: operation.message,
+    db,
+    operationId: operation.operationId,
+    status: operation.status,
+    rev: operation.rev,
+  };
+}
+
+function rememberRejected(
+  db: DemoDb,
+  input: CommandInput,
+  resolvedScope: string,
+  idempotencyKey: string,
+  operationId: string,
+  status: number,
+  message: string,
+  cache: boolean,
+): DemoDb {
+  let next = addAudit(
+    db,
+    {
+      operationId,
+      actorId: input.actorId,
+      action: input.action,
+      targetId: input.targetId,
+      scope: resolvedScope,
+      before: input.before,
+      after: input.after,
+      reason: input.reason,
+      result: rejectionResult(status),
+    },
+    false,
+  );
+
+  if (!cache) return next;
+
+  const operation: OperationRow = {
+    operationId,
+    idempotencyKey,
+    action: input.action,
+    targetId: input.targetId,
+    status: "rejected",
+    httpStatus: status,
+    message,
+    rev: next.rev,
+    at: new Date().toISOString(),
+  };
+  next = {
+    ...next,
+    operations: {
+      ...next.operations,
+      [operationKey(input.actorId, idempotencyKey)]: operation,
+    },
+  };
+  return saveDb(next);
 }
 
 export function createFixtureAdminApi(delayMs = DEMO_DELAY_MS): AdminApi {
   return {
     kind: "fixture",
     demo: true,
+
     async ready() {
       await pause(delayMs, "none");
       return { currency: CURRENCY, timeZone: TIME_ZONE, demo: true };
     },
+
     async page(pageId) {
       await pause(delayMs, "none");
       return catalogFor(pageId);
     },
+
     async list(name, scope) {
       const fault = readFault();
       await pause(delayMs, fault);
-      if (fault === "offline") assertWritable(fault);
+      const status = faultStatus(fault);
+      if (status !== null) throw new ApiError(status, classifyStatus(status));
       return rowsFor(loadDb(), name, scope, fault);
     },
+
     async search(query, scope) {
       await pause(delayMs, "none");
       return findHit(loadDb(), query, scope);
     },
-    async command(input) {
+
+    async command(raw) {
       const fault = readFault();
       await pause(delayMs, fault);
-      assertWritable(fault);
+
       let db = loadDb();
-      if (input.collection && input.patch) {
-        const key = input.collection as keyof DemoDb;
-        const rows = db[key];
-        if (Array.isArray(rows)) {
-          db = {
-            ...db,
-            [key]: rows.map((row) => (row.id === input.targetId ? { ...row, ...input.patch } : row)),
-          };
-        }
+      const spec = commandById(raw.action);
+      const actorRole = raw.actorRole ?? "super";
+      const actorScope = raw.actorScope ?? DEFAULT_SCOPE;
+      const idempotencyKey = raw.idempotencyKey ?? `direct-${db.rev}-${raw.action}-${raw.targetId}`;
+      const expectedRev = raw.expectedRev ?? db.rev;
+      const resolvedScope = resolveTargetScope(db, raw);
+      const resolvedState = resolveTargetState(db, raw);
+      const operationId = makeOperationId(raw.actorId, idempotencyKey);
+
+      const cached = db.operations[operationKey(raw.actorId, idempotencyKey)];
+      if (cached) return replayOperation(db, cached);
+
+      const reject = (status: number, message: string, cache = true): never => {
+        db = rememberRejected(db, raw, resolvedScope, idempotencyKey, operationId, status, message, cache);
+        throw new ApiError(status, message);
+      };
+
+      if (!spec) reject(422, `Unknown action ${raw.action}.`);
+      const actionSpec = spec!;
+
+      if (!can(actorRole, actionSpec.permission)) reject(403, "Your role cannot do that.");
+      if (!scopeAllowed(actorScope, resolvedScope)) reject(403, "That record is outside your active scope.");
+      if (actionSpec.reason && !raw.reason.trim()) reject(422, "A reason is required.");
+
+      if (!actionSpec.versioned && actionSpec.audit === "none") {
+        return {
+          message: "Done.",
+          db,
+          operationId,
+          status: "committed",
+          rev: db.rev,
+        };
       }
-      if (input.sliceKey) db = { ...db, slices: { ...db.slices, [input.sliceKey]: input.value } };
+
+      if (expectedRev !== db.rev) reject(409, "Someone else changed this. Reload and review the newest version.");
+      if (actionSpec.allowedStates && resolvedState && !actionSpec.allowedStates.includes(resolvedState)) {
+        reject(422, `${actionSpec.label} is not allowed while the record is ${resolvedState}.`);
+      }
+
+      const injectedStatus = faultStatus(fault);
+      if (injectedStatus !== null) {
+        const transient = injectedStatus === 0 || injectedStatus === 429 || injectedStatus === 503;
+        reject(
+          injectedStatus,
+          injectedStatus === 409 ? "This record changed. The newest version is still here." : classifyStatus(injectedStatus),
+          !transient,
+        );
+      }
+
+      if (actionSpec.approvalThresholdOre && (raw.amountOre ?? 0) >= actionSpec.approvalThresholdOre) {
+        const approval: ApprovalRow = {
+          id: `approval-${db.approvals.length + 1}`,
+          action: raw.action,
+          targetId: raw.targetId,
+          requestedBy: raw.actorId,
+          amountOre: raw.amountOre ?? 0,
+          reason: raw.reason,
+          status: "pending",
+        };
+
+        let next: DemoDb = { ...db, approvals: [approval, ...db.approvals] };
+        next = addAudit(next, {
+          operationId,
+          actorId: raw.actorId,
+          action: raw.action,
+          targetId: raw.targetId,
+          scope: resolvedScope,
+          before: raw.before,
+          after: "pending approval",
+          reason: raw.reason,
+          result: "pending_approval",
+        });
+
+        const operation: OperationRow = {
+          operationId,
+          idempotencyKey,
+          action: raw.action,
+          targetId: raw.targetId,
+          status: "pending_approval",
+          httpStatus: 202,
+          message: "Pending approval. A second authorised agent must decide this action.",
+          rev: next.rev,
+          at: new Date().toISOString(),
+        };
+        next = saveDb({
+          ...next,
+          operations: {
+            ...next.operations,
+            [operationKey(raw.actorId, idempotencyKey)]: operation,
+          },
+        });
+
+        return {
+          message: operation.message,
+          db: next,
+          operationId,
+          status: "pending_approval",
+          rev: next.rev,
+        };
+      }
+
+      if (raw.collection && raw.patch && TARGET_COLLECTIONS.includes(raw.collection as TargetCollection)) {
+        const key = raw.collection as TargetCollection;
+        db = {
+          ...db,
+          [key]: db[key].map((row) => row.id === raw.targetId ? { ...row, ...raw.patch } : row),
+        };
+      }
+
+      if (raw.sliceKey) {
+        db = {
+          ...db,
+          slices: {
+            ...db.slices,
+            [raw.sliceKey]: raw.value,
+          },
+        };
+      }
+
       db = addAudit(db, {
-        actorId: input.actorId,
-        action: input.action,
-        targetId: input.targetId,
-        before: input.before,
-        after: input.after,
-        reason: input.reason,
+        operationId,
+        actorId: raw.actorId,
+        action: raw.action,
+        targetId: raw.targetId,
+        scope: resolvedScope,
+        before: raw.before,
+        after: raw.after,
+        reason: raw.reason,
         result: "committed",
       });
-      return { message: "Saved in demo.", db };
+
+      const operation: OperationRow = {
+        operationId,
+        idempotencyKey,
+        action: raw.action,
+        targetId: raw.targetId,
+        status: "committed",
+        httpStatus: 200,
+        message: "Saved in demo.",
+        rev: db.rev,
+        at: new Date().toISOString(),
+      };
+      db = saveDb({
+        ...db,
+        operations: {
+          ...db.operations,
+          [operationKey(raw.actorId, idempotencyKey)]: operation,
+        },
+      });
+
+      return {
+        message: operation.message,
+        db,
+        operationId,
+        status: "committed",
+        rev: db.rev,
+      };
     },
+
+    async revision() {
+      return loadDb().rev;
+    },
+
+    async audit() {
+      return loadDb().audits;
+    },
+
+    async approvals() {
+      return loadDb().approvals;
+    },
+
+    async operation(idempotencyKey, actorId) {
+      return loadDb().operations[operationKey(actorId, idempotencyKey)] ?? null;
+    },
+
     async reset() {
       await pause(delayMs, "none");
       return resetDb();
     },
+
     async getFault() {
       return readFault();
     },
+
     async setFault(fault) {
       writeFault(fault);
     },
+
     async inbox() {
       return loadDb().inbox;
     },
+
     async freshness() {
       return loadDb().updatedAt;
     },
+
     async readSlice(key, fallback) {
       const fault = readFault();
       await pause(delayMs, fault);
       if (fault === "empty") return fallback;
+      const status = faultStatus(fault);
+      if (status !== null) throw new ApiError(status, classifyStatus(status));
       const value = loadDb().slices[key];
       return (value ?? fallback) as typeof fallback;
     },
@@ -126,6 +455,7 @@ export function createHttpAdminApi(baseUrl = ""): AdminApi {
   return {
     kind: "http",
     demo: false,
+
     async ready() {
       const body = (await apiRequest(baseUrl, "/ready")) as { currency?: string; timeZone?: string };
       if (body.currency !== CURRENCY || body.timeZone !== TIME_ZONE) {
@@ -133,12 +463,18 @@ export function createHttpAdminApi(baseUrl = ""): AdminApi {
       }
       return { currency: CURRENCY, timeZone: TIME_ZONE, demo: false };
     },
+
     async page(pageId) {
       return (await apiRequest(baseUrl, `/pages/${encodeURIComponent(pageId)}`)) as PageResult;
     },
+
     list: async () => unsupported(),
     search: async () => unsupported(),
     command: async () => unsupported(),
+    revision: async () => unsupported(),
+    audit: async () => unsupported(),
+    approvals: async () => unsupported(),
+    operation: async () => unsupported(),
     reset: async () => unsupported(),
     getFault: async () => unsupported(),
     setFault: async () => unsupported(),

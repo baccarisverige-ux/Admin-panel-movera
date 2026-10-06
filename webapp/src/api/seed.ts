@@ -24,14 +24,38 @@ export type DemoRecord = {
 
 export type AuditRow = {
   id: string;
+  operationId: string;
   at: string;
   actorId: string;
   action: string;
   targetId: string;
+  scope: string;
   before: string;
   after: string;
   reason: string;
-  result: string;
+  result: "committed" | "rejected" | "denied" | "conflict" | "pending_approval";
+};
+
+export type OperationRow = {
+  operationId: string;
+  idempotencyKey: string;
+  action: string;
+  targetId: string;
+  status: "committed" | "rejected" | "pending_approval";
+  httpStatus: number;
+  message: string;
+  rev: number;
+  at: string;
+};
+
+export type ApprovalRow = {
+  id: string;
+  action: string;
+  targetId: string;
+  requestedBy: string;
+  amountOre: number;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
 };
 
 export type InboxItem = { id: string; title: string; path: string };
@@ -58,6 +82,8 @@ export type DemoDb = {
   bonuses: DemoRecord[];
   staff: DemoRecord[];
   audits: AuditRow[];
+  operations: Record<string, OperationRow>;
+  approvals: ApprovalRow[];
   inbox: InboxItem[];
   slices: Record<string, unknown>;
 };
@@ -248,6 +274,8 @@ export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
     bonuses,
     staff,
     audits: [],
+    operations: {},
+    approvals: [],
     inbox: [
       { id: "in-1", title: `${drivers[4].name} has an expiring document`, path: `/drivers/${drivers[4].id}` },
       { id: "in-2", title: `${reservations[0].id} has no driver`, path: `/reservations/${reservations[0].id}` },

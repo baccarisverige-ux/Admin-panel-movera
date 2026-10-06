@@ -14,8 +14,11 @@ type CommandButtonProps = {
   targetId?: string;
   before?: string;
   after?: string;
+  entityState?: string;
+  amountOre?: number;
   collection?: string;
   patch?: Record<string, string | number | boolean | null>;
+  scope?: string;
   storeReason?: boolean;
   onDone?: () => void;
   children: ReactNode;
@@ -31,8 +34,11 @@ export function CommandButton({
   targetId,
   before,
   after,
+  entityState,
+  amountOre,
   collection,
   patch,
+  scope,
   storeReason,
   onDone,
   children,
@@ -50,13 +56,20 @@ export function CommandButton({
   const confirmed = mustType.length === 0 || typed === mustType;
 
   function fire(chosen: string) {
+    if (!session.agent && command === "admin.auth.pickAgent") {
+      onDone?.();
+      return;
+    }
     void commands.run(command, {
       reason: chosen,
       targetId,
       before,
       after,
+      entityState,
+      amountOre,
       collection,
       patch: patch ? { ...patch, ...(storeReason ? { notes: chosen } : {}) } : undefined,
+      scope,
     }).then((result) => {
       if (result) onDone?.();
     });

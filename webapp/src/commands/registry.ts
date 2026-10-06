@@ -5,7 +5,21 @@ export type CommandSpec = {
   permission: string;
 };
 
-export const COMMANDS: CommandSpec[] = [
+export type ActionScope = "global" | "zone" | "record";
+
+export type ActionSpec = CommandSpec & {
+  owner: string;
+  entity: string;
+  scope: ActionScope;
+  destructive: boolean;
+  idempotent: boolean;
+  versioned: boolean;
+  audit: "always" | "none";
+  allowedStates?: readonly string[];
+  approvalThresholdOre?: number;
+};
+
+const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.shell.menu", label: "Open menu", reason: false, permission: "overview.read" },
   { id: "admin.shell.search", label: "Search", reason: false, permission: "overview.read" },
   { id: "admin.shell.inbox", label: "Inbox", reason: false, permission: "overview.read" },
@@ -15,8 +29,8 @@ export const COMMANDS: CommandSpec[] = [
   { id: "admin.shell.closeSearch", label: "Close search", reason: false, permission: "overview.read" },
   { id: "admin.auth.signIn", label: "Sign in", reason: false, permission: "overview.read" },
   { id: "admin.auth.pickAgent", label: "Pick demo agent", reason: false, permission: "overview.read" },
-  { id: "admin.audit.refund50", label: "Refund 50 kr", reason: true, permission: "finance.refund" },
-  { id: "admin.audit.refund250", label: "Refund 250 kr", reason: true, permission: "finance.refund" },
+  { id: "admin.audit.refund50", label: "Refund 50 kr", reason: true, permission: "payments.refund" },
+  { id: "admin.audit.refund250", label: "Refund 250 kr", reason: true, permission: "payments.refund" },
   { id: "admin.config.publish", label: "Publish configuration", reason: true, permission: "settings.publish" },
   { id: "admin.config.approve", label: "Approve configuration", reason: true, permission: "settings.publish" },
   { id: "admin.config.review", label: "Send configuration for approval", reason: true, permission: "settings.edit" },
@@ -132,8 +146,99 @@ export const COMMANDS: CommandSpec[] = [
   { id: "admin.live.focus", label: "Focus live marker", reason: false, permission: "trips.read" },
 ];
 
+
+const OWNER_BY_DOMAIN: Record<string, string> = {
+  shell: "Platform",
+  auth: "Platform",
+  audit: "Finance",
+  config: "Configuration",
+  content: "Content",
+  design: "Platform",
+  driver: "Driver operations",
+  growth: "Growth",
+  handover: "Operations",
+  message: "Communications",
+  payment: "Finance",
+  pricing: "Pricing",
+  reservation: "Dispatch",
+  safety: "Safety",
+  support: "Support",
+  team: "Platform",
+  trip: "Dispatch",
+  rider: "Rider operations",
+  zone: "Places",
+  table: "Platform",
+  card: "Platform",
+  thread: "Support",
+  modal: "Platform",
+  tabs: "Platform",
+  ui: "Platform",
+  doc: "Compliance",
+  confirm: "Platform",
+  dispatch: "Dispatch",
+  live: "Dispatch",
+};
+
+const ALLOWED_STATES: Record<string, readonly string[]> = {
+  "admin.trip.cancel": ["requested", "searching", "offered", "accepted", "driver_to_pickup", "arrived", "rider_onboard", "in_trip"],
+  "admin.trip.reassign": ["accepted", "driver_to_pickup", "arrived"],
+  "admin.driver.activate": ["pending", "on_hold"],
+  "admin.reservation.assign": ["waiting", "booked"],
+  "admin.reservation.cancel": ["waiting", "booked", "assigned"],
+};
+
+const DESTRUCTIVE = new Set([
+  "admin.shell.reset",
+  "admin.config.publish",
+  "admin.config.rollback",
+  "admin.content.publish",
+  "admin.content.rollback",
+  "admin.payment.refund",
+  "admin.pricing.deleteRow",
+  "admin.reservation.cancel",
+  "admin.safety.resolve",
+  "admin.team.deactivate",
+  "admin.trip.cancel",
+  "admin.trip.refund",
+  "admin.rider.block",
+  "admin.rider.privacy",
+  "admin.zone.publish",
+  "admin.zone.rollback",
+  "admin.zone.archive",
+]);
+
+const GLOBAL_DOMAINS = new Set(["shell", "auth", "design", "handover", "table", "card", "modal", "tabs", "ui", "doc", "confirm"]);
+const ZONE_DOMAINS = new Set(["zone", "config", "pricing", "dispatch", "live"]);
+
+function scopeFor(domain: string): ActionScope {
+  if (GLOBAL_DOMAINS.has(domain)) return "global";
+  if (ZONE_DOMAINS.has(domain)) return "zone";
+  return "record";
+}
+
+function enrich(command: CommandSpec): ActionSpec {
+  const domain = command.id.split(".")[1] ?? "platform";
+  return {
+    ...command,
+    owner: OWNER_BY_DOMAIN[domain] ?? "Platform",
+    entity: domain,
+    scope: scopeFor(domain),
+    destructive: DESTRUCTIVE.has(command.id),
+    idempotent: true,
+    versioned: !GLOBAL_DOMAINS.has(domain),
+    audit: GLOBAL_DOMAINS.has(domain) ? "none" : "always",
+    allowedStates: ALLOWED_STATES[command.id],
+    approvalThresholdOre:
+      command.id === "admin.payment.refund" || command.id === "admin.audit.refund250"
+        ? 20_000
+        : undefined,
+  };
+}
+
+export const COMMANDS: ActionSpec[] = RAW_COMMANDS.map(enrich);
+
 const BY_ID = new Map(COMMANDS.map((command) => [command.id, command]));
 
-export function commandById(id: string): CommandSpec | undefined {
+export function commandById(id: string): ActionSpec | undefined {
   return BY_ID.get(id);
 }

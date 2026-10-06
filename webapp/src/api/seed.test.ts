@@ -55,4 +55,96 @@ assert(scoped.length > 0 && scoped.every((row) => row.zoneId === "Z001" || row.z
 const hiddenPlate = await api.search(PLATE, ["Z009"]);
 assert(hiddenPlate.length === 0, "search cannot escape its allowed zones");
 
+await api.reset();
+const rev = await api.revision();
+const first = await api.command({
+  action: "admin.rider.block",
+  targetId: "R0001",
+  reason: "Safety review",
+  actorId: "nora",
+  actorRole: "super",
+  actorScope: { zones: "all", market: "SE-STO" },
+  scope: "Z001",
+  idempotencyKey: "block-r1",
+  expectedRev: rev,
+  entityState: "active",
+  before: "active",
+  after: "blocked",
+  collection: "riders",
+  patch: { status: "blocked" },
+});
+const replay = await api.command({
+  action: "admin.rider.block",
+  targetId: "R0001",
+  reason: "Safety review",
+  actorId: "nora",
+  actorRole: "super",
+  actorScope: { zones: "all", market: "SE-STO" },
+  scope: "Z001",
+  idempotencyKey: "block-r1",
+  expectedRev: rev,
+  entityState: "active",
+  before: "active",
+  after: "blocked",
+  collection: "riders",
+  patch: { status: "blocked" },
+});
+assert(first.operationId === replay.operationId && first.rev === replay.rev, "same idempotency key replays one effect");
+const afterReplayAudit = await api.audit();
+assert(afterReplayAudit.filter((entry) => entry.operationId === first.operationId).length === 1, "replay creates one audit entry");
+
+await api.command({
+  action: "admin.rider.block",
+  targetId: "R0002",
+  reason: "Safety review",
+  actorId: "nora",
+  actorRole: "super",
+  actorScope: { zones: "all", market: "SE-STO" },
+  scope: "Z002",
+  idempotencyKey: "stale-r2",
+  expectedRev: rev,
+  before: "active",
+  after: "blocked",
+}).then(
+  () => { throw new Error("stale revision should reject"); },
+  (error: unknown) => assert(error instanceof Error && /newest version/.test(error.message), "stale revision is a truthful conflict"),
+);
+
+const deniedRev = await api.revision();
+await api.command({
+  action: "admin.payment.refund",
+  targetId: "PAY0001",
+  reason: "Safety review",
+  actorId: "maja",
+  actorRole: "support",
+  actorScope: { zones: ["Z001"], market: "SE-STO" },
+  scope: "Z001",
+  idempotencyKey: "support-refund",
+  expectedRev: deniedRev,
+  before: "captured",
+  after: "refunded",
+  amountOre: 10_000,
+}).then(
+  () => { throw new Error("support refund should reject"); },
+  (error: unknown) => assert(error instanceof Error && /role/.test(error.message), "permission denial comes from ActionSpec"),
+);
+
+const approvalRev = await api.revision();
+const pending = await api.command({
+  action: "admin.audit.refund250",
+  targetId: "RF-LARGE",
+  reason: "Safety review",
+  actorId: "astrid",
+  actorRole: "finance",
+  actorScope: { zones: "all", market: "SE-STO" },
+  scope: "all",
+  idempotencyKey: "large-refund",
+  expectedRev: approvalRev,
+  before: "open",
+  after: "refunded",
+  amountOre: 25_000,
+});
+assert(pending.status === "pending_approval", "large refund waits for approval");
+assert((await api.approvals()).some((item) => item.targetId === "RF-LARGE" && item.status === "pending"), "approval queue stores high-impact action");
+
 console.log("seed ok");
