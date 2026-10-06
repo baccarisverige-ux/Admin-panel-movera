@@ -231,7 +231,7 @@ export const zoneStore = {
       return {
         ...current,
         book: next,
-        notice: next === current.book ? "No previous published zones to restore." : `Rolled back as version ${next.versions.length}.`,
+        notice: next === current.book ? "No previous published zones to restore." : "Rolled back to the previous published zones.",
       };
     });
   },
