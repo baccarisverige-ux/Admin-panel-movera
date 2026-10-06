@@ -202,7 +202,7 @@ export function ZoneMap() {
                 setDragPriorityId("");
               }}
             >
-              <span aria-label={`Priority ${zone.name}`}>☰ {zone.name} · {zoneTypeLabel(zone.kind)} · priority {zone.priority}</span>
+              <span aria-label={`Priority ${zone.name}`}>Drag · {zone.name} · {zoneTypeLabel(zone.kind)} · priority {zone.priority}</span>
             </li>
           ))}
         </ol>
