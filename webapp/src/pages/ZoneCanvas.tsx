@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -165,6 +165,7 @@ function boundsFor(zones: ZoneShape[], ids?: string[]): maplibregl.LngLatBounds 
 
 function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce, onDrawn, onEdited }: DrawProps) {
   const host = useRef<HTMLDivElement>(null);
+  const [mapUnavailable, setMapUnavailable] = useState(false);
   const zonesRef = useRef(zones);
   const selectedRef = useRef(selectedId);
   const modeRef = useRef(mode);
@@ -186,12 +187,18 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
     if (!node) return;
     let alive = true;
     let generation = 0;
-    const map = new maplibregl.Map({
-      container: node,
-      style: OSM_STYLE,
-      center: [18.07, 59.34],
-      zoom: 12,
-    });
+    let map: maplibregl.Map;
+    try {
+      map = new maplibregl.Map({
+        container: node,
+        style: OSM_STYLE,
+        center: [18.07, 59.34],
+        zoom: 12,
+      });
+    } catch {
+      setMapUnavailable(true);
+      return;
+    }
     mapRef.current = map;
     const publish = () => {
       generation += 1;
@@ -416,7 +423,10 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
     map.jumpTo({ center: [focus.lng, focus.lat], zoom: 13 });
   }, [focus]);
 
-  return <div ref={host} className="live-map" />;
+  return <>
+    <div ref={host} className="live-map" hidden={mapUnavailable} />
+    {mapUnavailable ? <p role="status">Map unavailable. WebGL graphics could not initialize. The lists and settings remain available.</p> : null}
+  </>;
 }
 
 function GoogleDraw({ zones, selectedId, mode, layers, focus, selectionNonce, onDrawn, onEdited }: DrawProps) {
