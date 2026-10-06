@@ -1,54 +1,217 @@
-import { useState } from "react";
-import { assignReservation, cancelReservation, needsDriverSoon, useRecords, type Reservation } from "../api/hooks";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import {
+  emptyReservationBook,
+  normalizeReservationBook,
+  reservationOps,
+  reservationWarning,
+  saveReservationPolicy,
+  stockholmLabel,
+  useRecords,
+  useSlice,
+  type ReservationBook,
+  type ReservationPolicy,
+} from "../api/hooks";
+import { useSession } from "../auth/SessionContext";
 import { CommandButton } from "../ui/CommandButton";
+import { DataTable } from "../ui/DataTable";
 
-const NOW = "2026-10-05T10:40:00Z";
-const SEED: Reservation[] = [
-  { id: "B1", pickupAt: "2026-10-05T11:20:00Z", driverId: null, policyVersion: "res-2", status: "booked" },
-  { id: "B2", pickupAt: "2026-10-06T08:00:00Z", driverId: "D1", policyVersion: "res-2", status: "booked" },
-];
+const VIEWS = [
+  { id: "all", label: "All" },
+  { id: "waiting", label: "Waiting" },
+  { id: "assigned", label: "Assigned" },
+  { id: "warning", label: "Needs attention" },
+  { id: "return", label: "Return rides" },
+  { id: "cancelled", label: "Cancelled" },
+] as const;
 
 export function ReservationsPage() {
-  const [rows, setRows] = useState(SEED);
-  const [notice, setNotice] = useState("A booking under 60 minutes without a driver is flagged. Give-up is 5 minutes.");
-  const seeded = useRecords("reservations", null);
+  const navigate = useNavigate();
+  const { agent } = useSession();
+  const reservations = useRecords("reservations", null);
+  const store = useSlice<ReservationBook>("reservationOps", emptyReservationBook());
+  const book = useMemo(() => normalizeReservationBook(store.value), [store.value]);
+  const [view, setView] = useState<(typeof VIEWS)[number]["id"]>("all");
+  const [query, setQuery] = useState("");
+  const [policyDraft, setPolicyDraft] = useState<ReservationPolicy | null>(null);
+  const [notice, setNotice] = useState("Existing reservations keep the policy version they were booked with.");
+
+  const policy = policyDraft ?? book.currentPolicy;
+  const nowIso = new Date().toISOString();
+  const needle = query.trim().toLowerCase();
+
+  const rows = useMemo(() => (reservations.data ?? []).filter((record) => {
+    const ops = reservationOps(book, record);
+    const warning = reservationWarning(record, ops, nowIso);
+    if (view === "waiting" && !["waiting", "booked"].includes(record.status)) return false;
+    if (view === "assigned" && record.status !== "assigned") return false;
+    if (view === "warning" && !warning) return false;
+    if (view === "return" && !ops.returnPickupAt) return false;
+    if (view === "cancelled" && record.status !== "cancelled") return false;
+    if (!needle) return true;
+    return [record.id, record.name, record.phone, record.driverId ?? "", ops.category ?? "", ops.policy.version]
+      .some((value) => value.toLowerCase().includes(needle));
+  }), [book, needle, nowIso, reservations.data, view]);
+
+  function patchPolicy(patch: Partial<ReservationPolicy>) {
+    setPolicyDraft({ ...policy, ...patch });
+  }
+
+  const policyPrepared = agent
+    ? saveReservationPolicy(book, policy, agent.id)
+    : { book, error: "Sign in again." };
 
   return (
     <>
       <div className="page-heading">
         <div>
           <h2>Reservations</h2>
-          <p>Policy version stays on the booking when you cancel. Demo queue {seeded.data?.length ?? "…"}.</p>
+          <p>
+            {reservations.isLoading || store.loading ? "Loading reservations." : `${rows.length} reservations in this view.`}
+            {" "}Pickup times display in Europe/Stockholm. Each booking keeps its policy snapshot after policy changes or cancellation.
+          </p>
         </div>
       </div>
-      <p className="state-line">{notice}</p>
-      <article className="panel">
-        <h3>Reservation rules</h3>
+
+      <p className="state-line">{notice} {store.message}</p>
+
+      <div className="actions" aria-label="Reservation views">
+        {VIEWS.map((item) => (
+          <button
+            key={item.id}
+            data-command="admin.table.filter"
+            type="button"
+            className={view === item.id ? "primary-btn" : "secondary-btn"}
+            onClick={() => setView(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <label>
+        Find reservation
+        <input
+          aria-label="Find reservation"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Reservation, rider, phone, driver, category or policy"
+        />
+      </label>
+
+      <DataTable
+        head={["Reservation", "Rider", "Pickup", "Return", "Category", "Driver", "Status", "Warning", "Policy", "Zone"]}
+        rowIds={rows.map((row) => row.id)}
+        rows={rows.map((record) => {
+          const ops = reservationOps(book, record);
+          return [
+            record.id,
+            record.name,
+            stockholmLabel(ops.pickupAt),
+            ops.returnPickupAt ? stockholmLabel(ops.returnPickupAt) : "—",
+            ops.category ?? "economy",
+            record.driverId ?? "Unassigned",
+            record.status,
+            reservationWarning(record, ops, nowIso) ?? "—",
+            ops.policy.version,
+            record.zoneId,
+          ];
+        })}
+        state={reservations.isLoading || store.loading ? "loading" : reservations.isError ? "error" : "ready"}
+        onRetry={() => {
+          void reservations.refetch();
+          void store.refetch();
+        }}
+        onRow={(index) => {
+          const id = rows[index]?.id;
+          if (id) navigate(`/reservations/${id}`);
+        }}
+      />
+
+      <article className="panel" data-testid="reservation-policy">
+        <h3>Current reservation policy · {book.currentPolicy.version}</h3>
+        <p>Changing this policy creates a new version. Existing bookings continue to use their original snapshot.</p>
         <div className="field-grid">
-          <label>Booking horizon<input readOnly value="7 days" /></label>
-          <label>Assignment lead<input readOnly value="30 min" /></label>
-          <label>Give-up time<input readOnly value="5 min" /></label>
-          <label>Included waiting<input readOnly value="5 minutes" /></label>
-          <label>Free-cancel window<input readOnly value="2 minutes after accept" /></label>
+          <label>
+            Booking horizon (days)
+            <input
+              aria-label="Booking horizon"
+              type="number"
+              value={policy.bookingHorizonDays}
+              onChange={(event) => patchPolicy({ bookingHorizonDays: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            Assignment lead (min)
+            <input
+              aria-label="Assignment lead"
+              type="number"
+              value={policy.assignmentLeadMinutes}
+              onChange={(event) => patchPolicy({ assignmentLeadMinutes: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            Give-up time (min)
+            <input
+              aria-label="Give-up time"
+              type="number"
+              value={policy.giveUpMinutes}
+              onChange={(event) => patchPolicy({ giveUpMinutes: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            Included waiting (min)
+            <input
+              aria-label="Included waiting"
+              type="number"
+              value={policy.includedWaitingMinutes}
+              onChange={(event) => patchPolicy({ includedWaitingMinutes: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            Free cancel after accept (min)
+            <input
+              aria-label="Free cancel after accept"
+              type="number"
+              value={policy.freeCancelAfterAcceptMinutes}
+              onChange={(event) => patchPolicy({ freeCancelAfterAcceptMinutes: Number(event.target.value) })}
+            />
+          </label>
         </div>
-        <p className="state-line">A booking keeps policy {rows[0]?.policyVersion ?? "res-2"} after cancel. These defaults are not a second policy.</p>
+
+        <div className="actions">
+          <CommandButton
+            command="admin.reservation.savePolicy"
+            className="primary-btn"
+            type="button"
+            targetId="reservation-policy"
+            confirmTarget={false}
+            scope="all"
+            before={book.currentPolicy.version}
+            after={policyPrepared.error ? "invalid" : policyPrepared.book.currentPolicy.version}
+            expectedSliceRev={book.draftRev}
+            sliceKey="reservationOps"
+            value={policyPrepared.book}
+            disabled={!policyDraft || Boolean(policyPrepared.error)}
+            title={policyPrepared.error ?? (!policyDraft ? "No unsaved policy change." : undefined)}
+            onDone={() => {
+              setPolicyDraft(null);
+              setNotice(`Reservation policy published as ${policyPrepared.book.currentPolicy.version}. Existing bookings kept their snapshots.`);
+            }}
+          >
+            Save reservation policy
+          </CommandButton>
+          <button
+            data-command="admin.card.action"
+            className="secondary-btn"
+            type="button"
+            disabled={!policyDraft}
+            onClick={() => setPolicyDraft(null)}
+          >
+            Discard policy changes
+          </button>
+        </div>
       </article>
-      {rows.map((row) => (
-        <article className="panel" key={row.id}>
-          <h3>
-            {row.id} · {row.status} · policy {row.policyVersion}
-            {needsDriverSoon(row, NOW) ? " · needs a driver" : ""}
-          </h3>
-          <div className="actions">
-            <CommandButton command="admin.reservation.assign" className="secondary-btn" type="button" onDone={() => { setRows(rows.map((item) => item.id === row.id ? assignReservation(item, "D3") : item)); setNotice("Assigned D3."); }}>
-              Assign
-            </CommandButton>
-            <CommandButton command="admin.reservation.cancel" className="secondary-btn" type="button" onDone={() => { setRows(rows.map((item) => item.id === row.id ? cancelReservation(item) : item)); setNotice("Cancelled. Policy version unchanged."); }}>
-              Cancel
-            </CommandButton>
-          </div>
-        </article>
-      ))}
     </>
   );
 }
