@@ -19,6 +19,7 @@ import {
   useSlice,
   type ReservationBook,
 } from "../api/hooks";
+import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { statusLabel } from "../domain/labels";
 import { CommandButton } from "../ui/CommandButton";
@@ -61,12 +62,15 @@ export function ReservationDetailPage() {
   const candidates = reservationCandidates(record, ops, drivers.data ?? [], vehicles.data ?? []);
   const chosen = candidates.some((item) => item.id === driverId) ? driverId : candidates[0]?.id ?? "";
   const rider = (riders.data ?? []).find((item) => item.phone === record.phone);
-  const warning = reservationWarning(record, ops, new Date().toISOString());
+  const nowIso = new Date().toISOString();
+  const warning = reservationWarning(record, ops, nowIso);
+  const canIntervene = Boolean(agent && can(agent.role, "trips.intervene"));
+  const pickupFuture = Date.parse(ops.pickupAt) > Date.parse(nowIso);
   const isOpen = ["waiting", "booked", "assigned"].includes(record.status);
-  const canOffer = ["waiting", "booked"].includes(record.status) && candidates.length > 0;
-  const canAssign = ["waiting", "booked"].includes(record.status) && candidates.length > 0;
-  const canUnassign = record.status === "assigned" && Boolean(record.driverId);
-  const canCancel = ["waiting", "booked", "assigned"].includes(record.status);
+  const canOffer = canIntervene && pickupFuture && ["waiting", "booked"].includes(record.status) && candidates.length > 0;
+  const canAssign = canIntervene && pickupFuture && ["waiting", "booked"].includes(record.status) && candidates.length > 0;
+  const canUnassign = canIntervene && record.status === "assigned" && Boolean(record.driverId);
+  const canCancel = canIntervene && ["waiting", "booked", "assigned"].includes(record.status);
 
   const contactPrepared = recordReservationContact(
     book,
@@ -143,7 +147,7 @@ export function ReservationDetailPage() {
           <select
             aria-label="Reservation driver"
             value={chosen}
-            disabled={candidates.length === 0 || !isOpen}
+            disabled={!canIntervene || candidates.length === 0 || !isOpen || !pickupFuture}
             onChange={(event) => setDriverId(event.target.value)}
           >
             {candidates.length === 0 ? <option value="">No eligible driver</option> : null}
@@ -171,7 +175,7 @@ export function ReservationDetailPage() {
             sliceKey="reservationOps"
             value={offerPrepared}
             disabled={!canOffer}
-            title={!canOffer ? (candidates.length === 0 ? "No eligible driver." : "Reservation cannot be offered in this state.") : undefined}
+            title={!canOffer ? (!canIntervene ? "Your role is read-only." : !pickupFuture ? "Pickup time has already passed." : candidates.length === 0 ? "No eligible driver." : "Reservation cannot be offered in this state.") : undefined}
             onDone={() => setNotice(`Offer logged for ${chosen}.`)}
           >
             Offer to driver
@@ -193,7 +197,7 @@ export function ReservationDetailPage() {
             sliceKey="reservationOps"
             value={assignPrepared}
             disabled={!canAssign}
-            title={!canAssign ? (candidates.length === 0 ? "No eligible driver." : "Reservation cannot be assigned in this state.") : undefined}
+            title={!canAssign ? (!canIntervene ? "Your role is read-only." : !pickupFuture ? "Pickup time has already passed." : candidates.length === 0 ? "No eligible driver." : "Reservation cannot be assigned in this state.") : undefined}
             onDone={() => setNotice(`Assigned ${chosen}.`)}
           >
             Assign driver
@@ -258,7 +262,7 @@ export function ReservationDetailPage() {
           expectedSliceRev={book.draftRev}
           sliceKey="reservationOps"
           value={contactPrepared.book}
-          disabled={!isOpen || Boolean(contactPrepared.error)}
+          disabled={!canIntervene || !isOpen || Boolean(contactPrepared.error)}
           title={contactPrepared.error ?? (!isOpen ? "Cancelled/completed reservations cannot be contacted from dispatch." : undefined)}
           onDone={() => {
             setNotice(`${contactChannel.toUpperCase()} contact logged.`);
@@ -286,7 +290,7 @@ export function ReservationDetailPage() {
               type="datetime-local"
               value={shownReturnLocal}
               onChange={(event) => setReturnLocal(event.target.value)}
-              disabled={!isOpen}
+              disabled={!canIntervene || !isOpen}
             />
           </label>
           <label>
@@ -295,7 +299,7 @@ export function ReservationDetailPage() {
               aria-label="DST disambiguation"
               value={returnDisambiguation}
               onChange={(event) => setReturnDisambiguation(event.target.value as "earlier" | "later")}
-              disabled={!parsedReturn.ambiguous}
+              disabled={!canIntervene || !parsedReturn.ambiguous}
             >
               <option value="earlier">Earlier occurrence</option>
               <option value="later">Later occurrence</option>
@@ -318,7 +322,7 @@ export function ReservationDetailPage() {
             expectedSliceRev={book.draftRev}
             sliceKey="reservationOps"
             value={returnPrepared.book}
-            disabled={!isOpen || !shownReturnLocal || Boolean(parsedReturn.error) || Boolean(returnPrepared.error)}
+            disabled={!canIntervene || !isOpen || !shownReturnLocal || Boolean(parsedReturn.error) || Boolean(returnPrepared.error)}
             title={parsedReturn.error ?? returnPrepared.error}
             onDone={() => {
               setReturnLocal("");
@@ -340,7 +344,7 @@ export function ReservationDetailPage() {
             expectedSliceRev={book.draftRev}
             sliceKey="reservationOps"
             value={removeReturnPrepared.book}
-            disabled={!isOpen || !ops.returnPickupAt}
+            disabled={!canIntervene || !isOpen || !ops.returnPickupAt}
             onDone={() => {
               setReturnLocal("");
               setNotice("Return ride removed.");
