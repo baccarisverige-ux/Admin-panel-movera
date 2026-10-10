@@ -1,4 +1,6 @@
 import { TRIP_STATUSES } from "../domain/contract.ts";
+import { MARKETS } from "../markets/markets.ts";
+import { marketRows } from "./marketSeed.ts";
 
 export const PLATE = "ABC 123";
 export const TRIP_ID = "T0001";
@@ -135,7 +137,10 @@ function phone(index: number): string {
   return `+46 70 ${body.slice(0, 3)} ${body.slice(3, 5)} ${body.slice(5)}`;
 }
 
-export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
+/** The instant the demo data is built around. */
+export const SEED_NOW = "2026-10-05T16:00:00.000Z";
+
+export function createSeed(now = SEED_NOW): DemoDb {
   const zones = ZONES.map(([id, name]) => ({ id, name }));
   const zoneId = (index: number) => zones[index % 9].id;
   const drivers = Array.from({ length: 60 }, (_, index) => ({
@@ -290,21 +295,22 @@ export function createSeed(now = "2026-10-05T16:00:00.000Z"): DemoDb {
     zoneId: zones[index].id,
     status: "active",
   }));
+  const abroad = marketRows(now, { riders, drivers, zones: zones.slice(0, 9).map((zone) => zone.id) });
   return {
     rev: 1,
     updatedAt: now,
-    zones,
-    drivers,
-    riders,
-    vehicles,
+    zones: MARKETS.flatMap((item) => item.zones.map(({ id, name }) => ({ id, name }))),
+    drivers: [...drivers, ...abroad.drivers],
+    riders: [...riders, ...abroad.riders],
+    vehicles: [...vehicles, ...abroad.vehicles],
     fleets,
-    trips,
-    reservations,
-    tickets,
-    incidents,
-    payments,
+    trips: [...trips, ...abroad.trips],
+    reservations: [...reservations, ...abroad.sePastReservations, ...abroad.reservations],
+    tickets: [...tickets, ...abroad.tickets],
+    incidents: [...incidents, ...abroad.incidents],
+    payments: [...payments, ...abroad.payments],
     refunds,
-    payouts,
+    payouts: [...payouts, ...abroad.payouts],
     wallet,
     templates,
     banners,

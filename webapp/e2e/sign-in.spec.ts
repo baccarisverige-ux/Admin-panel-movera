@@ -43,6 +43,6 @@ test("sensitive phone reveal is permission gated and audited", async ({ page }) 
   await page.getByLabel("Type R0001 to confirm").fill("R0001");
   await page.getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByText(/Phone: \+46 70 100 00 01/).first()).toBeVisible();
-  const audit = await page.evaluate(() => localStorage.getItem("movera-demo-v3"));
+  const audit = await page.evaluate(() => localStorage.getItem("movera-demo-v4"));
   expect(audit).toContain("admin.rider.revealSensitive");
 });

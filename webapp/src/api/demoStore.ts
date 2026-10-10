@@ -3,7 +3,7 @@ import { createSeed, inScope, searchDb, type DemoDb, type DemoRecord, type ZoneS
 
 export type Fault = "none" | "401" | "403" | "409" | "422" | "429" | "503" | "offline" | "slow" | "empty";
 
-const DB_KEY = "movera-demo-v3";
+const DB_KEY = "movera-demo-v4";
 const FAULT_KEY = "movera-demo-fault";
 
 type StorageLike = { getItem: (key: string) => string | null; setItem: (key: string, value: string) => void; removeItem: (key: string) => void };
@@ -81,6 +81,7 @@ export function rowsFor(db: DemoDb, name: string, scope: ZoneScope, fault: Fault
   if (fault === "empty") return [];
   const table = db[name as keyof DemoDb];
   if (!Array.isArray(table)) return [];
+  if (name === "zones") return inScope((table as DemoDb["zones"]).map((zone) => ({ ...zone, zoneId: zone.id })), scope).map(({ id, name: label }) => ({ id, name: label })) as DemoRecord[];
   return inScope(table as DemoRecord[], scope);
 }
 

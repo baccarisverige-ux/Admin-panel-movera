@@ -32,14 +32,15 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { allowedZones, can, canUseZone } from "../auth/permissions";
+import { can, canUseZone } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { useAdminApi } from "../api/AdminApiContext";
 import { useInbox, useSearch } from "../api/hooks";
-import { ZONES } from "../api/seed";
 import type { Fault } from "../api/demoStore";
 import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
 import { CommandButton } from "../ui/CommandButton";
+import { useMarketScope } from "../markets/useMarketScope";
+import { MarketBar } from "./MarketBar";
 
 const ICONS: Record<NavIcon, typeof Menu> = {
   LayoutDashboard,
@@ -87,7 +88,7 @@ export function AppShell({ page, children }: AppShellProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const client = useQueryClient();
   const api = useAdminApi();
@@ -96,7 +97,6 @@ export function AppShell({ page, children }: AppShellProps) {
   const groups = MENU_GROUPS.filter((group) => visible.some((item) => item.group === group));
   const env = import.meta.env.VITE_DATA || "demo";
   const scope = params.get("scope") ?? "";
-  const zoneOptions = allowedZones(agent ?? { id: "", email: "", name: "", password: "", code: "", role: "viewer", active: false, presence: "away", scope: { zones: "all", market: "SE-STO" } }, ZONES.map(([id, name]) => ({ id, name })));
   const scopeDenied = Boolean(agent && scope && !canUseZone(agent, scope));
   const found = useSearch(searchOpen ? query : "");
   const inbox = useInbox();
@@ -105,7 +105,12 @@ export function AppShell({ page, children }: AppShellProps) {
     const timer = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-  const stockholm = new Intl.DateTimeFormat("sv-SE", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Stockholm" }).format(clock);
+  const marketScope = useMarketScope();
+  const localTime = new Intl.DateTimeFormat(marketScope.market.locale, { dateStyle: "medium", timeStyle: "short", hourCycle: "h23", timeZone: marketScope.market.timeZone }).format(clock);
+  const keep = new URLSearchParams();
+  if (params.get("country") || params.get("scope")) keep.set("country", marketScope.country);
+  if (params.get("scope")) keep.set("scope", params.get("scope")!);
+  const keepSearch = keep.size ? `?${keep.toString()}` : "";
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -137,7 +142,7 @@ export function AppShell({ page, children }: AppShellProps) {
                   return (
                     <Link
                       key={item.id}
-                      to={item.path}
+                      to={{ pathname: item.path, search: keepSearch }}
                       className={item.id === page.id ? "active" : undefined}
                       onClick={() => setMenuOpen(false)}
                     >
@@ -160,29 +165,14 @@ export function AppShell({ page, children }: AppShellProps) {
             <p className="crumb">{page.group}</p>
           </div>
           <div className="topbar-actions">
-            <select
-              aria-label="Scope"
-              value={scope}
-              onChange={(event) => {
-                client.clear();
-                const next = new URLSearchParams(params);
-                if (event.target.value) next.set("scope", event.target.value);
-                else next.delete("scope");
-                setParams(next);
-              }}
-            >
-              <option value="">All allowed zones</option>
-              {zoneOptions.map(({ id, name }) => (
-                <option key={id} value={id}>{name}</option>
-              ))}
-            </select>
+            <MarketBar />
             <CommandButton command="admin.shell.search" className="secondary-btn" type="button" onDone={() => setSearchOpen(true)}>Search</CommandButton>
             <CommandButton command="admin.shell.inbox" className="secondary-btn" type="button" aria-label="Inbox" onDone={() => setInboxOpen((open) => !open)}>Inbox</CommandButton>
             <div className="admin-profile">
               <div className="avatar">{agent ? agent.name.slice(0, 2).toUpperCase() : "AD"}</div>
               <div>
                 <strong>{agent?.name ?? "Signed out"}</strong>
-                <span>{stockholm} · {env} · {scope || "all"} · {agent?.role ?? "signed out"}</span>
+                <span>{marketScope.market.name} · {localTime} · {env} · {agent?.role ?? "signed out"}</span>
               </div>
               {agent?.role === "super" ? (
                 <>

@@ -1,0 +1,157 @@
+/** Countries Movera operates in, with their cities and zones. Sweden keeps the original zone ids. */
+
+export type MarketId = "SE" | "FR" | "TN";
+
+export type MarketZone = {
+  id: string;
+  name: string;
+  city: string;
+  kind: "operating" | "airport";
+  center: [lat: number, lng: number];
+};
+
+export type Market = {
+  id: MarketId;
+  name: string;
+  currency: "SEK" | "EUR" | "TND";
+  /** Minor units per major unit: öre, cents, millimes. */
+  minorUnits: number;
+  locale: string;
+  timeZone: string;
+  center: [lat: number, lng: number];
+  zoom: number;
+  zones: MarketZone[];
+};
+
+function zones(city: string, rows: Array<[string, string, number, number, ("airport" | undefined)?]>): MarketZone[] {
+  return rows.map(([id, name, lat, lng, kind]) => ({ id, name, city, kind: kind ?? "operating", center: [lat, lng] }));
+}
+
+export const MARKETS: readonly Market[] = [
+  {
+    id: "SE",
+    name: "Sweden",
+    currency: "SEK",
+    minorUnits: 100,
+    locale: "sv-SE",
+    timeZone: "Europe/Stockholm",
+    center: [59.334, 18.04],
+    zoom: 10.6,
+    zones: zones("Greater Stockholm", [
+      ["Z001", "Norrmalm", 59.334, 18.063],
+      ["Z002", "Södermalm", 59.314, 18.07],
+      ["Z003", "Östermalm", 59.338, 18.088],
+      ["Z004", "Kungsholmen", 59.33, 18.03],
+      ["Z005", "Vasastan", 59.346, 18.048],
+      ["Z006", "Bromma", 59.34, 17.94],
+      ["Z007", "Solna", 59.36, 18.0],
+      ["Z008", "Kista", 59.403, 17.944],
+      ["Z009", "Södertälje", 59.195, 17.628],
+      ["ARN", "Arlanda", 59.649, 17.929, "airport"],
+      ["BMA", "Bromma airport", 59.354, 17.948, "airport"],
+    ]),
+  },
+  {
+    id: "FR",
+    name: "France",
+    currency: "EUR",
+    minorUnits: 100,
+    locale: "fr-FR",
+    timeZone: "Europe/Paris",
+    center: [48.86, 2.34],
+    zoom: 10.8,
+    zones: zones("Grand Paris", [
+      ["FR-PC", "Paris Centre", 48.86, 2.347],
+      ["FR-RG", "Rive Gauche", 48.845, 2.32],
+      ["FR-OCE", "Opéra–Champs-Élysées", 48.872, 2.31],
+      ["FR-MN", "Montmartre–Nord", 48.887, 2.35],
+      ["FR-BE", "Bastille–Est", 48.853, 2.385],
+      ["FR-LD", "La Défense", 48.892, 2.238],
+      ["FR-SD", "Saint-Denis", 48.936, 2.357],
+      ["FR-BB", "Boulogne-Billancourt", 48.835, 2.24],
+      ["CDG", "Charles de Gaulle", 49.009, 2.548, "airport"],
+      ["ORY", "Orly", 48.726, 2.365, "airport"],
+    ]),
+  },
+  {
+    id: "TN",
+    name: "Tunisia",
+    currency: "TND",
+    minorUnits: 1000,
+    locale: "fr-TN",
+    timeZone: "Africa/Tunis",
+    center: [36.84, 10.22],
+    zoom: 10.8,
+    zones: zones("Grand Tunis", [
+      ["TN-TC", "Tunis Centre", 36.8, 10.18],
+      ["TN-LAC", "Les Berges du Lac", 36.835, 10.235],
+      ["TN-LM", "La Marsa", 36.878, 10.325],
+      ["TN-CAR", "Carthage", 36.853, 10.323],
+      ["TN-SBS", "Sidi Bou Saïd", 36.869, 10.341],
+      ["TN-LG", "La Goulette", 36.818, 10.305],
+      ["TN-AR", "Ariana", 36.862, 10.195],
+      ["TN-BA", "Ben Arous", 36.753, 10.222],
+      ["TUN", "Tunis-Carthage", 36.851, 10.227, "airport"],
+    ]),
+  },
+];
+
+export const DEFAULT_MARKET: MarketId = "SE";
+
+export function isMarketId(value: unknown): value is MarketId {
+  return value === "SE" || value === "FR" || value === "TN";
+}
+
+export function market(id: MarketId): Market {
+  return MARKETS.find((item) => item.id === id) ?? MARKETS[0];
+}
+
+export function marketOfZone(zoneId: string): Market | undefined {
+  return MARKETS.find((item) => item.zones.some((zone) => zone.id === zoneId));
+}
+
+export function zoneById(zoneId: string): MarketZone | undefined {
+  for (const item of MARKETS) {
+    const found = item.zones.find((zone) => zone.id === zoneId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+export function marketZoneIds(id: MarketId): string[] {
+  return market(id).zones.map((zone) => zone.id);
+}
+
+/** Zones grouped by city, airports last, in display order. */
+export function zoneGroups(id: MarketId, allowed?: (zoneId: string) => boolean): { label: string; zones: MarketZone[] }[] {
+  const visible = market(id).zones.filter((zone) => !allowed || allowed(zone.id));
+  const groups: { label: string; zones: MarketZone[] }[] = [];
+  for (const zone of visible.filter((item) => item.kind === "operating")) {
+    const group = groups.find((item) => item.label === zone.city);
+    if (group) group.zones.push(zone);
+    else groups.push({ label: zone.city, zones: [zone] });
+  }
+  const airports = visible.filter((item) => item.kind === "airport");
+  if (airports.length) groups.push({ label: "Airports", zones: airports });
+  return groups;
+}
+
+/** Parse the `scope` URL value: one zone id or a comma-separated list. */
+export function parseZoneList(value: string | null | undefined): string[] {
+  if (!value) return [];
+  return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean)));
+}
+
+/** Format an amount held in minor units in the market's currency. */
+export function formatMoney(minor: number, id: MarketId, options: { compact?: boolean } = {}): string {
+  const item = market(id);
+  const major = minor / item.minorUnits;
+  const digits = options.compact ? 0 : item.minorUnits === 1000 ? 3 : 2;
+  return new Intl.NumberFormat(item.locale, {
+    style: "currency",
+    currency: item.currency,
+    notation: options.compact && Math.abs(major) >= 10_000 ? "compact" : "standard",
+    minimumFractionDigits: options.compact ? 0 : digits,
+    maximumFractionDigits: options.compact ? (Math.abs(major) >= 10_000 ? 1 : 0) : digits,
+  }).format(major);
+}

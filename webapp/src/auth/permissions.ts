@@ -1,4 +1,7 @@
 import { MENU } from "../nav.ts";
+import type { MarketId } from "../markets/markets.ts";
+import { parseZoneList } from "../markets/markets.ts";
+import { zoneAllowed } from "../markets/scope.ts";
 
 export type Role =
   | "viewer"
@@ -17,6 +20,8 @@ export type AgentScope = {
   zones: "all" | string[];
   fleetPartnerId?: string;
   market: "SE-STO";
+  /** Countries this agent may open. Missing means every country. */
+  countries?: MarketId[];
 };
 
 export type Agent = {
@@ -38,6 +43,8 @@ export const IDLE_MS = 15 * 60 * 1000;
 const ALL_STOCKHOLM: AgentScope = { zones: "all", market: "SE-STO" };
 const CENTRAL: AgentScope = { zones: ["Z001", "Z002", "Z003", "Z004", "Z005"], market: "SE-STO" };
 const NORTH: AgentScope = { zones: ["Z007", "Z008", "ARN"], market: "SE-STO", fleetPartnerId: "F1" };
+const ALL_FRANCE: AgentScope = { zones: "all", market: "SE-STO", countries: ["FR"] };
+const ALL_TUNISIA: AgentScope = { zones: "all", market: "SE-STO", countries: ["TN"] };
 
 export const AGENTS: Agent[] = [
   { id: "nora", email: "nora@movera.se", name: "Nora Lind", password: DEMO_PASSWORD, code: DEMO_CODE, role: "super", active: true, presence: "online", scope: ALL_STOCKHOLM },
@@ -51,6 +58,8 @@ export const AGENTS: Agent[] = [
   { id: "otto", email: "config@movera.se", name: "Otto Lund", password: DEMO_PASSWORD, code: DEMO_CODE, role: "config", active: true, presence: "online", scope: ALL_STOCKHOLM },
   { id: "fredrik", email: "fleet@movera.se", name: "Fredrik Sand", password: DEMO_PASSWORD, code: DEMO_CODE, role: "fleet", active: true, presence: "online", scope: NORTH },
   { id: "anna", email: "viewer@movera.se", name: "Anna Blom", password: DEMO_PASSWORD, code: DEMO_CODE, role: "viewer", active: true, presence: "away", scope: CENTRAL },
+  { id: "camille", email: "france@movera.se", name: "Camille Moreau", password: DEMO_PASSWORD, code: DEMO_CODE, role: "ops", active: true, presence: "online", scope: ALL_FRANCE },
+  { id: "yasmine", email: "tunisia@movera.se", name: "Yasmine Trabelsi", password: DEMO_PASSWORD, code: DEMO_CODE, role: "ops", active: true, presence: "online", scope: ALL_TUNISIA },
 ];
 
 const ALL = ["*"] as const;
@@ -117,15 +126,17 @@ export function can(role: Role, permission: string): boolean {
   return list.includes("*") || list.includes(permission);
 }
 
+/** True when the agent may open the zone, or every zone of a comma-separated list. */
 export function canUseZone(agent: Agent, zoneId: string | null): boolean {
   if (!zoneId) return true;
+  const zones = parseZoneList(zoneId);
+  if (zones.length > 1) return zones.every((zone) => canUseZone(agent, zone));
+  if (agent.scope.countries) return zoneAllowed(agent.scope, zoneId);
   return agent.scope.zones === "all" || agent.scope.zones.includes(zoneId);
 }
 
 export function allowedZones(agent: Agent, zones: readonly { id: string; name: string }[]): { id: string; name: string }[] {
-  if (agent.scope.zones === "all") return [...zones];
-  const allowed = new Set(agent.scope.zones);
-  return zones.filter((zone) => allowed.has(zone.id));
+  return zones.filter((zone) => canUseZone(agent, zone.id));
 }
 
 export function signIn(

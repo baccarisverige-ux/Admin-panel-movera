@@ -35,6 +35,8 @@ test("R11 policy changes create a new version without rewriting existing reserva
 
 test("R11 assignment contact return unassign and cancel lifecycle persists", async ({ page }) => {
   test.setTimeout(90_000);
+  // The demo reservations are seeded around 2026-10-05 16:00 UTC; pin the clock there so B021 stays in the future.
+  await page.clock.setFixedTime(new Date("2026-10-05T16:00:00Z"));
   await session(page);
   await page.goto("/reservations/B021");
 

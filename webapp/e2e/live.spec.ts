@@ -6,14 +6,14 @@ async function signIn(page: Page) {
   await page.getByLabel("Password").fill("movera");
   await page.getByLabel("6-digit code").fill("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("link", { name: "Live map" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Live map", exact: true })).toBeVisible();
 }
 
 test("live map moves drivers and opens a stale position", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await signIn(page);
-  await page.getByRole("link", { name: "Live map" }).click();
+  await page.getByRole("link", { name: "Live map", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Live map" })).toBeVisible();
   await expect(page.locator(".page-heading")).toContainText("OpenStreetMap");
   await expect(page.locator("[data-live='counts']")).toContainText("600");
