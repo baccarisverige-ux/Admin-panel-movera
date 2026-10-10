@@ -23,7 +23,7 @@ const assert = (ok: unknown, message: string) => {
 };
 
 const seed = createSeed();
-assert(seed.trips.length === 600, "present reads 600 trips");
+assert(seed.trips.filter((trip) => /^T0\d{3}$/.test(trip.id)).length === 600, "present reads 600 Stockholm trips");
 assert(new Set(seed.trips.map((trip) => trip.status)).size === 18, "all 18 statuses are seeded");
 
 const requested = seed.trips.find((trip) => trip.status === "requested")!;

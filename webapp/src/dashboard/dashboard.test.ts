@@ -1,0 +1,67 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { createSeed, SEED_NOW } from "../api/seed.ts";
+import { marketZoneIds } from "../markets/markets.ts";
+import { change, earningsReport } from "./earnings.ts";
+import { countStates, liveDrivers } from "./live.ts";
+import { bucketStarts, parsePeriod, periodParams, periodWindow } from "./period.ts";
+import { rideCounts, scheduledRides } from "./scheduled.ts";
+
+const NOW = Date.parse("2026-10-10T14:30:00Z");
+const STOCKHOLM = "Europe/Stockholm";
+
+test("periods follow the country's calendar", () => {
+  const today = periodWindow({ kind: "today" }, NOW, STOCKHOLM);
+  assert.equal(new Date(today.start).toISOString(), "2026-10-09T22:00:00.000Z", "Stockholm midnight");
+  assert.equal(today.end, NOW);
+  assert.equal(today.bucket, "hour");
+  const week = periodWindow({ kind: "week" }, NOW, STOCKHOLM);
+  assert.equal(new Date(week.start).toISOString(), "2026-10-04T22:00:00.000Z", "weeks start on Monday");
+  assert.equal(week.prevEnd - week.prevStart, week.end - week.start, "compares the same elapsed time");
+  assert.equal(new Date(periodWindow({ kind: "year" }, NOW, "Africa/Tunis").start).toISOString(), "2025-12-31T23:00:00.000Z");
+  const day = periodWindow({ kind: "date", on: "2026-10-03" }, NOW, "Europe/Paris");
+  assert.equal(day.end - day.start, 24 * 3_600_000);
+  assert.equal(periodWindow({ kind: "range", from: "2026-01-01", to: "2026-09-30" }, NOW, STOCKHOLM).bucket, "month");
+  assert.equal(bucketStarts(week.start, week.spanEnd, "day", STOCKHOLM).length, 7);
+  assert.equal(bucketStarts(Date.parse("2026-10-24T22:00:00Z"), Date.parse("2026-10-25T23:00:00Z"), "hour", STOCKHOLM).length, 25, "the DST change day has 25 hours");
+});
+
+test("the period travels in the URL", () => {
+  assert.deepEqual(parsePeriod(new URLSearchParams("period=date&on=2026-10-03")), { kind: "date", on: "2026-10-03" });
+  assert.deepEqual(parsePeriod(new URLSearchParams("period=range&from=2026-10-09&to=2026-10-01")), { kind: "today" }, "a reversed range is refused");
+  assert.equal(periodParams({ kind: "week" }, new URLSearchParams("country=FR&on=x")).toString(), "country=FR&period=week");
+});
+
+test("earnings are repeatable, add up and stay in the past", () => {
+  const window = periodWindow({ kind: "week" }, NOW, STOCKHOLM);
+  const a = earningsReport("SE", marketZoneIds("SE"), window);
+  const b = earningsReport("SE", marketZoneIds("SE"), window);
+  assert.deepEqual(a.totals, b.totals);
+  assert.ok(a.totals.trips > 0 && a.totals.grossMinor > 0);
+  assert.ok(Math.abs(a.totals.netMinor - (a.totals.commissionMinor - a.totals.refundsMinor)) <= 2);
+  const summed = a.series.filter((point) => Number.isFinite(point.current)).reduce((sum, point) => sum + point.current, 0);
+  assert.ok(Math.abs(summed - a.totals.grossMinor) <= a.series.length, "chart and total agree");
+  assert.ok(Math.abs(a.byZone.reduce((sum, row) => sum + row.minor, 0) - a.totals.grossMinor) <= a.byZone.length);
+  const one = earningsReport("SE", ["Z001"], window);
+  assert.ok(one.totals.grossMinor < a.totals.grossMinor, "a zone filter narrows the numbers");
+  const future = earningsReport("FR", marketZoneIds("FR"), periodWindow({ kind: "date", on: "2026-12-24" }, NOW, "Europe/Paris"));
+  assert.equal(future.totals.grossMinor, 0, "no earnings in the future");
+  assert.equal(change(110, 100), 10);
+  assert.equal(change(5, 0), null);
+});
+
+test("live map and scheduled rides read the scoped records", () => {
+  const seed = createSeed();
+  const tunis = new Set(marketZoneIds("TN"));
+  const rows = (list: typeof seed.drivers) => list.filter((row) => tunis.has(row.zoneId));
+  const live = liveDrivers(rows(seed.drivers), rows(seed.vehicles), rows(seed.trips), rows(seed.incidents), 0);
+  assert.ok(live.length > 0 && live.every((row) => tunis.has(row.zoneId)));
+  assert.equal(countStates(live).sos, 1, "the queued Tunis SOS flags one driver");
+  assert.ok(live.every((row) => Math.abs(row.lat - 36.84) < 0.3 && Math.abs(row.lng - 10.22) < 0.3), "drivers sit around Tunis");
+  const shift = NOW - Date.parse(SEED_NOW);
+  const rides = scheduledRides(rows(seed.reservations), seed.drivers, NOW, shift);
+  const counts = rideCounts(rides, NOW);
+  assert.ok(counts.upcoming > 0 && counts.completed > 0, "past and upcoming rides");
+  assert.ok(rides.every((ride, index) => index === 0 || rides[index - 1].pickupAt <= ride.pickupAt), "sorted by pickup");
+  assert.ok(rides.some((ride) => ride.warning === "red"), "an unassigned ride inside the hour is flagged");
+});

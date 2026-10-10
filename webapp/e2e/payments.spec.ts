@@ -6,13 +6,13 @@ async function signIn(page: Page) {
   await page.getByLabel("Password").fill("movera");
   await page.getByLabel("6-digit code").fill("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("link", { name: "Payments" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Payments", exact: true })).toBeVisible();
 }
 
 test("a timed-out double click still refunds once", async ({ page }) => {
   test.setTimeout(60_000);
   await signIn(page);
-  await page.getByRole("link", { name: "Payments" }).click();
+  await page.getByRole("link", { name: "Payments", exact: true }).click();
   await expect(page.getByTestId("payment-count")).toContainText("300 payments");
   await expect(page.getByTestId("bank-check")).toContainText("SEB");
   await expect(page.getByTestId("bank-check")).toContainText("IBAN checks");

@@ -1,4 +1,5 @@
 import { emptyGateA, recordGateA, type GateBook } from "../gates/gateA.ts";
+import { zoneAllowed } from "../markets/scope.ts";
 import { scopedSlice, type ReadContext } from "./scopes.ts";
 import { emptyReports, reportExport, type ReportsBook } from "../reports/ops.ts";
 import { emptyGrowth, saveGrowthRule, redeemGrowth, moderateGrowth, growthReviews, type GrowthBook } from "../growth/ops.ts";
@@ -145,6 +146,7 @@ function resolveTargetState(db: DemoDb, input: CommandInput): string | undefined
 
 function scopeAllowed(actorScope: AgentScope, scope: string): boolean {
   if (!scope || scope === "all") return true;
+  if (actorScope.countries) return zoneAllowed(actorScope, scope);
   return actorScope.zones === "all" || actorScope.zones.includes(scope);
 }
 

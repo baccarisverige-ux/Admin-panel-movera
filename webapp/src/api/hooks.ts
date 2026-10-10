@@ -6,6 +6,8 @@ import { useSession } from "../auth/SessionContext.tsx";
 import { commandById } from "../commands/registry.ts";
 import { useAdminApi } from "./AdminApiContext.tsx";
 import type { CommandInput } from "./create.ts";
+import { useMarketScope } from "../markets/useMarketScope.ts";
+import { parseZoneList } from "../markets/markets.ts";
 
 export { advancePrivacy, blockRider, creditWallet, findRiders, RIDERS, signOutRider } from "../riders/book.ts";
 export type { Rider } from "../riders/book.ts";
@@ -33,18 +35,11 @@ export type { BoostSchedule, PricingBook, PricingSnapshot } from "../pricing/boo
 export function useRecords(name: string, scope?: string | null) {
   const api = useAdminApi();
   const session = useSession();
-  const [params] = useSearchParams();
-  const requested = scope ?? params.get("scope");
-  const scopeDenied = Boolean(requested && session.agent && !canUseZone(session.agent, requested));
-  const effectiveScope = scopeDenied
-    ? ["__scope-denied__"]
-    : requested
-      ? requested
-      : session.agent?.scope.zones === "all"
-        ? null
-        : session.agent?.scope.zones ?? null;
+  const resolved = useMarketScope(scope);
+  const scopeDenied = resolved.denied;
+  const effectiveScope = resolved.effective;
   const query = useQuery({
-    queryKey: ["records", name, JSON.stringify(effectiveScope ?? "all"), session.agent?.id ?? "signed-out"],
+    queryKey: ["records", name, JSON.stringify(effectiveScope), session.agent?.id ?? "signed-out"],
     queryFn: () => api.list(name, effectiveScope),
   });
   return { ...query, scopeDenied, effectiveScope };
@@ -70,18 +65,11 @@ export function useTrips(scope: string | null) {
 export function useSearch(query: string) {
   const api = useAdminApi();
   const session = useSession();
-  const [params] = useSearchParams();
-  const requested = params.get("scope");
-  const scopeDenied = Boolean(requested && session.agent && !canUseZone(session.agent, requested));
-  const effectiveScope = scopeDenied
-    ? ["__scope-denied__"]
-    : requested
-      ? requested
-      : session.agent?.scope.zones === "all"
-        ? null
-        : session.agent?.scope.zones ?? null;
+  const resolved = useMarketScope();
+  const scopeDenied = resolved.denied;
+  const effectiveScope = resolved.effective;
   return useQuery({
-    queryKey: ["search", query, JSON.stringify(effectiveScope ?? "all"), session.agent?.id ?? "signed-out"],
+    queryKey: ["search", query, JSON.stringify(effectiveScope), session.agent?.id ?? "signed-out"],
     queryFn: () => api.search(query, effectiveScope),
     enabled: query.trim().length > 1 && !scopeDenied,
   });
@@ -261,7 +249,7 @@ export function useSlice<T>(key: string, fallback: T) {
   const { agent }=useSession();
   const [params]=useSearchParams();
   const requested=params.get("scope");
-  const scope=agent ? { ...agent.scope, zones: requested ? canUseZone(agent,requested) ? [requested] : ["__scope-denied__"] : agent.scope.zones } : undefined;
+  const scope=agent ? { ...agent.scope, zones: requested ? canUseZone(agent,requested) ? parseZoneList(requested) : ["__scope-denied__"] : agent.scope.zones } : undefined;
   const query = useQuery({ queryKey: ["slice", key, agent?.id, JSON.stringify(scope)], queryFn: () => api.readSlice(key, fallback, agent && scope ? { actorId:agent.id,role:agent.role,scope } : undefined), enabled:Boolean(agent) });
   const command = useCommand(`admin.${key}.save`);
   return {

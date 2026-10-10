@@ -206,6 +206,14 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.dispatch.save", label: "Save dispatch rules", reason: true, permission: "trips.intervene" },
   { id: "admin.dispatch.restore", label: "Restore dispatch version", reason: true, permission: "trips.intervene" },
   { id: "admin.live.focus", label: "Focus live marker", reason: false, permission: "trips.read" },
+  { id: "admin.ui.country", label: "Choose country", reason: false, permission: "overview.read" },
+  { id: "admin.ui.zones", label: "Choose zones", reason: false, permission: "overview.read" },
+  { id: "admin.ui.period", label: "Choose period", reason: false, permission: "overview.read" },
+  { id: "admin.ui.refresh", label: "Refresh data", reason: false, permission: "overview.read" },
+  { id: "admin.ui.quickAction", label: "Run quick action", reason: false, permission: "overview.read" },
+  { id: "admin.ui.mapLayer", label: "Show or hide drivers on the map", reason: false, permission: "overview.read" },
+  { id: "admin.ui.mapClose", label: "Close driver details", reason: false, permission: "overview.read" },
+  { id: "admin.ui.dashboardTab", label: "Switch dashboard tab", reason: false, permission: "overview.read" },
 ];
 
 

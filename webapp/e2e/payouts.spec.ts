@@ -14,7 +14,7 @@ async function confirm(page: Page) {
 
 test("a payout is paid only after the bank is approved", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "Payouts" }).click();
+  await page.getByRole("link", { name: "Payouts", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Payouts" })).toBeVisible();
   await expect(page.getByText("100, 200 and 500 kr")).toBeVisible();
   await page.getByRole("button", { name: "Mark paid" }).click();
