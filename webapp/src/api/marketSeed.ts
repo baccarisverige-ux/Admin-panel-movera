@@ -127,7 +127,7 @@ function countryRows(id: Exclude<MarketId, "SE">, offset: number, now: string, s
     const past = index % 2 === 1;
     const pickupAt = new Date(nowMs + (past ? -1 : 1) * (35 + index * 95) * 60_000).toISOString();
     const status = past
-      ? index % 7 === 1 ? "cancelled" : "completed"
+      ? index % 7 === 1 ? "cancelled" : index % 9 === 5 ? "no_show" : "completed"
       : index % 6 === 0 ? "waiting" : index % 5 === 0 ? "booked" : "assigned";
     return {
       id: `B${offset + index + 1}`,
@@ -182,14 +182,14 @@ function swedishPastReservations(now: string, riders: readonly DemoRecord[], dri
   const nowMs = Date.parse(now);
   const [fareBase, fareStep] = FARE.SE;
   return Array.from({ length: 30 }, (_, index) => {
-    const status = index % 6 === 2 ? "cancelled" : "completed";
+    const status = index % 6 === 2 ? "cancelled" : index % 7 === 4 ? "no_show" : "completed";
     return {
       id: `B${101 + index}`,
       name: riders[index + 40].name,
       phone: riders[index + 40].phone,
       zoneId: zones[index % zones.length],
       status,
-      driverId: status === "cancelled" ? null : drivers[(index * 3) % drivers.length].id,
+      driverId: status === "completed" ? drivers[(index * 3) % drivers.length].id : null,
       category: CATEGORIES[index % CATEGORIES.length],
       fareOre: fareBase * 2 + (mix(index) % 30) * fareStep,
       pickupAt: new Date(nowMs - (50 + index * 330) * 60_000).toISOString(),

@@ -119,6 +119,7 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.reservation.return", label: "Change return ride", reason: true, permission: "trips.intervene" },
   { id: "admin.reservation.savePolicy", label: "Save reservation policy", reason: true, permission: "trips.intervene" },
   { id: "admin.reservation.cancel", label: "Cancel reservation", reason: true, permission: "trips.intervene" },
+  { id: "admin.reservation.noShow", label: "Mark reservation as no-show", reason: true, permission: "trips.intervene" },
   { id: "admin.safetyOps.save", label: "Save safety policy", reason: true, permission: "safety.edit" },
   { id: "admin.safety.contact", label: "Log contact attempt", reason: true, permission: "safety.edit" },
   { id: "admin.safety.take", label: "Take incident", reason: true, permission: "safety.edit" },
@@ -274,6 +275,7 @@ const ALLOWED_STATES: Record<string, readonly string[]> = {
   "admin.reservation.contact": ["waiting", "booked", "assigned"],
   "admin.reservation.return": ["waiting", "booked", "assigned"],
   "admin.reservation.cancel": ["waiting", "booked", "assigned"],
+  "admin.reservation.noShow": ["waiting", "booked", "assigned"],
 };
 
 const DESTRUCTIVE = new Set([
@@ -290,6 +292,7 @@ const DESTRUCTIVE = new Set([
   "admin.pricing.removeSchedule",
   "admin.pricing.restore",
   "admin.reservation.cancel",
+  "admin.reservation.noShow",
   "admin.safety.resolve",
   "admin.team.deactivate",
   "admin.driver.onHold",

@@ -561,10 +561,11 @@
 .no-driver { display: inline-flex; align-items: center; gap: 4px; color: #8a5a00; font-weight: 600; }
 .no-driver.red { color: #b42727; }
 
-.ride-status { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: capitalize; background: #eef0f1; color: var(--dash-ink-2); }
+.ride-status { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #eef0f1; color: var(--dash-ink-2); }
 .ride-status.s-assigned { background: #e8f1fc; color: #1c5cab; }
 .ride-status.s-completed { background: #e5f5e5; color: var(--status-good-text); }
 .ride-status.s-cancelled { background: #f1f1ef; color: #6d6c68; text-decoration: line-through; }
+.ride-status.s-no_show { background: #fdecec; color: #9b2020; }
 .ride-status.s-waiting,
 .ride-status.s-booked { background: #fff3dc; color: #7a5300; }
 

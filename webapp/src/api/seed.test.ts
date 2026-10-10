@@ -16,6 +16,7 @@ assert(sweden(seed.riders).length === 250, "250 Stockholm riders");
 assert(sweden(seed.trips).length === 600, "600 Stockholm trips");
 assert(seed.reservations.filter((row) => /^B0\d\d$/.test(row.id)).length === 40, "40 original reservations");
 assert(sweden(seed.reservations).length === 70, "Stockholm adds 30 past scheduled rides");
+assert(seed.reservations.slice(0, 40).every((row) => row.status !== "no_show"), "original reservations keep their statuses");
 assert(sweden(seed.tickets).length === 35, "35 Stockholm tickets");
 assert(sweden(seed.incidents).length === 6, "6 Stockholm incidents");
 assert(sweden(seed.payments).length === 300, "300 Stockholm payments");

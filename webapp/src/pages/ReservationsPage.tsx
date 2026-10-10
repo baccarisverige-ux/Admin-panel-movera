@@ -24,6 +24,7 @@ const VIEWS = [
   { id: "warning", label: "Needs attention" },
   { id: "return", label: "Return rides" },
   { id: "cancelled", label: "Cancelled" },
+  { id: "no_show", label: "No-show" },
 ] as const;
 
 export function ReservationsPage() {
@@ -50,6 +51,7 @@ export function ReservationsPage() {
     if (view === "warning" && !warning) return false;
     if (view === "return" && !ops.returnPickupAt) return false;
     if (view === "cancelled" && record.status !== "cancelled") return false;
+    if (view === "no_show" && record.status !== "no_show") return false;
     if (!needle) return true;
     return [record.id, record.name, record.phone, record.driverId ?? "", ops.category ?? "", ops.policy.version]
       .some((value) => value.toLowerCase().includes(needle));

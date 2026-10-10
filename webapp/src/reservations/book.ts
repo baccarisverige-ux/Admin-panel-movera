@@ -1,6 +1,11 @@
 import type { DemoRecord } from "../api/seed.ts";
 
-export type ReservationStatus = "waiting" | "booked" | "assigned" | "cancelled" | "completed";
+export type ReservationStatus = "waiting" | "booked" | "assigned" | "cancelled" | "completed" | "no_show";
+
+/** Statuses a scheduled ride can no longer leave. */
+export function reservationClosed(status: string): boolean {
+  return status === "cancelled" || status === "completed" || status === "no_show";
+}
 
 export type ReservationPolicy = {
   version: string;
@@ -158,7 +163,7 @@ export function needsDriverSoon(reservation: Reservation, nowIso: string): boole
 }
 
 export function reservationWarning(record: DemoRecord, ops: ReservationOps, nowIso: string): string | null {
-  if (record.status === "cancelled" || record.status === "completed") return null;
+  if (reservationClosed(record.status)) return null;
   const minutes = minutesUntil(ops.pickupAt, nowIso);
   if (minutes < 0) return "Pickup time has passed.";
   if (!record.driverId && minutes <= ops.policy.giveUpMinutes) return `Give-up threshold reached: ${ops.policy.giveUpMinutes} minutes.`;
@@ -176,7 +181,7 @@ export function cancelReservation(reservation: Reservation): Reservation {
 }
 
 export function unassignReservation(record: DemoRecord): Partial<DemoRecord> {
-  if (record.status === "cancelled" || record.status === "completed") return {};
+  if (reservationClosed(record.status)) return {};
   return { driverId: null, status: "waiting" };
 }
 

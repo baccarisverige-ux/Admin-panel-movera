@@ -71,6 +71,7 @@ export function ReservationDetailPage() {
   const canAssign = canIntervene && pickupFuture && ["waiting", "booked"].includes(record.status) && candidates.length > 0;
   const canUnassign = canIntervene && record.status === "assigned" && Boolean(record.driverId);
   const canCancel = canIntervene && ["waiting", "booked", "assigned"].includes(record.status);
+  const canNoShow = canCancel && !pickupFuture;
 
   const contactPrepared = recordReservationContact(
     book,
@@ -88,6 +89,7 @@ export function ReservationDetailPage() {
     : book;
   const unassignPrepared = touchReservation(book, record, agent?.id ?? "", `Driver ${record.driverId ?? "none"} unassigned`);
   const cancelPrepared = touchReservation(book, record, agent?.id ?? "", "Reservation cancelled");
+  const noShowPrepared = touchReservation(book, record, agent?.id ?? "", "Rider did not show up");
 
   const shownReturnLocal = returnLocal || (ops.returnPickupAt ? stockholmLocalValue(ops.returnPickupAt) : "");
   const parsedReturn = shownReturnLocal
@@ -378,6 +380,28 @@ export function ReservationDetailPage() {
           onDone={() => setNotice(`Reservation cancelled. Policy ${ops.policy.version} remains on the booking.`)}
         >
           Cancel reservation
+        </CommandButton>
+        <p>Mark a no-show when the pickup time has passed and the rider did not come.</p>
+        <CommandButton
+          command="admin.reservation.noShow"
+          className="secondary-btn"
+          type="button"
+          targetId={record.id}
+          entityState={record.status}
+          scope={record.zoneId}
+          collection="reservations"
+          patch={{ status: "no_show" }}
+          before={record.status}
+          after="no_show"
+          expectedSliceRev={book.draftRev}
+          sliceKey="reservationOps"
+          value={noShowPrepared}
+          disabled={!canNoShow}
+          title={!canNoShow ? (pickupFuture ? "Available once the pickup time has passed." : "Reservation is already terminal.") : undefined}
+          storeReason
+          onDone={() => setNotice("Reservation marked as no-show.")}
+        >
+          Mark no-show
         </CommandButton>
       </article>
 

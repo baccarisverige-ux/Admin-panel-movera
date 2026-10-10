@@ -52,3 +52,20 @@ test("scheduled rides show upcoming, past and calendar", async ({ page }) => {
   await rides.getByRole("tab", { name: "Calendar" }).click();
   await expect(rides.locator(".cal-day")).toHaveCount(7);
 });
+
+test("a passed reservation can be marked as no-show", async ({ page }) => {
+  await signInAs(page, "nora");
+  await page.goto("/reservations/B002");
+  await page.getByRole("button", { name: "Mark no-show" }).click();
+  const modal = page.locator(".modal.open");
+  const input = modal.getByLabel("Type B002 to confirm");
+  if (await input.count()) await input.fill("B002");
+  await modal.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Reservation marked as no-show.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/· No show ·/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mark no-show" })).toBeDisabled();
+  await page.goto("/reservations");
+  await page.getByRole("button", { name: "No-show" }).or(page.getByRole("tab", { name: "No-show" })).first().click();
+  await expect(page.getByRole("cell", { name: "B002" })).toBeVisible();
+});

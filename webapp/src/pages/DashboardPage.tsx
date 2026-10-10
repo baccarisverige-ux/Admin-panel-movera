@@ -298,7 +298,7 @@ export function DashboardPage() {
         </div>
         <dl className="earnings-side">
           <div className="side-row accent">
-            <dt>Movera earnings <small>Commission {Math.round(COMMISSION_PLACEHOLDER * 100)}% · placeholder</small></dt>
+            <dt>Movera earnings <small>Commission {Math.round(COMMISSION_PLACEHOLDER * 100)}% placeholder · set later in Pricing</small></dt>
             <dd>{money(totals.commissionMinor)} <Delta value={change(totals.commissionMinor, previous.commissionMinor)} label={span.compareLabel} /></dd>
           </div>
           <div className="side-row"><dt>Driver earnings</dt><dd>{money(totals.driverMinor)} <Delta value={change(totals.driverMinor, previous.driverMinor)} label={span.compareLabel} /></dd></div>
@@ -377,6 +377,7 @@ export function DashboardPage() {
             <span><strong>{counts.assigned}</strong> Assigned</span>
             <span><strong>{counts.completed}</strong> Completed</span>
             <span><strong>{counts.cancelled}</strong> Cancelled</span>
+            <span className={counts.noShow ? "warn" : undefined}><strong>{counts.noShow}</strong> No-show</span>
           </div>
           <div className="tabs-row" role="tablist" aria-label="Scheduled rides">
             {(["upcoming", "past", "calendar"] as const).map((tab) => (

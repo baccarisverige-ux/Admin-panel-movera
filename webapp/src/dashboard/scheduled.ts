@@ -60,6 +60,7 @@ export function rideCounts(rides: readonly ScheduledRide[], nowMs: number) {
     assigned: upcoming.filter((ride) => ride.status === "assigned").length,
     completed: rides.filter((ride) => ride.status === "completed").length,
     cancelled: rides.filter((ride) => ride.status === "cancelled").length,
+    noShow: rides.filter((ride) => ride.status === "no_show").length,
   };
 }
 

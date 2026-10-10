@@ -92,3 +92,6 @@ assert(Math.abs(Date.parse(fallLater.iso!) - Date.parse(fallEarlier.iso!)) === 6
 assert(normalizeReservationBook({}).currentPolicy.version === "res-2", "empty legacy slice normalizes safely");
 
 console.log("reservations ok");
+
+import { reservationClosed } from "./book.ts";
+if (!reservationClosed("no_show") || !reservationClosed("cancelled") || reservationClosed("assigned")) throw new Error("no-show is a closed reservation status");

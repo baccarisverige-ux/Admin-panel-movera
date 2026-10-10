@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { AlertTriangle } from "lucide-react";
+import { statusLabel } from "../domain/labels";
 import type { ScheduledRide } from "./scheduled";
 
 type Props = {
@@ -24,15 +25,15 @@ export function RideTable({ rides, now, upcoming, timeFormat, dayFormat, money, 
             const when = !upcoming
               ? dayFormat.format(ride.pickupAt)
               : minutes < 60 ? `in ${minutes} min` : minutes < 24 * 60 ? `in ${Math.floor(minutes / 60)} h ${minutes % 60} min` : dayFormat.format(ride.pickupAt);
-            const open = !ride.driver && ride.pickupAt >= now && ride.status !== "cancelled";
+            const open = !ride.driver && ride.pickupAt >= now && ride.status !== "cancelled" && ride.status !== "no_show";
             return (
               <tr key={ride.id} className={ride.warning ? `ride-${ride.warning}` : undefined}>
                 <td><strong>{timeFormat.format(ride.pickupAt)}</strong><small>{when}</small></td>
                 <td>{ride.rider}{ride.hasReturn ? <span className="chip">Return</span> : null}</td>
                 <td>{ride.zoneName}</td>
                 <td>{ride.category}</td>
-                <td>{ride.driver ?? (ride.status === "cancelled" ? "—" : <span className={ride.warning === "red" ? "no-driver red" : "no-driver"}><AlertTriangle size={13} aria-hidden="true" /> Unassigned</span>)}</td>
-                <td><span className={`ride-status s-${ride.status}`}>{ride.status}</span></td>
+                <td>{ride.driver ?? (ride.status === "cancelled" || ride.status === "no_show" ? "—" : <span className={ride.warning === "red" ? "no-driver red" : "no-driver"}><AlertTriangle size={13} aria-hidden="true" /> Unassigned</span>)}</td>
+                <td><span className={`ride-status s-${ride.status}`}>{statusLabel(ride.status)}</span></td>
                 <td className="num">{money(ride.fareMinor)}{ride.estimated ? <small> est.</small> : null}</td>
                 <td><Link className="link-action" to={withScope(`/reservations/${ride.id}`)}>{open ? "Assign" : "Open"}</Link></td>
               </tr>

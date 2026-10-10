@@ -62,6 +62,9 @@ test("live map and scheduled rides read the scoped records", () => {
   const rides = scheduledRides(rows(seed.reservations), seed.drivers, NOW, shift);
   const counts = rideCounts(rides, NOW);
   assert.ok(counts.upcoming > 0 && counts.completed > 0, "past and upcoming rides");
+  assert.ok(counts.noShow > 0, "past no-shows are counted");
+  const sweden = new Set(marketZoneIds("SE"));
+  assert.ok(seed.reservations.some((row) => sweden.has(row.zoneId) && row.status === "no_show"), "Stockholm has no-shows too");
   assert.ok(rides.every((ride, index) => index === 0 || rides[index - 1].pickupAt <= ride.pickupAt), "sorted by pickup");
   assert.ok(rides.some((ride) => ride.warning === "red"), "an unassigned ride inside the hour is flagged");
 });
