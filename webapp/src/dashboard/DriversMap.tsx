@@ -61,7 +61,23 @@ type Props = {
   surgeShown?: boolean;
   surgeStyle?: SurgeStyle;
   onSurgeZone?: (zoneId: string) => void;
+  /** Driver bonus areas, drawn in orange with a label, when shown. */
+  bonusAreas?: BonusMapArea[];
+  bonusShown?: boolean;
 };
+
+export type BonusMapArea = { id: string; label: string; live: boolean; rings: [number, number][][] };
+
+function bonusGeo(areas: readonly BonusMapArea[], shown: boolean) {
+  return {
+    type: "FeatureCollection" as const,
+    features: (shown ? areas : []).flatMap((area) => area.rings.filter((ring) => ring.length >= 3).map((ring) => ({
+      type: "Feature" as const,
+      properties: { id: area.id, live: area.live ? 1 : 0 },
+      geometry: { type: "Polygon" as const, coordinates: [[...ring.map(([lat, lng]) => [lng, lat]), [ring[0]![1], ring[0]![0]]]] },
+    }))),
+  };
+}
 
 const LEVEL_COLOR = { ok: "#0ca30c", tight: "#eda100", short: "#d03b3b" };
 
@@ -135,10 +151,11 @@ function geo(drivers: LiveDriver[], hidden: Set<LiveState>) {
 }
 
 /** Live drivers on a MapLibre map, coloured by state; click a driver for details. */
-export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null, tripFor, infoFor, requests = [], showRequests = true, focusRequest = null, renderAssign, balance = [], showBalance = false, surge = [], surgeShown = false, surgeStyle = "zones", onSurgeZone }: Props) {
+export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null, tripFor, infoFor, requests = [], showRequests = true, focusRequest = null, renderAssign, balance = [], showBalance = false, surge = [], surgeShown = false, surgeStyle = "zones", onSurgeZone, bonusAreas = [], bonusShown = false }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const latest = useRef({ drivers, hidden, requests, showRequests, balance, showBalance });
+  const latest = useRef({ drivers, hidden, requests, showRequests, balance, showBalance, bonusAreas, bonusShown });
+  const bonusPins = useRef<maplibregl.Marker[]>([]);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -149,7 +166,7 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
   const surgeClick = useRef(onSurgeZone);
   surgeClick.current = onSurgeZone;
   const pins = useRef<maplibregl.Marker[]>([]);
-  latest.current = { drivers, hidden, requests, showRequests, balance, showBalance };
+  latest.current = { drivers, hidden, requests, showRequests, balance, showBalance, bonusAreas, bonusShown };
 
   function select(id: string | null) {
     setSelectedId(id);
@@ -173,6 +190,9 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.on("load", () => {
       installSurgeLayers(map, (zoneId) => surgeClick.current?.(zoneId));
+      map.addSource("bonus-areas", { type: "geojson", data: bonusGeo(latest.current.bonusAreas, latest.current.bonusShown) });
+      map.addLayer({ id: "bonus-fill", type: "fill", source: "bonus-areas", paint: { "fill-color": "#f2994a", "fill-opacity": ["case", ["==", ["get", "live"], 1], 0.34, 0.16] } });
+      map.addLayer({ id: "bonus-line", type: "line", source: "bonus-areas", paint: { "line-color": "#e36414", "line-width": ["case", ["==", ["get", "live"], 1], 3, 1.5], "line-dasharray": ["case", ["==", ["get", "live"], 1], ["literal", [1, 0]], ["literal", [3, 2]]] } });
       map.addSource("balance", { type: "geojson", data: balanceGeo(latest.current.balance, latest.current.showBalance) });
       map.addLayer({
         id: "balance",
@@ -263,6 +283,27 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
     const source = mapRef.current?.getSource("drivers") as GeoJSONSource | undefined;
     if (ready && source) source.setData(geo(drivers, hidden));
   }, [drivers, hidden, ready]);
+
+  const bonusKey = bonusShown ? JSON.stringify(bonusAreas.map((area) => [area.id, area.label, area.live, area.rings.length])) : "";
+  useEffect(() => {
+    const map = mapRef.current;
+    const source = map?.getSource("bonus-areas") as GeoJSONSource | undefined;
+    if (!ready || !map || !source) return;
+    source.setData(bonusGeo(bonusAreas, bonusShown));
+    bonusPins.current.forEach((marker) => marker.remove());
+    bonusPins.current = [];
+    if (!bonusShown) return;
+    for (const area of bonusAreas) {
+      const ring = area.rings[0];
+      if (!ring?.length) continue;
+      const element = document.createElement("div");
+      element.className = area.live ? "bonus-pin live" : "bonus-pin";
+      element.textContent = area.label;
+      const lat = ring.reduce((sum, [value]) => sum + value, 0) / ring.length;
+      const lng = ring.reduce((sum, [, value]) => sum + value, 0) / ring.length;
+      bonusPins.current.push(new maplibregl.Marker({ element, anchor: "center" }).setLngLat([lng, lat]).addTo(map));
+    }
+  }, [bonusKey, ready]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource("balance") as GeoJSONSource | undefined;

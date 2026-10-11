@@ -7,6 +7,7 @@ import "./styles/dashboard.css";
 import "./styles/fleet.css";
 import "./styles/pricing.css";
 import "./styles/zones.css";
+import "./styles/bonus.css";
 import "./styles/riders.css";
 
 createRoot(document.getElementById("root")!).render(
