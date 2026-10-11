@@ -29,8 +29,16 @@ export type DriverBankReview = {
   note: string;
 };
 
+export type ThreadMessage = {
+  from: "admin" | "contact";
+  text: string;
+  at: string;
+  by: string;
+};
+
 export type DriverOps = {
   driverId: string;
+  messages?: ThreadMessage[];
   documents: Record<DocId, DriverDocumentReview>;
   categories: Record<Vehicle["category"], boolean>;
   bank: DriverBankReview;
@@ -74,6 +82,9 @@ export type DriverSeed = {
   id: string;
   name: string;
   fleetId?: string | null;
+  /** Account status and seeded document state; when given, untouched documents start from them. */
+  status?: string;
+  kind?: string;
 };
 
 export type VehicleSeed = {
@@ -116,13 +127,32 @@ export function emptyDriverOpsBook(): DriverOpsBook {
   return { draftRev: 1, drivers: {}, vehicles: {} };
 }
 
+/**
+ * Starting documents for a seeded driver: pending drivers still have everything to upload;
+ * drivers already on the platform start approved, with the seeded document problem applied.
+ */
+function seededDocuments(driver: DriverSeed): Record<DocId, DriverDocumentReview> {
+  const documents = documentDefaults();
+  if (!driver.status || driver.status === "pending") return documents;
+  for (const id of DRIVER_DOCUMENTS) documents[id] = { ...documents[id], status: "approved", reviewerId: "nora" };
+  const set = (id: DocId, patch: Partial<DriverDocumentReview>) => { documents[id] = { ...documents[id], ...patch }; };
+  // About four in ten drivers have one document to look at; the rest are clean.
+  const problem = (Number(driver.id.replace(/\D/g, "")) || 0) % 10;
+  if (problem === 2 || problem === 7) set("vehicle_insurance", { status: "expiring", expiresAt: isoDate(18) });
+  if (problem === 4) set("taxi_driver_license", { status: "expired", expiresAt: isoDate(-9) });
+  if (problem === 5) set("vehicle_registration", { status: "rejected", note: "Photo is blurry, upload again" });
+  if (problem === 9) set("profile_photo", { status: "in_review", reviewerId: "" });
+  if (driver.status === "on_hold") set("vehicle_insurance", { status: "expired", expiresAt: isoDate(-3) });
+  return documents;
+}
+
 export function driverOps(book: DriverOpsBook, driver: DriverSeed): DriverOps {
   const stored = book.drivers[driver.id];
   if (stored) return stored;
   const suffix = Number(driver.id.replace(/\D/g, "")) || 1;
   return {
     driverId: driver.id,
-    documents: documentDefaults(),
+    documents: seededDocuments(driver),
     categories: {
       economy: true,
       comfort: suffix % 2 === 0,
@@ -275,6 +305,29 @@ export function setBankReview(
     ...current,
     bank: { ...current.bank, status, reviewerId: actorId, note: note.trim() },
     activity: [`Bank details ${status} by ${actorId}`, ...current.activity].slice(0, 30),
+  };
+  return { ...nextBook(book), drivers: { ...book.drivers, [driver.id]: updated } };
+}
+
+/** Change a document's expiry date; an empty value clears it. */
+export function setDocumentExpiry(book: DriverOpsBook, driver: DriverSeed, id: DocId, expiresAt: string, actorId: string): DriverOpsBook {
+  const current = driverOps(book, driver);
+  const updated: DriverOps = {
+    ...current,
+    documents: { ...current.documents, [id]: { ...current.documents[id], expiresAt } },
+    activity: [`${id}: expiry ${expiresAt || "cleared"} by ${actorId}`, ...current.activity].slice(0, 30),
+  };
+  return { ...nextBook(book), drivers: { ...book.drivers, [driver.id]: updated } };
+}
+
+/** Add a message from the admin to the driver's thread. */
+export function sendDriverMessage(book: DriverOpsBook, driver: DriverSeed, text: string, actorId: string, at: string): DriverOpsBook {
+  const current = driverOps(book, driver);
+  const message: ThreadMessage = { from: "admin", text: text.trim(), at, by: actorId };
+  const updated: DriverOps = {
+    ...current,
+    messages: [...(current.messages ?? []), message].slice(-100),
+    activity: [`Message sent by ${actorId}`, ...current.activity].slice(0, 30),
   };
   return { ...nextBook(book), drivers: { ...book.drivers, [driver.id]: updated } };
 }

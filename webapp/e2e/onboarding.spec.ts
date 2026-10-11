@@ -28,7 +28,7 @@ test("onboarding approves documents and activates a driver", async ({ page }) =>
   await expect(page.getByText("Driver is active. New offers can be sent.")).toBeVisible();
   await page.getByRole("link", { name: "Drivers", exact: true }).click();
   await page.getByRole("button", { name: "Pending", exact: true }).click();
-  await page.getByRole("cell", { name: "D0001" }).click();
+  await page.getByRole("cell", { name: "MV-SE-0001" }).click();
   await expect(page).toHaveURL(/\/drivers\/D0001$/);
   await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
   await page.getByRole("tab", { name: "Documents" }).click();
@@ -36,7 +36,7 @@ test("onboarding approves documents and activates a driver", async ({ page }) =>
   const documents = page.locator('#tabpanel-documents');
   await expect(documents).toHaveClass(/active/);
   await expect(documents).not.toHaveAttribute('hidden', '');
-  await expect(page.getByText("driver_license · latest review needed", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("doc-driver_license")).toContainText("Missing");
   await page.getByRole("tab", { name: "Vehicles" }).click();
-  await expect(page.getByText(/No vehicle linked|ABC 123|MVR/)).toBeVisible();
+  await expect(page.locator("#tabpanel-vehicles").getByText(/No vehicle linked|ABC 123|MVR/).first()).toBeVisible();
 });

@@ -4,6 +4,7 @@ import { AdminProviders } from "./api/AdminApiContext";
 import { App } from "./App";
 import "./styles/tokens.css";
 import "./styles/dashboard.css";
+import "./styles/fleet.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

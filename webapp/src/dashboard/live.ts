@@ -31,10 +31,15 @@ function hash(text: string): number {
   return value >>> 0;
 }
 
+/** Active drivers who have the app open right now; about a quarter are offline at any moment. */
+export function isOnline(driver: Pick<DemoRecord, "id" | "status">): boolean {
+  return driver.status === "active" && (hash(driver.id) >>> 13) % 100 >= 24;
+}
+
 const ACTIVE_TRIP = new Set(["accepted", "driver_to_pickup", "arrived", "rider_onboard", "in_trip", "approaching_dropoff"]);
 
 /**
- * Online drivers with a simulated position. Only active drivers are online; each queued SOS
+ * Online drivers with a simulated position. Only active drivers can be online; each queued SOS
  * flags the first online driver in its zone. `tick` advances moving drivers a little.
  */
 export function liveDrivers(
@@ -47,7 +52,7 @@ export function liveDrivers(
   const sosZones = new Set(incidents.filter((row) => row.status === "queued").map((row) => row.zoneId));
   const flagged = new Set<string>();
   return drivers
-    .filter((driver) => driver.status === "active" && zoneById(driver.zoneId))
+    .filter((driver) => isOnline(driver) && zoneById(driver.zoneId))
     .map((driver) => {
       const zone = zoneById(driver.zoneId)!;
       const seed = hash(driver.id);

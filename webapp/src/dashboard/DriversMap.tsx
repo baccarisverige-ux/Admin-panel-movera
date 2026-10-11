@@ -5,6 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { X } from "lucide-react";
 import type { Market } from "../markets/markets";
 import { zoneById } from "../markets/markets";
+import { driverCode } from "../fleet/codes";
 import { LIVE_STATES, type LiveDriver, type LiveState } from "./live";
 
 const STYLE = {
@@ -34,6 +35,8 @@ type Props = {
   zones: string[];
   hidden: Set<LiveState>;
   withScope: (path: string) => string;
+  /** Driver to zoom to and open, from a "See on map" link. */
+  focusId?: string | null;
 };
 
 function geo(drivers: LiveDriver[], hidden: Set<LiveState>) {
@@ -50,7 +53,7 @@ function geo(drivers: LiveDriver[], hidden: Set<LiveState>) {
 }
 
 /** Live drivers on a MapLibre map, coloured by state; click a driver for details. */
-export function DriversMap({ drivers, market, zones, hidden, withScope }: Props) {
+export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const latest = useRef({ drivers, hidden });
@@ -125,6 +128,18 @@ export function DriversMap({ drivers, market, zones, hidden, withScope }: Props)
     map.fitBounds(bounds, { padding: 70, maxZoom: 13.5, duration: 600 });
   }, [zones, market, ready]);
 
+  const focused = useRef<string | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !focusId || focused.current === focusId) return;
+    const target = latest.current.drivers.find((driver) => driver.id === focusId);
+    if (!target) return;
+    focused.current = focusId;
+    setSelectedId(focusId);
+    map.flyTo({ center: [target.lng, target.lat], zoom: 14.5, duration: 900 });
+    host.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusId, ready, drivers]);
+
   const selected = drivers.find((driver) => driver.id === selectedId) ?? null;
 
   if (failed) {
@@ -143,6 +158,7 @@ export function DriversMap({ drivers, market, zones, hidden, withScope }: Props)
         <div className="map-popup" role="dialog" aria-label={`Driver ${selected.name}`}>
           <button data-command="admin.ui.mapClose" type="button" className="map-popup-close" aria-label="Close" onClick={() => setSelectedId(null)}><X size={14} /></button>
           <strong>{selected.name}</strong>
+          <small className="map-popup-code">{driverCode(selected)}</small>
           <span className="map-popup-state"><i style={{ background: STATE_COLOR[selected.state] }} />{LIVE_STATES.find((state) => state.id === selected.state)?.label}</span>
           <dl>
             <dt>Zone</dt><dd>{selected.zoneName}</dd>

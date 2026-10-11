@@ -92,6 +92,7 @@ const TARGET_COLLECTIONS = [
   "riders",
   "vehicles",
   "fleets",
+  "fleetOwners",
   "trips",
   "reservations",
   "tickets",

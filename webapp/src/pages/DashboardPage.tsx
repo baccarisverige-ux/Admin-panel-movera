@@ -345,7 +345,7 @@ export function DashboardPage() {
               );
             })}
           </div>
-          <DriversMap drivers={live} market={market} zones={scope.zones} hidden={hidden} withScope={withScope} />
+          <DriversMap drivers={live} market={market} zones={scope.zones} hidden={hidden} withScope={withScope} focusId={params.get("focus")} />
           <p className="fine-print">{api.demo ? "Simulated positions from demo data. " : ""}Refreshes every 5 seconds.</p>
         </section>
 
