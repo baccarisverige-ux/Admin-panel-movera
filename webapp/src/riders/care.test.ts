@@ -1,4 +1,4 @@
-import { addCredit, addLostItem, advanceLostItem, ban, createPromotion, decideRefund, emptyRiderCare, isBanned, markPaid, maxCost, merge, normalizeCare, promoResults, promoUsed, reply, requestRefund, saveFilter, threadOf, unpaidMinor, waitingMinutes, type PromoDraft } from "./care.ts";
+import { addCredit, editPromotion, setPromotionOn, addLostItem, advanceLostItem, ban, createPromotion, decideRefund, emptyRiderCare, isBanned, markPaid, maxCost, merge, normalizeCare, promoResults, promoUsed, reply, requestRefund, saveFilter, threadOf, unpaidMinor, waitingMinutes, type PromoDraft } from "./care.ts";
 import { bookingCounts, joinedAt, riderBookings, riderCode, riderProfile, type RiderRecord } from "./profile.ts";
 import { buildRows, insights, matches, ridersCsv, segmentCounts, sortRows } from "./segments.ts";
 
@@ -77,6 +77,12 @@ assert(!created.error && created.ticket?.status === "active", "promotion created
 assert(createPromotion(created.care, draft, "nora", NOW).error?.includes("already used"), "codes are unique");
 assert(createPromotion(care, { ...draft, budget: 500 }, "nora", NOW).error?.includes("budget"), "budget is checked");
 assert(promoUsed(created.ticket!, "R0001", riderBookings(people[0], NOW)) === 0, "a new promotion is unused");
+const paused = setPromotionOn(created.care, created.ticket!.id, false);
+assert(paused.promotions[0].status === "paused" && setPromotionOn(paused, created.ticket!.id, true).promotions[0].status === "active", "promotions switch off and on");
+assert(!buildRows([people[0]], paused, NOW, "month", new Set())[0].promos.some((item) => item.ticket.code === "SPRING30"), "a paused promotion is not usable");
+const edited = editPromotion(created.care, created.ticket!.id, { value: 25, maxPerRide: 40, rides: 5 }, "lena", NOW);
+assert(!edited.error && edited.care.promotions[0].value === 25 && edited.care.promotions[0].rides === 5 && edited.care.promotions[0].editedBy === "lena", "promotion edited");
+assert(editPromotion(created.care, created.ticket!.id, { value: 0, maxPerRide: 40, rides: 5 }, "lena", NOW).error, "a 0% promotion is refused");
 const seeded = care.promotions[1];
 const results = promoResults(seeded, (id) => {
   const rider = people.find((item) => item.id === id)!;

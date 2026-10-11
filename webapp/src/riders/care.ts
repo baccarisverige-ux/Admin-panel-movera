@@ -45,12 +45,14 @@ export type PromoTicket = {
   group: string;
   createdBy: string;
   createdAt: string;
-  status: "active" | "stopped";
+  status: "active" | "paused" | "stopped";
+  editedBy?: string;
+  editedAt?: string;
 };
 export type AutoPromos = {
-  firstRide: { on: boolean; percent: number; maxPerRide: number };
-  birthday: { on: boolean; percent: number; maxPerRide: number };
-  winBack: { on: boolean; percent: number; afterDays: number; maxPerRide: number };
+  firstRide: { on: boolean; percent: number; maxPerRide: number; rides: number };
+  birthday: { on: boolean; percent: number; maxPerRide: number; rides: number };
+  winBack: { on: boolean; percent: number; afterDays: number; maxPerRide: number; rides: number };
 };
 export type BanEntry = { value: string; riderId: string; reason: string; by: string; at: string };
 export type LostItem = { id: string; item: string; bookingId: string; status: "reported" | "driver contacted" | "returned"; at: string; by: string };
@@ -90,9 +92,9 @@ export function emptyRiderCare(): RiderCare {
       { id: "P-SEED-2", code: "THANKYOU20", title: "Thank you for riding", kind: "percent", value: 20, rides: 10, maxPerRide: 40, minFare: 80, validFrom: "2026-09-15T00:00:00.000Z", validTo: "2026-11-30T23:00:00.000Z", country: "SE", zones: [], categories: ["economy", "comfort"], budget: 30000, riderIds: ["R0010", "R0020", "R0030", "R0040", "R0050", "R0060", "R0070", "R0080"], group: "Top riders", createdBy: "lena", createdAt: "2026-09-15T08:00:00.000Z", status: "active" },
     ],
     autoPromos: {
-      firstRide: { on: true, percent: 50, maxPerRide: 100 },
-      birthday: { on: false, percent: 20, maxPerRide: 60 },
-      winBack: { on: true, percent: 25, afterDays: 30, maxPerRide: 60 },
+      firstRide: { on: true, percent: 50, maxPerRide: 100, rides: 1 },
+      birthday: { on: false, percent: 20, maxPerRide: 60, rides: 1 },
+      winBack: { on: true, percent: 25, afterDays: 30, maxPerRide: 60, rides: 3 },
     },
     bans: { phones: [], cards: [] },
     lostFound: {},
@@ -111,7 +113,11 @@ export function normalizeCare(value: unknown): RiderCare {
   return {
     ...fallback,
     ...raw,
-    autoPromos: { ...fallback.autoPromos, ...(raw.autoPromos ?? {}) },
+    autoPromos: {
+      firstRide: { ...fallback.autoPromos.firstRide, ...(raw.autoPromos?.firstRide ?? {}) },
+      birthday: { ...fallback.autoPromos.birthday, ...(raw.autoPromos?.birthday ?? {}) },
+      winBack: { ...fallback.autoPromos.winBack, ...(raw.autoPromos?.winBack ?? {}) },
+    },
     bans: { ...fallback.bans, ...(raw.bans ?? {}) },
     limits: { ...fallback.limits, ...(raw.limits ?? {}) },
     promotions: Array.isArray(raw.promotions) ? raw.promotions : fallback.promotions,
@@ -287,6 +293,24 @@ export function createPromotion(care: RiderCare, draft: PromoDraft, by: string, 
 
 export function stopPromotion(care: RiderCare, id: string): RiderCare {
   return bump(care, { promotions: care.promotions.map((item) => (item.id === id ? { ...item, status: "stopped" } : item)) });
+}
+
+/** Switch a promotion off for now (riders keep it but cannot use it) or back on. */
+export function setPromotionOn(care: RiderCare, id: string, on: boolean): RiderCare {
+  return bump(care, { promotions: care.promotions.map((item) => (item.id === id && item.status !== "stopped" ? { ...item, status: on ? "active" : "paused" } : item)) });
+}
+
+export type PromoEdit = { value: number; maxPerRide: number; rides: number };
+
+/** Change the discount, the most per ride or how many rides, on a promotion already given. */
+export function editPromotion(care: RiderCare, id: string, edit: PromoEdit, by: string, now: number): { care: RiderCare; error?: string } {
+  const ticket = care.promotions.find((item) => item.id === id);
+  if (!ticket) return { care, error: "Promotion not found." };
+  if (ticket.status === "stopped") return { care, error: "A stopped promotion cannot be changed." };
+  const next = { ...ticket, ...edit, maxPerRide: ticket.kind === "percent" ? edit.maxPerRide : edit.value };
+  const error = validatePromo(next);
+  if (error) return { care, error };
+  return { care: bump(care, { promotions: care.promotions.map((item) => (item.id === id ? { ...next, editedBy: by, editedAt: new Date(now).toISOString() } : item)) }) };
 }
 
 export function setAutoPromos(care: RiderCare, auto: AutoPromos): RiderCare {

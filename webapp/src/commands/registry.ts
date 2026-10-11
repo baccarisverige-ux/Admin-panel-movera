@@ -200,6 +200,8 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.riders.bulkMessage", label: "Message a group of riders", reason: true, permission: "support.reply" },
   { id: "admin.riders.promoCreate", label: "Create promotion", reason: true, permission: "riders.promotions" },
   { id: "admin.riders.promoStop", label: "Stop promotion", reason: true, permission: "riders.promotions" },
+  { id: "admin.riders.promoToggle", label: "Switch promotion on or off", reason: true, permission: "riders.promotions" },
+  { id: "admin.riders.promoEdit", label: "Change promotion", reason: true, permission: "riders.promotions" },
   { id: "admin.riders.autoPromo", label: "Save automatic promotions", reason: true, permission: "riders.promotions" },
   { id: "admin.zone.publish", label: "Publish zones", reason: true, permission: "zones.publish" },
   { id: "admin.zone.review", label: "Send zones for review", reason: true, permission: "zones.edit" },

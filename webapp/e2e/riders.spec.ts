@@ -125,3 +125,35 @@ test("riders page and rider page stay usable at 390px", async ({ page }) => {
     expect(overflow, path).toBeLessThanOrEqual(2);
   }
 });
+
+test("existing promotions switch off and on, and their discount, max per ride and rides can change", async ({ page }) => {
+  await session(page);
+  await page.goto("/riders?view=promotions");
+  const list = page.getByRole("list", { name: "Promotions" });
+  await page.getByRole("button", { name: "WELCOME30 on" }).click();
+  await confirm(page);
+  await expect(page.getByText("Promotion WELCOME30 switched off.")).toBeVisible();
+  await expect(list).toContainText("Off: riders cannot use it now");
+  await page.getByRole("button", { name: "WELCOME30 off" }).click();
+  await confirm(page);
+  await expect(page.getByText("Promotion WELCOME30 switched on.")).toBeVisible();
+
+  const thanks = list.getByRole("listitem").filter({ hasText: "THANKYOU20" });
+  await thanks.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("THANKYOU20 discount").fill("25");
+  await page.getByLabel("THANKYOU20 max per ride").fill("60");
+  await page.getByLabel("THANKYOU20 rides").fill("6");
+  await expect(thanks.getByLabel("Promotion THANKYOU20")).toContainText("25% off your next 6 rides · max 60 kr per ride");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await confirm(page);
+  await expect(page.getByText("Promotion THANKYOU20 changed.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("list", { name: "Promotions" }).getByLabel("Promotion THANKYOU20")).toContainText("25% off your next 6 rides · max 60 kr per ride");
+
+  await page.getByLabel("Come back rides").fill("5");
+  await page.getByRole("button", { name: "Save automatic promotions" }).click();
+  await confirm(page);
+  await expect(page.getByText("Automatic promotions saved.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Come back rides")).toHaveValue("5");
+});

@@ -55,7 +55,7 @@ export function PromoTicketCard({ ticket, used, locale }: { ticket: Pick<PromoTi
   const deal = ticket.kind === "percent" ? `${ticket.value}%` : `${ticket.value} ${symbol}`;
   const left = used === undefined ? null : Math.max(0, ticket.rides - used);
   return (
-    <div className={ticket.status === "stopped" ? "rd-ticket stopped" : "rd-ticket"} aria-label={`Promotion ${ticket.code}`}>
+    <div className={`rd-ticket${ticket.status === "active" ? "" : ` ${ticket.status}`}`} aria-label={`Promotion ${ticket.code}`}>
       <div className="rd-ticket-deal">
         <Ticket size={16} aria-hidden="true" />
         <strong>{deal}</strong>

@@ -27,7 +27,7 @@ import { can } from "../auth/permissions";
 import { AccountChip, Avatar, ContactActions } from "../fleet/ui";
 import { market, zoneById } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
-import { CARE_KEY, REPLY_TEMPLATES, messageGroup, promoResults, promoUsed, saveFilter, setAutoPromos, stopPromotion, type AutoPromos, type RiderCare } from "../riders/care";
+import { CARE_KEY, REPLY_TEMPLATES, editPromotion, messageGroup, promoResults, promoUsed, saveFilter, setAutoPromos, setPromotionOn, stopPromotion, type AutoPromos, type PromoEdit, type RiderCare } from "../riders/care";
 import { PromoBuilder } from "../riders/PromoBuilder";
 import { PERIODS, SEGMENTS, SORTS, insights, matches, ridersCsv, segmentCounts, sortRows, type Period, type RiderRow, type SegmentId, type SortId } from "../riders/segments";
 import { LevelBadge, LiveChip, PromoTicketCard, RiderBadges, Stars, money } from "../riders/ui";
@@ -286,7 +286,7 @@ function GroupMessage({ care, rows, agentId, now, onClose, onSent }: { care: Rid
 }
 
 function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuilder, onNotice, now }: { care: RiderCare; rows: RiderRow[]; country: "SE" | "FR" | "TN"; agentId: string | null; canEdit: boolean; builder: string[] | null; onBuilder: (ids: string[] | null) => void; onNotice: (text: string) => void; now: number }) {
-  const [auto, setAuto] = useState<AutoPromos>(care.autoPromos);
+  const [editing, setEditing] = useState<{ id: string; edit: PromoEdit } | null>(null);
   const byId = useMemo(() => new Map(rows.map((row) => [row.rider.id, row])), [rows]);
   const tickets = care.promotions.filter((ticket) => ticket.country === country);
   const locale = market(country).locale;
@@ -316,17 +316,43 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
                 return row ? { used: promoUsed(ticket, id, row.bookings), avgFare: row.profile.avgFareMinor / market(country).minorUnits } : { used: 0, avgFare: 0 };
               });
               const spent = ticket.budget ? Math.min(100, (results.cost / ticket.budget) * 100) : null;
+              const symbol = { SE: "kr", FR: "€", TN: "DT" }[country];
+              const draft = editing?.id === ticket.id ? editing.edit : null;
+              const edited = draft && agentId ? editPromotion(care, ticket.id, draft, agentId, now) : null;
+              const on = ticket.status === "active";
               return (
                 <li key={ticket.id}>
-                  <PromoTicketCard ticket={ticket} locale={locale} />
+                  <div className="rd-promo-card">
+                    <PromoTicketCard ticket={draft ? { ...ticket, ...draft, maxPerRide: ticket.kind === "percent" ? draft.maxPerRide : draft.value } : ticket} locale={locale} />
+                    {ticket.status !== "stopped" ? (
+                      <div className="rd-promo-controls">
+                        <CommandButton command="admin.riders.promoToggle" className={on ? "surge-toggle on" : "surge-toggle"} targetId={ticket.code} confirmTarget={false} scope="all" before={ticket.status} after={on ? "off" : "on"} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={setPromotionOn(care, ticket.id, !on)} disabled={!canEdit} aria-label={`${ticket.code} ${on ? "on" : "off"}`} onDone={() => onNotice(`Promotion ${ticket.code} switched ${on ? "off" : "on"}.`)}>
+                          {on ? "On" : "Off"} <span className="switch" aria-hidden="true"><i /></span>
+                        </CommandButton>
+                        {draft ? null : <button data-command="admin.riders.promoEdit" type="button" className="dash-btn small ghost" disabled={!canEdit} onClick={() => setEditing({ id: ticket.id, edit: { value: ticket.value, maxPerRide: ticket.maxPerRide, rides: ticket.rides } })}>Edit</button>}
+                      </div>
+                    ) : null}
+                    {draft ? (
+                      <div className="rd-promo-edit" role="group" aria-label={`Change ${ticket.code}`}>
+                        <label className="field">{ticket.kind === "percent" ? "Discount" : "Amount off"}<NumberField label={`${ticket.code} discount`} value={draft.value} unit={ticket.kind === "percent" ? "%" : symbol} max={ticket.kind === "percent" ? 100 : undefined} onChange={(value) => setEditing({ id: ticket.id, edit: { ...draft, value } })} /></label>
+                        {ticket.kind === "percent" ? <label className="field">Max per ride<NumberField label={`${ticket.code} max per ride`} value={draft.maxPerRide} unit={symbol} onChange={(value) => setEditing({ id: ticket.id, edit: { ...draft, maxPerRide: value } })} /></label> : null}
+                        <label className="field">Rides<NumberField label={`${ticket.code} rides`} value={draft.rides} unit="rides" max={100} onChange={(value) => setEditing({ id: ticket.id, edit: { ...draft, rides: Math.round(value) } })} /></label>
+                        {edited?.error ? <p className="rd-form-error">{edited.error}</p> : null}
+                        <div className="cat-actions">
+                          <CommandButton command="admin.riders.promoEdit" className="dash-btn small" targetId={ticket.code} confirmTarget={false} scope="all" before={`${ticket.value} · max ${ticket.maxPerRide} · ${ticket.rides} rides`} after={`${draft.value} · max ${draft.maxPerRide} · ${draft.rides} rides`} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={edited?.care ?? care} disabled={!canEdit || !edited || Boolean(edited.error)} onDone={() => { setEditing(null); onNotice(`Promotion ${ticket.code} changed.`); }}>Save changes</CommandButton>
+                          <button data-command="admin.confirm.cancel" type="button" className="dash-btn small ghost" onClick={() => setEditing(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="rd-promo-stats">
                     <div><span>Riders</span><b>{results.reached}</b><small>{ticket.group}</small></div>
                     <div><span>Used by</span><b>{results.usedBy}</b><small>{results.reached ? Math.round((results.usedBy / results.reached) * 100) : 0}%</small></div>
                     <div><span>Rides with promo</span><b>{results.ridesUsed}</b><small>+{results.ridesGained} extra rides</small></div>
                     <div><span>Cost so far</span><b>{money(results.cost * market(country).minorUnits, country, true)}</b><small>{ticket.budget ? `of ${money(ticket.budget * market(country).minorUnits, country, true)}` : "no budget"}</small></div>
                     {spent !== null ? <span className="rd-budget" aria-label={`${Math.round(spent)}% of budget used`}><i style={{ width: `${spent}%` }} /></span> : null}
-                    <p className="fine">Created {date.format(Date.parse(ticket.createdAt))} by {ticket.createdBy} · {ticket.status === "stopped" ? "Stopped" : `Ends ${date.format(Date.parse(ticket.validTo))}`}</p>
-                    {ticket.status === "active" ? (
+                    <p className="fine">Created {date.format(Date.parse(ticket.createdAt))} by {ticket.createdBy}{ticket.editedBy ? ` · changed by ${ticket.editedBy}` : ""} · {ticket.status === "stopped" ? "Stopped" : ticket.status === "paused" ? "Off: riders cannot use it now" : `Ends ${date.format(Date.parse(ticket.validTo))}`}</p>
+                    {ticket.status !== "stopped" ? (
                       <CommandButton command="admin.riders.promoStop" className="dash-btn small ghost" targetId={ticket.code} confirmTarget={false} scope="all" before="active" after="stopped" expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={stopPromotion(care, ticket.id)} disabled={!canEdit} onDone={() => onNotice(`Promotion ${ticket.code} stopped.`)}>Stop promotion</CommandButton>
                     ) : null}
                   </div>
@@ -337,34 +363,42 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
         )}
       </section>
 
-      <section className="dash-card" aria-labelledby="auto-title">
-        <div className="card-head">
-          <h3 id="auto-title"><Sparkles size={16} aria-hidden="true" /> Automatic promotions</h3>
-          <span className="fine-print">Given by the system when the moment comes</span>
-        </div>
-        <div className="rd-auto">
-          {([["firstRide", "First ride", "New riders get a discount on their first ride"], ["birthday", "Birthday", "A gift on the rider's birthday"], ["winBack", "Come back", "Riders with no ride for a while"]] as const).map(([key, label, hint]) => (
-            <div key={key} className={auto[key].on ? "rd-auto-card on" : "rd-auto-card"}>
-              <label className="mini-switch big">
-                <input type="checkbox" aria-label={`${label} promotion on`} checked={auto[key].on} disabled={!canEdit} onChange={(event) => setAuto({ ...auto, [key]: { ...auto[key], on: event.target.checked } })} />
-                <span aria-hidden="true"><i /></span>
-                <b>{label}</b>
-              </label>
-              <small>{hint}</small>
-              <div className="rd-form-grid">
-                <label className="field">Discount<NumberField label={`${label} discount`} value={auto[key].percent} unit="%" max={100} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], percent: value } })} /></label>
-                <label className="field">Max per ride<NumberField label={`${label} max per ride`} value={auto[key].maxPerRide} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], maxPerRide: value } })} /></label>
-                {key === "winBack" ? <label className="field">After no ride for<NumberField label="Come back after days" value={auto.winBack.afterDays} unit="days" disabled={!canEdit} onChange={(value) => setAuto({ ...auto, winBack: { ...auto.winBack, afterDays: Math.round(value) } })} /></label> : null}
-              </div>
-            </div>
-          ))}
-        </div>
-        <CommandButton command="admin.riders.autoPromo" className="dash-btn" targetId="auto-promotions" confirmTarget={false} scope="all" before={JSON.stringify(care.autoPromos)} after={JSON.stringify(auto)} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={setAutoPromos(care, auto)} disabled={!canEdit || JSON.stringify(auto) === JSON.stringify(care.autoPromos)} onDone={() => onNotice("Automatic promotions saved.")}>
-          Save automatic promotions
-        </CommandButton>
-        <p className="fine">Updated {new Date(now).toLocaleDateString(locale)}.</p>
-      </section>
+      <AutoPromosCard key={JSON.stringify(care.autoPromos)} care={care} country={country} canEdit={canEdit} onNotice={onNotice} />
     </div>
+  );
+}
+
+/** Keyed on the saved settings, so the form shows them once they load or after a save. */
+function AutoPromosCard({ care, country, canEdit, onNotice }: { care: RiderCare; country: "SE" | "FR" | "TN"; canEdit: boolean; onNotice: (text: string) => void }) {
+  const [auto, setAuto] = useState<AutoPromos>(care.autoPromos);
+  return (
+        <section className="dash-card" aria-labelledby="auto-title">
+          <div className="card-head">
+            <h3 id="auto-title"><Sparkles size={16} aria-hidden="true" /> Automatic promotions</h3>
+            <span className="fine-print">Given by the system when the moment comes</span>
+          </div>
+          <div className="rd-auto">
+            {([["firstRide", "First ride", "New riders get a discount on their first ride"], ["birthday", "Birthday", "A gift on the rider's birthday"], ["winBack", "Come back", "Riders with no ride for a while"]] as const).map(([key, label, hint]) => (
+              <div key={key} className={auto[key].on ? "rd-auto-card on" : "rd-auto-card"}>
+                <label className="mini-switch big">
+                  <input type="checkbox" aria-label={`${label} promotion on`} checked={auto[key].on} disabled={!canEdit} onChange={(event) => setAuto({ ...auto, [key]: { ...auto[key], on: event.target.checked } })} />
+                  <span aria-hidden="true"><i /></span>
+                  <b>{label}</b>
+                </label>
+                <small>{hint}</small>
+                <div className="rd-form-grid">
+                  <label className="field">Discount<NumberField label={`${label} discount`} value={auto[key].percent} unit="%" max={100} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], percent: value } })} /></label>
+                  <label className="field">Max per ride<NumberField label={`${label} max per ride`} value={auto[key].maxPerRide} unit={{ SE: "kr", FR: "€", TN: "DT" }[country]} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], maxPerRide: value } })} /></label>
+                  <label className="field">For how many rides<NumberField label={`${label} rides`} value={auto[key].rides} unit="rides" max={20} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], rides: Math.max(1, Math.round(value)) } })} /></label>
+                  {key === "winBack" ? <label className="field">After no ride for<NumberField label="Come back after days" value={auto.winBack.afterDays} unit="days" disabled={!canEdit} onChange={(value) => setAuto({ ...auto, winBack: { ...auto.winBack, afterDays: Math.round(value) } })} /></label> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+          <CommandButton command="admin.riders.autoPromo" className="dash-btn" targetId="auto-promotions" confirmTarget={false} scope="all" before={JSON.stringify(care.autoPromos)} after={JSON.stringify(auto)} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={setAutoPromos(care, auto)} disabled={!canEdit || JSON.stringify(auto) === JSON.stringify(care.autoPromos)} onDone={() => onNotice("Automatic promotions saved.")}>
+            Save automatic promotions
+          </CommandButton>
+        </section>
   );
 }
 
