@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from "react";
+import type { MarketId } from "../markets/markets";
+import { PLACES } from "./cities";
 import {
-  ADDRESS_BOOK,
   addHole,
+  createZoneIn,
+  deleteZone,
   addPickup,
   archiveZone,
   createZone,
@@ -19,12 +22,16 @@ import {
   setOuter,
   splitZone,
   submitReview,
+  type NewZone,
   type PickupPoint,
   type ZoneBook,
   type ZoneShape,
 } from "./releases";
 
-export type DrawTool = "render" | "polygon" | "rectangle" | "circle" | "freehand" | "point" | "select" | "hole";
+export type DrawTool = "render" | "polygon" | "rectangle" | "circle" | "freehand" | "point" | "select" | "hole" | "line";
+
+/** Where a finished drawing goes: the selected zone, the new-zone sketch, a no-stop street or the ruler. */
+export type DrawTarget = "zone" | "sketch" | "nostop" | "measure";
 
 export type ZoneLayers = {
   drivers: boolean;
@@ -36,6 +43,10 @@ export type ZoneLayers = {
   queue: boolean;
   boosts: boolean;
   events: boolean;
+  gaps: boolean;
+  before: boolean;
+  districts: boolean;
+  satellite: boolean;
 };
 
 export type ZoneFocus = { lat: number; lng: number; nonce: number };
@@ -50,9 +61,13 @@ export type ZoneUi = {
   layers: ZoneLayers;
   past: ZoneBook[];
   future: ZoneBook[];
+  target: DrawTarget;
+  /** The shape of a zone being created, before it is saved. */
+  sketch: [number, number][];
+  measure: [number, number][];
 };
 
-const STORE_KEY = "movera-admin-zones-v3";
+const STORE_KEY = "movera-admin-zones-v4";
 
 function loadBook(): ZoneBook {
   if (typeof localStorage === "undefined") return emptyBook();
@@ -72,7 +87,7 @@ let state: ZoneUi = {
   book: loadBook(),
   selectedId: "op-norrmalm",
   tool: "render",
-  notice: "Pick a zone, draw with Terra Draw, then send it for review. A second agent publishes.",
+  notice: "",
   focus: null,
   selectionNonce: 0,
   layers: {
@@ -85,9 +100,16 @@ let state: ZoneUi = {
     queue: true,
     boosts: true,
     events: true,
+    gaps: false,
+    before: true,
+    districts: false,
+    satellite: false,
   },
   past: [],
   future: [],
+  target: "zone",
+  sketch: [],
+  measure: [],
 };
 
 const listeners = new Set<() => void>();
@@ -128,19 +150,67 @@ export const zoneStore = {
     coalesce = false;
     update((current) => ({ ...current, selectedId: id, selectionNonce: current.selectionNonce + 1 }));
   },
-  setTool(tool: DrawTool) {
+  setTool(tool: DrawTool, target: DrawTarget = "zone") {
     coalesce = false;
-    update((current) => ({ ...current, tool }));
+    update((current) => ({ ...current, tool, target }));
   },
   cancelTool() {
     coalesce = false;
-    update((current) => ({ ...current, tool: "render", notice: "Drawing cancelled." }));
+    update((current) => ({ ...current, tool: "render", target: "zone", notice: "Drawing stopped." }));
+  },
+  setSketch(points: [number, number][], notice?: string) {
+    update((current) => ({ ...current, sketch: points, tool: "render", target: "zone", notice: notice ?? current.notice }));
+  },
+  clearSketch() {
+    update((current) => ({ ...current, sketch: [], tool: current.target === "sketch" ? "render" : current.tool, target: current.target === "sketch" ? "zone" : current.target }));
+  },
+  setMeasure(points: [number, number][]) {
+    update((current) => ({ ...current, measure: points, tool: "render", target: "zone" }));
+  },
+  notify(notice: string) {
+    update((current) => ({ ...current, notice }));
+  },
+  focusOn(lat: number, lng: number, notice?: string) {
+    update((current) => ({ ...current, focus: { lat, lng, nonce: (current.focus?.nonce ?? 0) + 1 }, notice: notice ?? current.notice }));
+  },
+  /** Keep the selection inside the country chosen in the top bar. */
+  ensureCountry(country: MarketId, preferId?: string) {
+    const inCountry = state.book.draft.filter((zone) => zone.country === country && !zone.archived);
+    const selected = state.book.draft.find((zone) => zone.id === state.selectedId);
+    const wanted = preferId ? inCountry.find((zone) => zone.id === preferId || zone.marketZoneId === preferId) : undefined;
+    if (wanted && wanted.id !== state.selectedId) {
+      update((current) => ({ ...current, selectedId: wanted.id, selectionNonce: current.selectionNonce + 1 }));
+      return;
+    }
+    if (selected && selected.country === country) return;
+    const first = inCountry.find((zone) => zone.kind === "operating") ?? inCountry[0];
+    update((current) => ({ ...current, selectedId: first?.id ?? "", tool: "render", target: "zone", sketch: [] }));
+  },
+  createIn(input: NewZone, authorId: string): string | null {
+    const result = createZoneIn(state.book, input, authorId);
+    if (result.error) {
+      update((current) => ({ ...current, notice: result.error ?? "Could not create the zone." }));
+      return null;
+    }
+    remember(result.book, `Created ${result.book.draft.find((zone) => zone.id === result.id)?.name}. Saved as draft.`, { selectedId: result.id, selectionNonce: state.selectionNonce + 1, sketch: [], tool: "render", target: "zone" });
+    return result.id;
+  },
+  remove(zoneId: string, authorId: string) {
+    const name = state.book.draft.find((zone) => zone.id === zoneId)?.name ?? "zone";
+    const result = deleteZone(state.book, zoneId, authorId);
+    if (result.error) update((current) => ({ ...current, notice: result.error ?? "Delete failed." }));
+    else remember(result.book, `Deleted ${name}. Publish to make it final, or undo.`, { selectedId: result.book.draft.find((zone) => zone.country === state.book.draft.find((item) => item.id === zoneId)?.country && zone.kind === "operating")?.id ?? "" });
+  },
+  addLine(zoneId: string, line: [number, number][], authorId: string) {
+    const zone = state.book.draft.find((item) => item.id === zoneId);
+    if (!zone || line.length < 2) return;
+    remember(patchZone(state.book, zoneId, { noStopLines: [...zone.noStopLines, line] }, authorId), `No-stop street added in ${zone.name}.`, { tool: "render", target: "zone" });
   },
   toggleLayer(layer: keyof ZoneLayers) {
     update((current) => ({ ...current, layers: { ...current.layers, [layer]: !current.layers[layer] } }));
   },
   search(query: string) {
-    const hit = ADDRESS_BOOK.find((item) => item.name.toLowerCase().includes(query.trim().toLowerCase()));
+    const hit = PLACES.find((item) => item.name.toLowerCase().includes(query.trim().toLowerCase()));
     if (!hit) {
       update((current) => ({ ...current, notice: "No matching address." }));
       return;
