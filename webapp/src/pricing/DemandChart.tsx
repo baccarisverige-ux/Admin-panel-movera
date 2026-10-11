@@ -8,7 +8,7 @@ const H = 220;
 const PAD = { left: 34, right: 12, top: 14, bottom: 52 };
 const BAND = 26;
 
-/** Riders asking against free drivers over the last hours, with the surge level as a band below. */
+/** Ride requests against free online drivers over the last hours, with the surge level as a band below. */
 export function DemandChart({ points, surge, locale, timeZone }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   if (points.length < 2) return null;
@@ -24,14 +24,14 @@ export function DemandChart({ points, surge, locale, timeZone }: Props) {
   const maxSurge = Math.max(2, ...surge);
   const active = hover ?? points.length - 1;
   const point = points[active];
-  const label = `Riders asking and free drivers, last ${Math.round((points[points.length - 1].at - points[0].at) / 3_600_000)} hours. Now ${point.requests} riders, ${point.free} free drivers, surge ×${(surge[active] ?? 1).toFixed(1)}.`;
+  const label = `Ride requests and free online drivers, last ${Math.round((points[points.length - 1].at - points[0].at) / 3_600_000)} hours. Now ${point.requests} requests, ${point.free} free online drivers, surge ×${(surge[active] ?? 1).toFixed(1)}.`;
   return (
     <figure className="demand-chart">
       <div className="demand-legend" aria-hidden="true">
-        <span><i className="req" />Riders asking</span>
-        <span><i className="free" />Free drivers</span>
+        <span><i className="req" />Ride requests</span>
+        <span><i className="free" />Free online drivers</span>
         <span><i className="srg" />Surge</span>
-        <b>{time.format(point.at)} · {point.requests} riders · {point.free} free · ×{(surge[active] ?? 1).toFixed(1)}</b>
+        <b>{time.format(point.at)} · {point.requests} requests · {point.free} free drivers · ×{(surge[active] ?? 1).toFixed(1)}</b>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} onMouseLeave={() => setHover(null)}>
         <defs>

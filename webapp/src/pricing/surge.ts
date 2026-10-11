@@ -92,7 +92,7 @@ export function inActiveHours(smart: SmartSurge, at: number, timeZone: string): 
   return inRange(minuteOf(smart.activeFrom), minuteOf(smart.activeTo), local.hour * 60 + local.minute);
 }
 
-/** Highest step the riders ÷ drivers level reaches, never above the cap. */
+/** Highest step that requests per free online driver reach, never above the cap. */
 export function smartMultiplier(profile: SurgeProfile, ratio: number): number {
   let multiplier = 1;
   for (const step of profile.steps) if (ratio >= step.ratio) multiplier = step.multiplier;
@@ -158,7 +158,7 @@ export function surgeAlerts(rows: readonly { book: ZoneBook; live: ZoneLive; sur
     const short = top ? surge.ratio >= top.ratio : surge.ratio >= 3;
     if (surge.source !== "manual" && short) {
       const cause = surge.smartNote ?? (surge.profile && surge.multiplier >= surge.profile.cap ? `smart surge is at its cap ×${surge.profile.cap}` : "smart surge is at its highest step");
-      alerts.push({ id: `${surge.zoneId}-manual`, zoneId: surge.zoneId, tone: "critical", title: `${surge.name} needs a manual surge`, detail: `${surge.requests} riders asking · ${surge.free} free drivers · ${cause.charAt(0).toLowerCase()}${cause.slice(1)}.`, action: "manual" });
+      alerts.push({ id: `${surge.zoneId}-manual`, zoneId: surge.zoneId, tone: "critical", title: `${surge.name} needs a manual surge`, detail: `${surge.requests} ride requests · ${surge.free} free online drivers · ${cause.charAt(0).toLowerCase()}${cause.slice(1)}.`, action: "manual" });
     }
     if (book.smart.enabled && surge.requests === 0 && surge.free === 0) {
       alerts.push({ id: `${surge.zoneId}-nodata`, zoneId: surge.zoneId, tone: "warning", title: `No live data from ${surge.name}`, detail: "Smart surge cannot work here until riders or drivers show up.", action: "settings" });
