@@ -58,6 +58,8 @@ import { SurgeControls, SurgeLegend } from "../pricing/SurgeControls";
 import { useSurgePref } from "../pricing/useSurgePref";
 import { SLICE_KEY, emptyPricingStore, normalizeStore } from "../pricing/zonePricing";
 import { Flag } from "../ui/Flag";
+import { BONUS_KEY, bonusState, emptyBonusBook, normalizeBonusBook, type BonusBook } from "../drivers/bonus";
+import type { BonusMapArea } from "../dashboard/DriversMap";
 
 const FIVE_MIN = 5 * 60_000;
 const DAY_MS = 86_400_000;
@@ -146,6 +148,7 @@ export function DashboardPage() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [showRequests, setShowRequests] = useState(true);
   const [showBalance, setShowBalance] = useState(false);
+  const [showBonus, setShowBonus] = useState(true);
   const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null);
   const [liveNotice, setLiveNotice] = useState("");
   const [refreshedAt, setRefreshedAt] = useState(0);
@@ -179,6 +182,13 @@ export function DashboardPage() {
   const audit = useAudit(LIVE_MS);
   const approvals = useApprovals(LIVE_MS);
   const driverStore = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
+  const bonusSlice = useSlice<BonusBook>(BONUS_KEY, emptyBonusBook());
+  const bonusMinute = Math.floor(now / 60_000);
+  const bonusAreas: BonusMapArea[] = useMemo(() => normalizeBonusBook(bonusSlice.value).bonuses
+    .filter((bonus) => bonus.country === country && bonus.kind === "area")
+    .map((bonus) => ({ bonus, state: bonusState(bonus, bonusMinute * 60_000, market.timeZone) }))
+    .filter((item) => item.state === "live" || item.state === "today")
+    .map(({ bonus, state }) => ({ id: bonus.id, label: state === "live" ? `Bonus now · ${bonus.name}` : `${bonus.name} · from ${bonus.start}`, live: state === "live", rings: bonus.areas.map((area) => area.ring) })), [bonusSlice.value, country, bonusMinute, market.timeZone]);
   const liveQueries = [drivers, trips, incidents, tickets, reservations, payments];
   const failed = liveQueries.find((query) => query.error);
   const updatedAt = Math.max(refreshedAt, ...liveQueries.map((query) => query.dataUpdatedAt || 0));
@@ -513,6 +523,9 @@ export function DashboardPage() {
                 <button data-command="admin.ui.mapLayer" type="button" aria-pressed={showBalance} className={showBalance ? "state-chip" : "state-chip off"} onClick={() => setShowBalance((value) => !value)}>
                   <i style={{ background: "linear-gradient(90deg,#0ca30c,#eda100,#d03b3b)" }} />Supply vs demand
                 </button>
+                <button data-command="admin.ui.mapLayer" type="button" aria-pressed={showBonus} className={showBonus ? "state-chip" : "state-chip off"} onClick={() => setShowBonus((value) => !value)}>
+                  <i style={{ background: "#f2994a" }} />Driver bonus areas<strong>{bonusAreas.length}</strong>
+                </button>
                 <SurgeControls compact shown={surgePref.shown} style={surgePref.style} onShown={surgePref.setShown} onStyle={surgePref.setStyle} />
               </div>
               {liveNotice ? <p className="fd-notice" role="status">{liveNotice}</p> : null}
@@ -526,6 +539,8 @@ export function DashboardPage() {
                 surge={surge}
                 surgeShown={surgePref.shown}
                 surgeStyle={surgePref.style}
+                bonusAreas={bonusAreas}
+                bonusShown={showBonus}
                 onSurgeZone={(zoneId) => { const link = surgeLink(zoneId); if (link) navigate(link); }}
                 renderAssign={can(role, "trips.intervene") ? (request) => <AssignControls request={request} candidates={candidatesOf(request)} onDone={setLiveNotice} /> : undefined}
                 market={market}

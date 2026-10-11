@@ -1,6 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { AlertTriangle, CalendarClock, Car, PauseCircle, UserCheck, Users } from "lucide-react";
+import { can } from "../auth/permissions";
+import { BonusesView } from "../drivers/BonusesView";
+import type { BonusDriver } from "../drivers/BonusBuilder";
+import { AlertTriangle, CalendarClock, Car, Flame, PauseCircle, UserCheck, Users } from "lucide-react";
 import { useRecords, useSlice } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
 import { periodWindow } from "../dashboard/period";
@@ -31,7 +34,8 @@ type View = (typeof VIEWS)[number]["id"];
 
 export function DriversPage() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("view") === "bonuses" ? "bonuses" : "drivers";
   const { agent } = useSession();
   const scope = useMarketScope();
   const drivers = useRecords("drivers", null);
@@ -82,6 +86,49 @@ export function DriversPage() {
     return view === "all" || row.driver.status === view;
   });
   const money = (minor: number) => formatMoney(minor, scope.country, { compact: true });
+  const bonusDrivers: BonusDriver[] = useMemo(() => enriched
+    .filter((row) => marketOfZone(row.driver.zoneId)?.id === scope.country)
+    .map((row) => {
+      const ops = driverOps(store.value, { id: row.driver.id, name: row.driver.name, fleetId: row.driver.fleetId, status: row.driver.status, kind: row.driver.kind });
+      let seed = 0;
+      for (const char of row.driver.id) seed = (seed * 31 + char.charCodeAt(0)) >>> 0;
+      return {
+        facts: { id: row.driver.id, fleetId: row.driver.fleetId ?? null, status: row.driver.status, rating: ops.ratings.stars, joinedDays: seed % 400 },
+        name: row.driver.name,
+        code: row.code,
+        zoneId: row.driver.zoneId,
+        home: zoneById(row.driver.zoneId)?.center ?? scope.market.center,
+      };
+    }), [enriched, store.value, scope.country, scope.market.center]);
+
+  function go(next: "drivers" | "bonuses") {
+    const copy = new URLSearchParams(params);
+    if (next === "bonuses") copy.set("view", "bonuses");
+    else copy.delete("view");
+    setParams(copy, { replace: true });
+  }
+
+  const tabs = (
+    <div className="dash-tabs" role="tablist" aria-label="Drivers sections">
+      <button data-command="admin.drivers.view" type="button" role="tab" aria-selected={tab === "drivers"} className={tab === "drivers" ? "active" : undefined} onClick={() => go("drivers")}><Users size={15} aria-hidden="true" /> Drivers</button>
+      <button data-command="admin.drivers.view" type="button" role="tab" aria-selected={tab === "bonuses"} className={tab === "bonuses" ? "active" : undefined} onClick={() => go("bonuses")}><Flame size={15} aria-hidden="true" /> Bonuses</button>
+    </div>
+  );
+
+  if (tab === "bonuses") {
+    return (
+      <div className="fd-page">
+        <div className="fd-head">
+          <div>
+            <h2>Drivers</h2>
+            <p>Bonuses drivers see in the driver app: ride bonuses and area bonuses on the map, in {scope.market.name}.</p>
+          </div>
+        </div>
+        {tabs}
+        <BonusesView country={scope.country} drivers={bonusDrivers} fleets={Array.from(new Map((fleets.data ?? []).map((fleet) => [fleet.id, { id: fleet.id, name: fleet.name }])).values())} agentId={agent?.id ?? null} canEdit={Boolean(agent && can(agent.role, "drivers.bonuses"))} />
+      </div>
+    );
+  }
   const keep = params.get("country") || params.get("scope") ? `?${params.toString()}` : "";
 
   return (
@@ -92,6 +139,8 @@ export function DriversPage() {
           <p>{drivers.isLoading ? "Loading drivers." : `${rows.length} in ${VIEWS.find((item) => item.id === view)?.label}.`} Open a driver to see every detail, document, performance and earnings. Numbers are for {month.label}.</p>
         </div>
       </div>
+
+      {tabs}
 
       <section className="fd-cards" aria-label="Driver summary">
         <SummaryCard icon={<Users size={18} />} tone="blue" label="All drivers" value={counts.all} />

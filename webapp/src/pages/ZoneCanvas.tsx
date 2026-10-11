@@ -22,6 +22,10 @@ export type MapOverlays = {
   lines?: Ring[];
   measure?: Ring;
   outline?: Ring;
+  /** Driver bonus areas, drawn in orange. */
+  areas?: { ring: Ring; name: string }[];
+  /** A shape to fit the view to, once, when it changes. */
+  fitTo?: Ring;
 };
 
 type DrawProps = {
@@ -80,6 +84,7 @@ function overlayGeo(overlays: MapOverlays | undefined, layers: ZoneLayers): GeoJ
   if (layers.districts || overlays.districts?.some((item) => item.picked)) for (const item of overlays.districts ?? []) polygonOf(item.ring, item.picked ? "district-on" : "district", { name: item.name });
   if (layers.before && overlays.before) lineOf([...overlays.before, overlays.before[0]!], "before");
   for (const line of overlays.lines ?? []) lineOf(line, "nostop");
+  for (const area of overlays.areas ?? []) polygonOf(area.ring, "bonus", { name: area.name });
   if (overlays.sketch) polygonOf(overlays.sketch, "sketch");
   if (overlays.measure) lineOf(overlays.measure, "measure");
   return { type: "FeatureCollection", features };
@@ -361,8 +366,8 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
         source: "overlay",
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: {
-          "fill-color": ["match", ["get", "kind"], "gap", "#e34948", "district-on", "#6250d6", "district", "#6250d6", "sketch", "#6250d6", "#6250d6"],
-          "fill-opacity": ["match", ["get", "kind"], "gap", 0.32, "district-on", 0.35, "district", 0.06, "sketch", 0.28, 0.1],
+          "fill-color": ["match", ["get", "kind"], "gap", "#e34948", "district-on", "#6250d6", "district", "#6250d6", "sketch", "#6250d6", "bonus", "#f2994a", "#6250d6"],
+          "fill-opacity": ["match", ["get", "kind"], "gap", 0.32, "district-on", 0.35, "district", 0.06, "sketch", 0.28, "bonus", 0.38, 0.1],
         },
       });
       map.addLayer({
@@ -370,8 +375,8 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
         type: "line",
         source: "overlay",
         paint: {
-          "line-color": ["match", ["get", "kind"], "gap", "#e34948", "before", "#111614", "nostop", "#d03b3b", "measure", "#c98a00", "outline", "#215277", "#6250d6"],
-          "line-width": ["match", ["get", "kind"], "nostop", 5, "measure", 3, "sketch", 3, "district", 1.2, "gap", 0.5, 2],
+          "line-color": ["match", ["get", "kind"], "gap", "#e34948", "before", "#111614", "nostop", "#d03b3b", "measure", "#c98a00", "outline", "#215277", "bonus", "#e36414", "#6250d6"],
+          "line-width": ["match", ["get", "kind"], "nostop", 5, "measure", 3, "sketch", 3, "bonus", 3, "district", 1.2, "gap", 0.5, 2],
           "line-dasharray": ["match", ["get", "kind"], "before", ["literal", [2, 2]], "outline", ["literal", [4, 3]], "measure", ["literal", [1, 1.5]], "district", ["literal", [2, 2]], ["literal", [1, 0]]],
         },
       });
@@ -457,10 +462,11 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
   }, [layers.satellite]);
 
   // Show the new-zone shape as soon as it is made.
-  const sketchKey = overlays?.sketch && overlays.sketch.length >= 3 ? JSON.stringify(overlays.sketch) : "";
+  const fitShape = overlays?.fitTo ?? overlays?.sketch;
+  const sketchKey = fitShape && fitShape.length >= 3 ? JSON.stringify(fitShape) : "";
   useEffect(() => {
     const map = mapRef.current;
-    const sketch = overlaysRef.current?.sketch;
+    const sketch = overlaysRef.current?.fitTo ?? overlaysRef.current?.sketch;
     if (!map || !sketchKey || !sketch) return;
     const bounds = new maplibregl.LngLatBounds();
     for (const [lat, lng] of sketch) bounds.extend([lng, lat]);

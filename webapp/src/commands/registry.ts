@@ -62,6 +62,13 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.driver.docExpiry", label: "Set document expiry date", reason: false, permission: "documents.approve" },
   { id: "admin.driver.message", label: "Message driver", reason: false, permission: "drivers.read" },
   { id: "admin.driver.call", label: "Call driver", reason: false, permission: "drivers.viewSensitive" },
+  { id: "admin.drivers.view", label: "Choose drivers view", reason: false, permission: "drivers.read" },
+  { id: "admin.drivers.bonusCreate", label: "Create driver bonus", reason: true, permission: "drivers.bonuses" },
+  { id: "admin.drivers.bonusEdit", label: "Change driver bonus", reason: true, permission: "drivers.bonuses" },
+  { id: "admin.drivers.bonusToggle", label: "Switch driver bonus on or off", reason: true, permission: "drivers.bonuses" },
+  { id: "admin.drivers.bonusStop", label: "End driver bonus", reason: true, permission: "drivers.bonuses" },
+  { id: "admin.drivers.bonusForm", label: "Driver bonus form", reason: false, permission: "drivers.read" },
+  { id: "admin.drivers.bonusDraw", label: "Draw bonus area", reason: false, permission: "drivers.read" },
   { id: "admin.fleetOwner.call", label: "Call fleet owner", reason: false, permission: "drivers.viewSensitive" },
   { id: "admin.fleetOwner.review", label: "Review fleet owner document", reason: true, permission: "documents.approve" },
   { id: "admin.fleetOwner.docExpiry", label: "Set fleet owner document expiry date", reason: false, permission: "documents.approve" },
@@ -388,6 +395,7 @@ const DESTRUCTIVE = new Set([
   "admin.zone.rollback",
   "admin.zone.archive",
   "admin.zone.delete",
+  "admin.drivers.bonusStop",
 ]);
 
 const GLOBAL_DOMAINS = new Set(["shell", "auth", "design", "handover", "table", "card", "modal", "tabs", "ui", "doc", "confirm"]);
