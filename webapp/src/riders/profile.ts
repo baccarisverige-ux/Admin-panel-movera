@@ -49,8 +49,6 @@ export type Booking = {
   zoneId: string;
 };
 
-export type RiderLevel = "Bronze" | "Silver" | "Gold" | "VIP";
-
 export type RiderProfile = {
   id: string;
   code: string;
@@ -59,7 +57,6 @@ export type RiderProfile = {
   email: string;
   language: string;
   rating: number;
-  level: RiderLevel;
   score: number;
   completed: number;
   cancelled: number;
@@ -264,7 +261,6 @@ export function riderProfile(rider: RiderRecord, bookings: readonly Booking[], n
     email: `${first}.${(seed % 900) + 100}@mail.${country === "SE" ? "se" : country === "FR" ? "fr" : "tn"}`,
     language: pick(LANG[country], seed >>> 2),
     rating,
-    level: ridesLast30 >= 20 ? "VIP" : ridesLast30 >= 10 ? "Gold" : ridesLast30 >= 4 ? "Silver" : "Bronze",
     score,
     completed: done.length,
     cancelled,

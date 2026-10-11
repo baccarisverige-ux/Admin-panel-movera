@@ -46,6 +46,8 @@ export type PromoTicket = {
   createdBy: string;
   createdAt: string;
   status: "active" | "paused" | "stopped";
+  /** Picture on the home-screen card in the rider app. */
+  image?: string;
   editedBy?: string;
   editedAt?: string;
 };
@@ -88,8 +90,8 @@ export function emptyRiderCare(): RiderCare {
     credits: [],
     refunds: [],
     promotions: [
-      { id: "P-SEED-1", code: "WELCOME30", title: "Welcome to Movera", kind: "percent", value: 30, rides: 3, maxPerRide: 50, minFare: 0, validFrom: "2026-09-01T00:00:00.000Z", validTo: "2026-12-31T23:00:00.000Z", country: "SE", zones: [], categories: [], budget: 20000, riderIds: ["R0001", "R0017", "R0033", "R0049", "R0065", "R0081", "R0097", "R0113", "R0129", "R0145"], group: "New riders", createdBy: "nora", createdAt: "2026-09-20T09:00:00.000Z", status: "active" },
-      { id: "P-SEED-2", code: "THANKYOU20", title: "Thank you for riding", kind: "percent", value: 20, rides: 10, maxPerRide: 40, minFare: 80, validFrom: "2026-09-15T00:00:00.000Z", validTo: "2026-11-30T23:00:00.000Z", country: "SE", zones: [], categories: ["economy", "comfort"], budget: 30000, riderIds: ["R0010", "R0020", "R0030", "R0040", "R0050", "R0060", "R0070", "R0080"], group: "Top riders", createdBy: "lena", createdAt: "2026-09-15T08:00:00.000Z", status: "active" },
+      { id: "P-SEED-1", code: "WELCOME30", title: "Welcome to Movera", kind: "percent", value: 30, rides: 3, maxPerRide: 50, minFare: 0, validFrom: "2026-09-01T00:00:00.000Z", validTo: "2026-12-31T23:00:00.000Z", country: "SE", zones: [], categories: [], budget: 20000, riderIds: ["R0001", "R0017", "R0033", "R0049", "R0065", "R0081", "R0097", "R0113", "R0129", "R0145"], group: "New riders", createdBy: "nora", createdAt: "2026-09-20T09:00:00.000Z", status: "active", image: "gradient" },
+      { id: "P-SEED-2", code: "THANKYOU20", title: "Thank you for riding", kind: "percent", value: 20, rides: 10, maxPerRide: 40, minFare: 80, validFrom: "2026-09-15T00:00:00.000Z", validTo: "2026-11-30T23:00:00.000Z", country: "SE", zones: [], categories: ["economy", "comfort"], budget: 30000, riderIds: ["R0010", "R0020", "R0030", "R0040", "R0050", "R0060", "R0070", "R0080"], group: "Top riders", createdBy: "lena", createdAt: "2026-09-15T08:00:00.000Z", status: "active", image: "comfort" },
     ],
     autoPromos: {
       firstRide: { on: true, percent: 50, maxPerRide: 100, rides: 1 },

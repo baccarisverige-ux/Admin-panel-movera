@@ -172,14 +172,13 @@ export function insights(rows: readonly RiderRow[], now: number): Insights {
 
 /** CSV of the chosen riders, without hidden contact details. */
 export function ridersCsv(rows: readonly RiderRow[], money: (row: RiderRow, minor: number) => string): string {
-  const head = ["Code", "Name", "Zone", "Status", "Level", "Rating", "Rides", "Spent", "Last ride", "Joined"];
+  const head = ["Code", "Name", "Zone", "Status", "Rating", "Rides", "Spent", "Last ride", "Joined"];
   const escape = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
   const lines = rows.map((row) => [
     row.profile.code,
     row.rider.name,
     row.profile.homeArea,
     row.rider.status,
-    row.profile.level,
     row.profile.rating.toFixed(2),
     String(row.profile.completed),
     money(row, row.profile.spentMinor),

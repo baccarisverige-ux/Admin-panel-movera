@@ -7,6 +7,7 @@ import { CARE_KEY, createPromotion, maxCost, validatePromo, type PromoDraft, typ
 import { categoryName } from "./profile";
 import type { RiderRow, SegmentId } from "./segments";
 import { CURRENCY_SYMBOL, money, PromoTicketCard } from "./ui";
+import { CARD_IMAGES, RiderAppPreview, imageUrl } from "./RiderAppPreview";
 
 const CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet", "child_seat"];
 const QUICK: { id: SegmentId; label: string }[] = [
@@ -54,11 +55,12 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
   const [picked, setPicked] = useState<Set<string>>(() => new Set(single ? rows.map((row) => row.rider.id) : preselected));
   const [group, setGroup] = useState(single ? "One rider" : preselected.length ? "Picked riders" : "");
   const [query, setQuery] = useState("");
+  const [image, setImage] = useState("gradient");
 
   const draft: PromoDraft = {
     code: code.trim().toUpperCase(), title, kind, value, rides, maxPerRide: kind === "percent" ? maxPerRide : value, minFare,
     validFrom: from ? new Date(`${from}T00:00:00`).toISOString() : "", validTo: to ? new Date(`${to}T23:59:00`).toISOString() : "",
-    country, zones, categories, budget: budget > 0 ? budget : null, riderIds: [...picked], group: group || "Picked riders",
+    country, zones, categories, budget: budget > 0 ? budget : null, riderIds: [...picked], group: group || "Picked riders", image,
   };
   const error = validatePromo(draft);
   const created = agentId ? createPromotion(care, draft, agentId, Date.now()) : { care, error: "Sign in again." };
@@ -94,6 +96,16 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
           <label className="field">Ends<input type="date" aria-label="Promotion ends" value={to} onChange={(event) => setTo(event.target.value)} /></label>
           <label className="field">Budget (optional)<NumberField label="Promotion budget" value={budget} unit={symbol} onChange={setBudget} /></label>
         </div>
+        <fieldset className="rd-chips rd-pictures">
+          <legend>Picture on the rider app card</legend>
+          {CARD_IMAGES.map((item) => (
+            <label key={item.id} className={image === item.id ? "rd-pic on" : "rd-pic"}>
+              <input type="radio" name="promo-picture" aria-label={`Picture ${item.label}`} checked={image === item.id} onChange={() => setImage(item.id)} />
+              <span className="rd-pic-thumb" style={imageUrl(item.id) ? { backgroundImage: `url(${imageUrl(item.id)})` } : undefined} aria-hidden="true" />
+              {item.label}
+            </label>
+          ))}
+        </fieldset>
         <fieldset className="rd-chips">
           <legend>Categories <small>(none = all)</small></legend>
           {CATEGORIES.map((id) => (
@@ -113,6 +125,7 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
       </div>
 
       <div className="rd-builder-side">
+        <RiderAppPreview promo={draft} />
         <PromoTicketCard ticket={{ ...draft, status: "active" }} locale={market(country).locale} />
         <dl className="rd-cost">
           <div><dt>Riders</dt><dd>{picked.size}</dd></div>

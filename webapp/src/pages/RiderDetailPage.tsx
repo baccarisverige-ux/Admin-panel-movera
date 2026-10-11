@@ -57,7 +57,7 @@ import {
 import { advanceRiderPrivacy, emptyRiderOpsBook, revokeRiderSessions, riderOps, setRiderAccountReason, setRiderNote, type RiderOpsBook } from "../riders/ops";
 import { BOOKING_LABEL, categoryName, type Booking } from "../riders/profile";
 import { PromoBuilder } from "../riders/PromoBuilder";
-import { CURRENCY_SYMBOL, LevelBadge, LiveChip, PromoTicketCard, RiderBadges, ScoreBadge, money, waitText } from "../riders/ui";
+import { CURRENCY_SYMBOL, LiveChip, PromoTicketCard, RiderBadges, ScoreBadge, money, waitText } from "../riders/ui";
 import { useRidersData } from "../riders/useRidersData";
 import { CommandButton } from "../ui/CommandButton";
 import { SensitiveValue } from "../ui/SensitiveValue";
@@ -196,7 +196,6 @@ export function RiderDetailPage() {
             <h2>{rider.name}</h2>
             <div className="fd-chips">
               <span className="fd-chip code"><Hash size={13} aria-hidden="true" />{profile.code}</span>
-              <LevelBadge level={profile.level} />
               <ScoreBadge score={profile.score} />
               <span className="fd-chip">{profile.rating.toFixed(2)} from drivers</span>
               <LiveChip state={row.live} />

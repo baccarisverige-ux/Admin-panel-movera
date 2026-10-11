@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { AlertTriangle, Crown, Gift, MessageCircleWarning, Sparkles, Star, Ticket, Wallet } from "lucide-react";
 import { formatMoney, type MarketId } from "../markets/markets";
 import type { PromoTicket } from "./care";
-import { categoryName, type RiderLevel } from "./profile";
+import { categoryName } from "./profile";
 import type { LiveState, RiderRow } from "./segments";
 
 export const CURRENCY_SYMBOL: Record<MarketId, string> = { SE: "kr", FR: "€", TN: "DT" };
@@ -15,10 +15,6 @@ const LIVE_LABEL: Record<LiveState, string> = { waiting: "Waiting for a driver",
 
 export function LiveChip({ state }: { state: LiveState }) {
   return <span className={`rd-live l-${state}`}><i aria-hidden="true" />{LIVE_LABEL[state]}</span>;
-}
-
-export function LevelBadge({ level }: { level: RiderLevel }) {
-  return <span className={`rd-level lv-${level.toLowerCase()}`}>{level === "VIP" ? <Crown size={11} aria-hidden="true" /> : null}{level}</span>;
 }
 
 export function ScoreBadge({ score }: { score: number }) {

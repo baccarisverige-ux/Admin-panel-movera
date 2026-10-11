@@ -29,8 +29,9 @@ import { market, zoneById } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
 import { CARE_KEY, REPLY_TEMPLATES, editPromotion, messageGroup, promoResults, promoUsed, saveFilter, setAutoPromos, setPromotionOn, stopPromotion, type AutoPromos, type PromoEdit, type RiderCare } from "../riders/care";
 import { PromoBuilder } from "../riders/PromoBuilder";
+import { RiderAppPreview } from "../riders/RiderAppPreview";
 import { PERIODS, SEGMENTS, SORTS, insights, matches, ridersCsv, segmentCounts, sortRows, type Period, type RiderRow, type SegmentId, type SortId } from "../riders/segments";
-import { LevelBadge, LiveChip, PromoTicketCard, RiderBadges, Stars, money } from "../riders/ui";
+import { LiveChip, PromoTicketCard, RiderBadges, Stars, money } from "../riders/ui";
 import { useRidersData } from "../riders/useRidersData";
 import { NumberField } from "../pricing/NumberField";
 import { CommandButton } from "../ui/CommandButton";
@@ -210,7 +211,7 @@ export function RidersPage() {
           <div className="rd-list-wrap">
             <div className="rd-row head" aria-hidden="true">
               <span><input type="checkbox" tabIndex={-1} checked={shown.length > 0 && shown.every((row) => selected.has(row.rider.id))} onChange={() => setSelected((current) => (shown.every((row) => current.has(row.rider.id)) ? new Set() : new Set(shown.map((row) => row.rider.id))))} /></span>
-              <span>#</span><span /><span>Rider</span><span>Now</span><span>Level</span><span>Rating</span><span>Rides</span><span>Spent</span><span>Last ride</span><span>Status</span><span />
+              <span>#</span><span /><span>Rider</span><span>Now</span><span>Rating</span><span>Rides</span><span>Spent</span><span>Last ride</span><span>Status</span><span />
             </div>
             {data.loading ? <p className="state-line">Loading riders.</p> : shown.length === 0 ? <p className="state-line">No rider in {SEGMENTS.find((item) => item.id === segment)?.label.toLowerCase()}{query ? ` matching "${query}"` : ""}.</p> : (
               <ul className="rd-list" aria-label="Riders">
@@ -225,7 +226,6 @@ export function RidersPage() {
                       <RiderBadges row={row} compact />
                     </span>
                     <LiveChip state={row.live} />
-                    <LevelBadge level={row.profile.level} />
                     <Stars value={row.profile.rating} />
                     <span className="rd-num" title={`${row.periodRides} in the chosen period · ${row.profile.completed} in total`}><b>{period === "year" || sort === "rides" || segment === "top" ? row.periodRides : row.profile.completed}</b><small>{period === "year" || sort === "rides" || segment === "top" ? `${row.profile.completed} total` : `${row.periodRides} this ${period === "today" ? "day" : period}`}</small></span>
                     <span className="rd-num"><b>{money(segment === "top" || sort === "spent" ? row.periodSpentMinor : row.profile.spentMinor, row.profile.country, true)}</b><small>{segment === "top" || sort === "spent" ? "in period" : "all time"}</small></span>
@@ -287,6 +287,7 @@ function GroupMessage({ care, rows, agentId, now, onClose, onSent }: { care: Rid
 
 function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuilder, onNotice, now }: { care: RiderCare; rows: RiderRow[]; country: "SE" | "FR" | "TN"; agentId: string | null; canEdit: boolean; builder: string[] | null; onBuilder: (ids: string[] | null) => void; onNotice: (text: string) => void; now: number }) {
   const [editing, setEditing] = useState<{ id: string; edit: PromoEdit } | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const byId = useMemo(() => new Map(rows.map((row) => [row.rider.id, row])), [rows]);
   const tickets = care.promotions.filter((ticket) => ticket.country === country);
   const locale = market(country).locale;
@@ -330,6 +331,7 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
                           {on ? "On" : "Off"} <span className="switch" aria-hidden="true"><i /></span>
                         </CommandButton>
                         {draft ? null : <button data-command="admin.riders.promoEdit" type="button" className="dash-btn small ghost" disabled={!canEdit} onClick={() => setEditing({ id: ticket.id, edit: { value: ticket.value, maxPerRide: ticket.maxPerRide, rides: ticket.rides } })}>Edit</button>}
+                        <button data-command="admin.ui.quickAction" type="button" className="dash-btn small ghost" aria-pressed={previewId === ticket.id} onClick={() => setPreviewId(previewId === ticket.id ? null : ticket.id)}>{previewId === ticket.id ? "Hide app preview" : "See in rider app"}</button>
                       </div>
                     ) : null}
                     {draft ? (
@@ -344,6 +346,7 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
                         </div>
                       </div>
                     ) : null}
+                    {previewId === ticket.id || draft ? <RiderAppPreview promo={draft ? { ...ticket, ...draft, maxPerRide: ticket.kind === "percent" ? draft.maxPerRide : draft.value } : ticket} off={ticket.status !== "active"} /> : null}
                   </div>
                   <div className="rd-promo-stats">
                     <div><span>Riders</span><b>{results.reached}</b><small>{ticket.group}</small></div>
@@ -407,7 +410,6 @@ function InsightsView({ rows, now, locale, country, onSegment }: { rows: RiderRo
   const day = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" });
   const peak = Math.max(1, ...facts.signups.map((item) => item.count));
   const maxZone = Math.max(1, ...facts.topZones.map((item) => item.rides));
-  const levels = (["VIP", "Gold", "Silver", "Bronze"] as const).map((level) => ({ level, count: rows.filter((row) => row.profile.level === level).length }));
   const newThisWeek = facts.signups.slice(-7).reduce((sum, item) => sum + item.count, 0);
   return (
     <div className="rd-insights">
@@ -435,15 +437,7 @@ function InsightsView({ rows, now, locale, country, onSegment }: { rows: RiderRo
           </ul>
         </section>
       </div>
-      <section className="dash-card" aria-labelledby="levels-title">
-        <div className="card-head"><h3 id="levels-title"><Crown size={16} aria-hidden="true" /> Rider levels</h3><span className="fine-print">By rides in the last 30 days · VIP 20+, Gold 10+, Silver 4+</span></div>
-        <div className="rd-levels">
-          {levels.map((item) => (
-            <div key={item.level} className={`rd-level-card lv-${item.level.toLowerCase()}`}><LevelBadge level={item.level} /><strong>{item.count}</strong><small>{rows.length ? Math.round((item.count / rows.length) * 100) : 0}% of riders</small></div>
-          ))}
-        </div>
-        <p className="fine">Spend this month: {money(rows.reduce((sum, row) => sum + row.bookings.filter((booking) => booking.status === "completed" && booking.at > now - 30 * 86_400_000).reduce((acc, booking) => acc + booking.fareMinor, 0), 0), country)}</p>
-      </section>
+      <p className="fine">Spend in the last 30 days: {money(rows.reduce((sum, row) => sum + row.bookings.filter((booking) => booking.status === "completed" && booking.at > now - 30 * 86_400_000).reduce((acc, booking) => acc + booking.fareMinor, 0), 0), country)}</p>
     </div>
   );
 }
