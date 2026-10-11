@@ -225,6 +225,7 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.ui.mapLayer", label: "Show or hide drivers on the map", reason: false, permission: "overview.read" },
   { id: "admin.ui.mapClose", label: "Close driver details", reason: false, permission: "overview.read" },
   { id: "admin.ui.dashboardTab", label: "Switch dashboard tab", reason: false, permission: "overview.read" },
+  { id: "admin.ui.alertSound", label: "Alert sound and notifications", reason: false, permission: "overview.read" },
 ];
 
 

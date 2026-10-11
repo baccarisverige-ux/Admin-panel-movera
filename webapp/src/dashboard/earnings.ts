@@ -96,7 +96,20 @@ function localHour(at: number, timeZone: string): { hour: number; weekday: numbe
   return found;
 }
 
+const hours = new Map<string, Hour>();
+
+/** Each zone-hour is computed once; switching periods back and forth reuses them. */
 function hourModel(id: MarketId, zoneId: string, kind: "operating" | "airport", at: number): Hour {
+  const key = `${zoneId}:${Math.floor(at / 3_600_000)}`;
+  const cached = hours.get(key);
+  if (cached) return cached;
+  if (hours.size > 400_000) hours.clear();
+  const hour = computeHour(id, zoneId, kind, at);
+  hours.set(key, hour);
+  return hour;
+}
+
+function computeHour(id: MarketId, zoneId: string, kind: "operating" | "airport", at: number): Hour {
   const model = MODEL[id];
   const local = localHour(at, market(id).timeZone);
   const seed = zoneSeed(zoneId);

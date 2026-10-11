@@ -44,6 +44,7 @@ test("a country manager only sees their country", async ({ page }) => {
 test("scheduled rides show upcoming, past and calendar", async ({ page }) => {
   await signInAs(page, "nora");
   await page.goto("/");
+  await page.getByRole("tab", { name: /^Work/ }).click();
   const rides = page.getByRole("region", { name: "Scheduled rides" }).or(page.locator(".rides-card"));
   await expect(rides.getByRole("cell").first()).toBeVisible();
   await rides.getByRole("tab", { name: /Past/ }).click();
@@ -68,4 +69,35 @@ test("a passed reservation can be marked as no-show", async ({ page }) => {
   await page.goto("/reservations");
   await page.getByRole("button", { name: "No-show" }).or(page.getByRole("tab", { name: "No-show" })).first().click();
   await expect(page.getByRole("cell", { name: "B002" })).toBeVisible();
+});
+
+test("the dashboard has four tabs with live widgets, activity and insights", async ({ page }) => {
+  await signInAs(page, "nora");
+  await page.goto("/?country=SE");
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("status").filter({ hasText: /Live · updated/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reset demo" })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: /^Live/ }).click();
+  await expect(page).toHaveURL(/tab=live/);
+  const supply = page.getByRole("region", { name: "Supply vs demand" });
+  await expect(supply.getByRole("listitem").first()).toBeVisible();
+  await supply.getByRole("button", { name: "Show on map" }).click();
+  await expect(supply.getByRole("button", { name: "Hide on map" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Airport queue" })).toContainText("drivers waiting");
+  await expect(page.getByRole("region", { name: "Surge and boost zones" })).toBeVisible();
+
+  await page.getByRole("tab", { name: /^Work/ }).click();
+  await expect(page.getByRole("region", { name: "Recent activity" })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Insights", exact: true }).click();
+  const insights = page.getByRole("region", { name: "Insights" });
+  await expect(insights.getByText("Best rating")).toBeVisible();
+  await insights.getByRole("tab", { name: "Cancellations" }).click();
+  await expect(insights.getByText("By rider")).toBeVisible();
+  await insights.getByRole("tab", { name: "Ratings & complaints" }).click();
+  await expect(insights.getByText("Average rating")).toBeVisible();
+
+  await page.goto("/system");
+  await expect(page.getByRole("region", { name: "Demo tools" }).or(page.getByRole("article", { name: "Demo tools" }))).toBeVisible();
 });

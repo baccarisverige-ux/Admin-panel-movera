@@ -1,6 +1,7 @@
 import { TRIP_STATUSES } from "../domain/contract.ts";
 import { market, type MarketId } from "../markets/markets.ts";
 import type { DemoRecord } from "./seed.ts";
+import { sosDriverId } from "./presence.ts";
 
 /**
  * Demo records for France and Tunisia, plus past scheduled rides for Sweden.
@@ -197,6 +198,7 @@ function countryRows(id: Exclude<MarketId, "SE">, offset: number, now: string, s
     phone: riders[index].phone,
     zoneId: zoneAt(index),
     status: index === 0 ? "queued" : "closed",
+    driverId: index === 0 ? sosDriverId(drivers, zoneAt(index)) : null,
   }));
   const payments = Array.from({ length: 80 }, (_, index) => ({
     id: `PAY${offset + index + 1}`,

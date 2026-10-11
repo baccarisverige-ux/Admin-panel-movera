@@ -142,7 +142,7 @@ test("the driver profile shows the current trip with a link to its route", async
 
 test("riders waiting for a driver can be sent to the nearest driver with the radar", async ({ page }) => {
   await signInAs(page);
-  await page.goto("/?country=SE");
+  await page.goto("/?country=SE&tab=live");
   const list = page.getByRole("list", { name: "Riders looking for a driver" });
   await expect(list.locator("li").first()).toBeVisible();
   const row = list.locator("li").filter({ has: page.getByRole("button", { name: "Driver radar", disabled: false }) }).first();
@@ -155,7 +155,7 @@ test("riders waiting for a driver can be sent to the nearest driver with the rad
 
 test("a waiting rider opens on the map with assign actions and a link to the rider", async ({ page }) => {
   await signInAs(page);
-  await page.goto("/?country=SE");
+  await page.goto("/?country=SE&tab=live");
   const first = page.getByRole("list", { name: "Riders looking for a driver" }).locator("li").first();
   await first.getByRole("button", { name: /on the map$/ }).click();
   const panel = page.getByRole("dialog", { name: /^Rider / });

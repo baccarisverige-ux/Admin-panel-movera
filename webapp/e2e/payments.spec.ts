@@ -16,6 +16,7 @@ test("a timed-out double click still refunds once", async ({ page }) => {
   await expect(page.getByTestId("payment-count")).toContainText("300 payments");
   await expect(page.getByTestId("bank-check")).toContainText("SEB");
   await expect(page.getByTestId("bank-check")).toContainText("IBAN checks");
+  await page.goto("/system");
   await page.getByLabel("Simulate errors").selectOption("slow");
   await page.goto("/payments/PAY0002");
   const refund = page.getByRole("button", { name: "Refund payment" });
@@ -35,5 +36,6 @@ test("a timed-out double click still refunds once", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.screenshot({ path: "docs/gates/g10/payments-1440.png", fullPage: false });
   }
+  await page.goto("/system");
   await page.getByLabel("Simulate errors").selectOption("none");
 });

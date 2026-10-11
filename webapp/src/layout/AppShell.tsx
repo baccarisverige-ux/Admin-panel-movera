@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
   BarChart3,
@@ -35,9 +34,7 @@ import {
 } from "lucide-react";
 import { can, canUseZone } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
-import { useAdminApi } from "../api/AdminApiContext";
 import { useInbox, useSearch } from "../api/hooks";
-import type { Fault } from "../api/demoStore";
 import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
 import { CommandButton } from "../ui/CommandButton";
 import { useMarketScope } from "../markets/useMarketScope";
@@ -92,8 +89,6 @@ export function AppShell({ page, children }: AppShellProps) {
   const [inboxOpen, setInboxOpen] = useState(false);
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const client = useQueryClient();
-  const api = useAdminApi();
   const { agent, signOut } = useSession();
   const visible = MENU.filter((item) => !agent || can(agent.role, item.permission));
   const groups = MENU_GROUPS.filter((group) => visible.some((item) => item.group === group));
@@ -176,16 +171,6 @@ export function AppShell({ page, children }: AppShellProps) {
                 <strong>{agent?.name ?? "Signed out"}</strong>
                 <span>{marketScope.market.name} · {localTime} · {env} · {agent?.role ?? "signed out"}</span>
               </div>
-              {agent?.role === "super" ? (
-                <>
-                  <select aria-label="Simulate errors" defaultValue="none" onChange={(event) => void api.setFault(event.target.value as Fault)}>
-                    {["none", "401", "403", "409", "422", "429", "503", "offline", "slow", "empty"].map((fault) => (
-                      <option key={fault} value={fault}>{fault}</option>
-                    ))}
-                  </select>
-                  <CommandButton command="admin.shell.reset" className="link-action" type="button" onDone={() => void api.reset().then(() => client.invalidateQueries())}>Reset demo</CommandButton>
-                </>
-              ) : null}
               <CommandButton command="admin.shell.signOut" className="link-action" type="button" onDone={signOut}>Sign out</CommandButton>
             </div>
           </div>

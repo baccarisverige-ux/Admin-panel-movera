@@ -9,6 +9,7 @@ import { DriverPanel, type DriverInfo } from "./DriverPanel";
 import { LIVE_STATES, type LiveDriver, type LiveState } from "./live";
 import type { LiveTrip } from "./liveTrip";
 import type { RideRequest } from "./riders";
+import type { ZoneBalance } from "./insights";
 import { along, type LatLng } from "./route";
 import { WaybillDialog } from "./TripCard";
 
@@ -49,7 +50,23 @@ type Props = {
   /** Open a waiting rider from outside the map (the Live riders list). */
   focusRequest?: { id: string; nonce: number } | null;
   renderAssign?: (request: RideRequest) => ReactNode;
+  /** Supply vs demand per zone, drawn as coloured circles when shown. */
+  balance?: ZoneBalance[];
+  showBalance?: boolean;
 };
+
+const LEVEL_COLOR = { ok: "#0ca30c", tight: "#eda100", short: "#d03b3b" };
+
+function balanceGeo(rows: readonly ZoneBalance[], shown: boolean) {
+  return {
+    type: "FeatureCollection" as const,
+    features: (shown ? rows : []).map((row) => ({
+      type: "Feature" as const,
+      properties: { color: LEVEL_COLOR[row.level], label: `${row.waiting}/${row.free}` },
+      geometry: { type: "Point" as const, coordinates: [row.center[1], row.center[0]] },
+    })),
+  };
+}
 
 function requestGeo(requests: readonly RideRequest[], shown: boolean) {
   return {
@@ -110,10 +127,10 @@ function geo(drivers: LiveDriver[], hidden: Set<LiveState>) {
 }
 
 /** Live drivers on a MapLibre map, coloured by state; click a driver for details. */
-export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null, tripFor, infoFor, requests = [], showRequests = true, focusRequest = null, renderAssign }: Props) {
+export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null, tripFor, infoFor, requests = [], showRequests = true, focusRequest = null, renderAssign, balance = [], showBalance = false }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const latest = useRef({ drivers, hidden, requests, showRequests });
+  const latest = useRef({ drivers, hidden, requests, showRequests, balance, showBalance });
   const [requestId, setRequestId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -122,7 +139,7 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
   const [following, setFollowing] = useState(false);
   const [waybillOpen, setWaybillOpen] = useState(false);
   const pins = useRef<maplibregl.Marker[]>([]);
-  latest.current = { drivers, hidden, requests, showRequests };
+  latest.current = { drivers, hidden, requests, showRequests, balance, showBalance };
 
   function select(id: string | null) {
     setSelectedId(id);
@@ -145,6 +162,20 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.on("load", () => {
+      map.addSource("balance", { type: "geojson", data: balanceGeo(latest.current.balance, latest.current.showBalance) });
+      map.addLayer({
+        id: "balance",
+        type: "circle",
+        source: "balance",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 18, 11, 46, 14, 120],
+          "circle-color": ["get", "color"],
+          "circle-opacity": 0.16,
+          "circle-stroke-color": ["get", "color"],
+          "circle-stroke-width": 2,
+          "circle-stroke-opacity": 0.6,
+        },
+      });
       map.addSource("drivers", { type: "geojson", data: geo(latest.current.drivers, latest.current.hidden) });
       map.addSource("trip-route", { type: "geojson", data: routeGeo(null, null) });
       const routeLayer = (id: string, kinds: string[], dashed: boolean, width: number) => map.addLayer({
@@ -221,6 +252,11 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
     const source = mapRef.current?.getSource("drivers") as GeoJSONSource | undefined;
     if (ready && source) source.setData(geo(drivers, hidden));
   }, [drivers, hidden, ready]);
+
+  useEffect(() => {
+    const source = mapRef.current?.getSource("balance") as GeoJSONSource | undefined;
+    if (ready && source) source.setData(balanceGeo(balance, showBalance));
+  }, [balance, showBalance, ready]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource("requests") as GeoJSONSource | undefined;
