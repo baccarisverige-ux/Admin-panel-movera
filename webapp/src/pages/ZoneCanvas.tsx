@@ -11,6 +11,19 @@ import type { DrawTool, ZoneFocus, ZoneLayers } from "../zones/bookStore";
 
 export type DrawMode = DrawTool;
 
+type Ring = [number, number][];
+
+/** Extra shapes drawn on top: the new-zone sketch, gaps, districts, the published shape, no-stop streets, the ruler. */
+export type MapOverlays = {
+  sketch?: Ring;
+  gaps?: Ring[];
+  districts?: { ring: Ring; name: string; picked: boolean }[];
+  before?: Ring;
+  lines?: Ring[];
+  measure?: Ring;
+  outline?: Ring;
+};
+
 type DrawProps = {
   zones: ZoneShape[];
   selectedId: string;
@@ -18,8 +31,13 @@ type DrawProps = {
   layers: ZoneLayers;
   focus: ZoneFocus | null;
   selectionNonce: number;
-  onDrawn: (points: [number, number][], intent: "outer" | "hole" | "point") => void;
+  onDrawn: (points: [number, number][], intent: "outer" | "hole" | "point" | "line") => void;
   onEdited: (points: [number, number][]) => void;
+  overlays?: MapOverlays;
+  /** Zones to fit the view to; the view refits when viewKey changes (the country). */
+  fitIds?: string[];
+  viewKey?: string;
+  onPick?: (zoneId: string) => void;
 };
 
 const INNER_IDS = ["op-bromma", "op-kungsholmen", "op-sodermalm", "op-norrmalm", "op-vasastan", "op-ostermalm"];
@@ -33,9 +51,39 @@ const OSM_STYLE = {
       tileSize: 256,
       attribution: "&copy; OpenStreetMap",
     },
+    satellite: {
+      type: "raster" as const,
+      tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      tileSize: 256,
+      attribution: "Imagery &copy; Esri",
+    },
   },
-  layers: [{ id: "osm", type: "raster" as const, source: "osm" }],
+  layers: [
+    { id: "osm", type: "raster" as const, source: "osm" },
+    { id: "satellite", type: "raster" as const, source: "satellite", layout: { visibility: "none" as const } },
+  ],
 };
+
+function overlayGeo(overlays: MapOverlays | undefined, layers: ZoneLayers): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  const polygonOf = (ring: Ring, kind: string, extra: Record<string, unknown> = {}) => {
+    if (ring.length < 3) return;
+    features.push({ type: "Feature", properties: { kind, ...extra }, geometry: { type: "Polygon", coordinates: [closedRing(ring)] } });
+  };
+  const lineOf = (line: Ring, kind: string) => {
+    if (line.length < 2) return;
+    features.push({ type: "Feature", properties: { kind }, geometry: { type: "LineString", coordinates: line.map(([lat, lng]) => [lng, lat]) } });
+  };
+  if (!overlays) return { type: "FeatureCollection", features };
+  if (overlays.outline) lineOf([...overlays.outline, overlays.outline[0]!], "outline");
+  if (layers.gaps) for (const cell of overlays.gaps ?? []) polygonOf(cell, "gap");
+  if (layers.districts || overlays.districts?.some((item) => item.picked)) for (const item of overlays.districts ?? []) polygonOf(item.ring, item.picked ? "district-on" : "district", { name: item.name });
+  if (layers.before && overlays.before) lineOf([...overlays.before, overlays.before[0]!], "before");
+  for (const line of overlays.lines ?? []) lineOf(line, "nostop");
+  if (overlays.sketch) polygonOf(overlays.sketch, "sketch");
+  if (overlays.measure) lineOf(overlays.measure, "measure");
+  return { type: "FeatureCollection", features };
+}
 
 function closedRing(points: [number, number][]): [number, number][] {
   const ring = points.map(([lat, lng]) => [lng, lat] as [number, number]);
@@ -108,6 +156,9 @@ function activityGeo(layers: ZoneLayers, demand: boolean): GeoJSON.FeatureCollec
 
 function drawnPoints(feature: GeoJSONStoreFeatures | undefined): [number, number][] | null {
   if (!feature) return null;
+  if (feature.geometry.type === "LineString") {
+    return feature.geometry.coordinates.map(([lng, lat]) => [lat ?? 0, lng ?? 0] as [number, number]);
+  }
   if (feature.geometry.type === "Point") {
     const [lng, lat] = feature.geometry.coordinates;
     return [[lat ?? 0, lng ?? 0]];
@@ -120,6 +171,7 @@ function drawnPoints(feature: GeoJSONStoreFeatures | undefined): [number, number
 
 function terraMode(mode: DrawMode): string {
   if (mode === "hole") return "polygon";
+  if (mode === "line") return "linestring";
   return mode;
 }
 
@@ -139,7 +191,7 @@ function polygonFeature(zone: ZoneShape): GeoJSONStoreFeatures | null {
 
 function labelText(zone: ZoneShape): string | null {
   if (zone.archived || zone.kind === "service" || zone.points.length < 1) return null;
-  if (zone.kind === "operating" || zone.kind === "airport") return zone.name;
+  if (zone.kind === "operating" || zone.kind === "airport") return zone.name.includes(" · ") ? zone.name.split(" · ").slice(1).join(" · ") : zone.name;
   return zone.code;
 }
 
@@ -163,7 +215,7 @@ function boundsFor(zones: ZoneShape[], ids?: string[]): maplibregl.LngLatBounds 
   return count > 0 ? bounds : null;
 }
 
-function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce, onDrawn, onEdited }: DrawProps) {
+function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce, onDrawn, onEdited, overlays, fitIds, viewKey, onPick }: DrawProps) {
   const host = useRef<HTMLDivElement>(null);
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const zonesRef = useRef(zones);
@@ -176,11 +228,19 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const editIdRef = useRef<string | null>(null);
   const ignoreRef = useRef(false);
+  const overlaysRef = useRef(overlays);
+  const layersRef = useRef(layers);
+  const fitRef = useRef(fitIds);
+  const pickRef = useRef(onPick);
   zonesRef.current = zones;
   selectedRef.current = selectedId;
   modeRef.current = mode;
   drawnRef.current = onDrawn;
   editedRef.current = onEdited;
+  overlaysRef.current = overlays;
+  layersRef.current = layers;
+  fitRef.current = fitIds;
+  pickRef.current = onPick;
 
   useEffect(() => {
     const node = host.current;
@@ -220,7 +280,7 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: {
           "fill-color": ["get", "color"],
-          "fill-opacity": ["case", ["==", ["get", "kind"], "service"], 0.22, 0.78],
+          "fill-opacity": ["case", ["==", ["get", "kind"], "service"], 0.05, ["==", ["get", "selected"], 1], 0.62, 0.42],
         },
       });
       map.addLayer({
@@ -230,7 +290,7 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: {
           "line-color": ["get", "color"],
-          "line-width": ["case", ["==", ["get", "selected"], 1], 5, 3.5],
+          "line-width": ["case", ["==", ["get", "selected"], 1], 4, ["==", ["get", "kind"], "service"], 1.5, 2],
         },
       });
       map.addLayer({
@@ -294,8 +354,39 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
           "heatmap-opacity": 0.62,
         },
       });
+      map.addSource("overlay", { type: "geojson", data: overlayGeo(overlaysRef.current, layersRef.current) });
+      map.addLayer({
+        id: "overlay-fill",
+        type: "fill",
+        source: "overlay",
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: {
+          "fill-color": ["match", ["get", "kind"], "gap", "#e34948", "district-on", "#6250d6", "district", "#6250d6", "sketch", "#6250d6", "#6250d6"],
+          "fill-opacity": ["match", ["get", "kind"], "gap", 0.32, "district-on", 0.35, "district", 0.06, "sketch", 0.28, 0.1],
+        },
+      });
+      map.addLayer({
+        id: "overlay-line",
+        type: "line",
+        source: "overlay",
+        paint: {
+          "line-color": ["match", ["get", "kind"], "gap", "#e34948", "before", "#111614", "nostop", "#d03b3b", "measure", "#c98a00", "outline", "#215277", "#6250d6"],
+          "line-width": ["match", ["get", "kind"], "nostop", 5, "measure", 3, "sketch", 3, "district", 1.2, "gap", 0.5, 2],
+          "line-dasharray": ["match", ["get", "kind"], "before", ["literal", [2, 2]], "outline", ["literal", [4, 3]], "measure", ["literal", [1, 1.5]], "district", ["literal", [2, 2]], ["literal", [1, 0]]],
+        },
+      });
+      map.on("click", "zones-fill", (event) => {
+        if (modeRef.current !== "render") return;
+        const hit = (event.features ?? []).map((feature) => String(feature.properties?.id ?? "")).find((id) => {
+          const zone = zonesRef.current.find((item) => item.id === id);
+          return zone && zone.kind !== "service";
+        });
+        if (hit) pickRef.current?.(hit);
+      });
+      map.on("mouseenter", "zones-fill", () => { if (modeRef.current === "render" && pickRef.current) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "zones-fill", () => { map.getCanvas().style.cursor = ""; });
       paintLabels(map);
-      const inner = boundsFor(zonesRef.current, INNER_IDS) ?? boundsFor(zonesRef.current);
+      const inner = (fitRef.current?.length ? boundsFor(zonesRef.current, fitRef.current) : boundsFor(zonesRef.current, INNER_IDS)) ?? boundsFor(zonesRef.current);
       map.on("idle", publish);
       if (inner) map.fitBounds(inner, { padding: 36, animate: false, maxZoom: 13 });
       else publish();
@@ -304,7 +395,7 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
       draw.setMode(terraMode(modeRef.current));
       draw.on("finish", (id) => {
         const points = drawnPoints(draw.getSnapshotFeature(id));
-        const intent = modeRef.current === "hole" ? "hole" : modeRef.current === "point" ? "point" : "outer";
+        const intent = modeRef.current === "hole" ? "hole" : modeRef.current === "point" ? "point" : modeRef.current === "line" ? "line" : "outer";
         try {
           draw.removeFeatures([id]);
         } catch {
@@ -353,6 +444,44 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
     if (source && "setData" in source) (source as GeoJSONSource).setData(zonesGeo(zones, selectedId, layers));
     if (map?.isStyleLoaded()) paintLabels(map);
   }, [zones, selectedId]);
+
+  useEffect(() => {
+    const source = mapRef.current?.getSource("overlay");
+    if (source && "setData" in source) (source as GeoJSONSource).setData(overlayGeo(overlays, layers));
+  }, [overlays, layers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.getLayer("satellite")) return;
+    map.setLayoutProperty("satellite", "visibility", layers.satellite ? "visible" : "none");
+  }, [layers.satellite]);
+
+  // Show the new-zone shape as soon as it is made.
+  const sketchKey = overlays?.sketch && overlays.sketch.length >= 3 ? JSON.stringify(overlays.sketch) : "";
+  useEffect(() => {
+    const map = mapRef.current;
+    const sketch = overlaysRef.current?.sketch;
+    if (!map || !sketchKey || !sketch) return;
+    const bounds = new maplibregl.LngLatBounds();
+    for (const [lat, lng] of sketch) bounds.extend([lng, lat]);
+    map.fitBounds(bounds, { padding: 70, animate: false, maxZoom: 14 });
+    const current = window.__moveraMap;
+    if (current) window.__moveraMap = { ...current, generation: current.generation + 1 };
+  }, [sketchKey]);
+
+  const firstView = useRef(true);
+  useEffect(() => {
+    if (firstView.current) {
+      firstView.current = false;
+      return;
+    }
+    const map = mapRef.current;
+    if (!map) return;
+    const bounds = fitRef.current?.length ? boundsFor(zonesRef.current, fitRef.current) : null;
+    if (bounds) map.fitBounds(bounds, { padding: 36, animate: false, maxZoom: 13 });
+    const current = window.__moveraMap;
+    if (current) window.__moveraMap = { ...current, generation: current.generation + 1 };
+  }, [viewKey]);
 
   useEffect(() => {
     const activity = mapRef.current?.getSource("activity");
@@ -430,6 +559,7 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
 }
 
 function GoogleDraw({ zones, selectedId, mode, layers, focus, selectionNonce, onDrawn, onEdited }: DrawProps) {
+  // Google Maps shows zones and drawing; the extra overlays are drawn on the OpenStreetMap canvas.
   const map = useMap();
   const zonesRef = useRef(zones);
   const selectedRef = useRef(selectedId);
@@ -466,7 +596,7 @@ function GoogleDraw({ zones, selectedId, mode, layers, focus, selectionNonce, on
     draw.setMode(terraMode(modeRef.current));
     draw.on("finish", (id) => {
       const points = drawnPoints(draw.getSnapshotFeature(id));
-      const intent = modeRef.current === "hole" ? "hole" : modeRef.current === "point" ? "point" : "outer";
+      const intent = modeRef.current === "hole" ? "hole" : modeRef.current === "point" ? "point" : modeRef.current === "line" ? "line" : "outer";
       try {
         draw.removeFeatures([id]);
       } catch {

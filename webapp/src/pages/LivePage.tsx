@@ -48,7 +48,7 @@ export function LivePage() {
         zones={stockholmZones()}
         selectedId="op-norrmalm"
         mode="select"
-        layers={{ drivers: true, trips: true, requests: true, demandHour: false, demand7d: false, pickups: true, queue: true, boosts: true, events: true }}
+        layers={{ drivers: true, trips: true, requests: true, demandHour: false, demand7d: false, pickups: true, queue: true, boosts: true, events: true, gaps: false, before: false, districts: false, satellite: false }}
         focus={null}
         selectionNonce={0}
         onDrawn={() => undefined}

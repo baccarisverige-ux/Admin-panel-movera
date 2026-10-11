@@ -22,6 +22,28 @@ import {
   zonesToGeoJSON,
 } from "./releases.ts";
 import { zoneDrawModes } from "./drawModes.ts";
+import { cityById } from "./cities.ts";
+import {
+  activityInside,
+  circleRing,
+  cityGaps,
+  clipToCity,
+  createZoneIn,
+  deleteZone,
+  displayName,
+  firstShapeFromFile,
+  goLiveState,
+  joinShapes,
+  launchChecklist,
+  lineKm,
+  removeOverlaps,
+  ringAreaKm,
+  seedZones,
+  shapeChecks,
+  suggestCode,
+  suggestedShape,
+  zoneChanges,
+} from "./releases.ts";
 
 const assert = (ok: unknown, message: string) => {
   if (!ok) throw new Error(message);
@@ -115,5 +137,49 @@ assert(JSON.stringify(rolled.published) === JSON.stringify(book.versions[0]), "r
 assert(JSON.stringify(rolled.draft) === JSON.stringify(rolled.published), "rollback draft follows the restored publication");
 assert(zonesAt(seed, 59.334, 18.063).some((zone) => zone.name === "Norrmalm"), "test point hits Norrmalm");
 assert(zonesAt(seed, 59.334, 18.063).some((zone) => zone.kind === "service"), "test point hits the service area");
+
+
+// Countries, cities and new zones.
+const all = seedZones();
+assert(all.some((zone) => zone.country === "FR" && zone.name === "Paris Centre") && all.some((zone) => zone.country === "TN" && zone.kind === "airport"), "Paris and Tunis are seeded");
+assert(validateZones(all).every((issue) => issue.level !== "error"), "all countries seed without errors");
+assert(all.filter((zone) => zone.marketZoneId).length === 11 + 10 + 9, "seed zones link to the zone ids other sections use");
+const paris = cityById("paris")!;
+assert(displayName({ name: "Paris Centre", city: "paris" }) === "Paris · Paris Centre" && displayName({ name: "Paris · Batignolles", city: "paris" }) === "Paris · Batignolles", "names start with the city");
+assert(suggestCode(paris, "Batignolles", all) === "PAR-BAT" && suggestCode(cityById("stockholm")!, "Kista Nord", all) === "STO-KN", "codes come from the city code");
+const bat = paris.districts.find((item) => item.name === "Batignolles")!.ring;
+const mon = paris.districts.find((item) => item.name === "Montmartre–Nord")!.ring;
+assert(!joinShapes([bat, mon]).error && joinShapes([bat, mon]).points.length >= 4, "touching districts join");
+assert(joinShapes([bat, paris.districts.find((item) => item.name === "Vincennes")!.ring]).error, "districts apart do not join");
+assert(shapeChecks(mon, paris, "operating", all).some((issue) => issue.message === "The shape overlaps Montmartre–Nord. Operating zones cannot overlap."), "an identical shape is an overlap");
+assert(!shapeChecks(bat, paris, "operating", all).some((issue) => issue.level === "error"), "a shape next to a zone is fine");
+const station = circleRing(59.3303, 18.0586, 1);
+assert(Math.abs(ringAreaKm(station) - Math.PI) < 0.1, "a 1 km circle is about 3.14 km²");
+assert(shapeChecks(station, cityById("stockholm")!, "operating", all).some((issue) => issue.message.includes("overlaps")), "the circle overlaps Norrmalm");
+assert(!shapeChecks(removeOverlaps(station, all).points, cityById("stockholm")!, "operating", all).some((issue) => issue.message.includes("overlaps")), "removing overlaps fixes it");
+assert(clipToCity(circleRing(59.51, 18.26, 3), cityById("stockholm")!).points.every(([lat, lng]) => lat <= 59.51 + 1e-6 && lng <= 18.26 + 1e-6), "fit to city border");
+const made = createZoneIn(emptyBook("nora"), { country: "FR", city: "paris", kind: "operating", name: "Batignolles", code: "PAR-BAT", points: bat, copyFrom: "op-fr-mn", schedule: "weekly", hours: "20:00–06:00" }, "nora");
+const madeZone = made.book.draft.find((zone) => zone.id === made.id)!;
+assert(!made.error && madeZone.name === "Paris · Batignolles" && madeZone.parentId === "svc-paris" && madeZone.hours === "20:00–06:00", "new zone in Paris");
+assert(createZoneIn(made.book, { country: "FR", city: "paris", kind: "operating", name: "Again", code: "PAR-BAT", points: bat }, "nora").error, "codes are unique");
+assert(createZoneIn(emptyBook("nora"), { country: "FR", city: "stockholm", kind: "operating", name: "X", code: "X-1", points: bat }, "nora").error, "the city must be in the country");
+assert(zoneChanges(made.book.published, made.book.draft, "FR").some((change) => change.change === "added" && change.name === "Paris · Batignolles") && zoneChanges(made.book.published, made.book.draft, "SE").length === 0, "changes per country");
+const goteborg = createZoneIn(emptyBook("nora"), { country: "SE", city: "goteborg", kind: "operating", name: "Centrum", code: "GOT-CEN", points: circleRing(57.7089, 11.9746, 1) }, "nora");
+assert(!validateZones(goteborg.book.draft).some((issue) => issue.level === "error"), "a new city without a service area can launch");
+const noPay = patchZone(made.book, made.id, { paymentMethods: [] }, "nora");
+assert(launchChecklist(noPay.draft.find((zone) => zone.id === made.id)!, validateZones(noPay.draft)).find((item) => item.id === "payments")?.ok === false, "checklist sees missing payments");
+assert(submitReview(noPay, "nora").error?.includes("payment methods missing"), "review is blocked until the checklist passes");
+assert(!submitReview(made.book, "nora").error, "a ready zone goes to review");
+const removed = deleteZone(made.book, made.id, "nora");
+assert(!removed.error && !removed.book.draft.some((zone) => zone.id === made.id), "delete removes the zone from the draft");
+assert(deleteZone(emptyBook("nora"), "svc-paris", "nora").error, "a service area with zones inside cannot be deleted");
+const gaps = cityGaps(all, paris, 12);
+assert(gaps.coverage > 0 && gaps.coverage < 100 && gaps.cells.length > 0, "gaps show where no zone is");
+assert(cityGaps(all, cityById("lyon")!, 8).coverage === 0, "a city without zones is all gap");
+assert(!suggestedShape(paris).error && suggestedShape(cityById("lyon")!).error, "suggested shape needs ride requests");
+assert(Math.abs(lineKm([[59.33, 18.0], [59.33, 18.1]]) - 5.69) < 0.1, "measure a line");
+assert(firstShapeFromFile(JSON.stringify(zonesToGeoJSON([madeZone]))).points.length === madeZone.points.length && firstShapeFromFile("nope").error, "first shape from a file");
+assert(goLiveState({ ...madeZone, goLiveAt: "2099-01-01T06:00" }, Date.now()) === "scheduled" && goLiveState(madeZone, Date.now()) === "now", "go live later");
+assert(activityInside(paris.outline).drivers > 0, "drivers inside Paris");
 
 console.log("zones ok");
