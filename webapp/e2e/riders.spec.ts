@@ -157,3 +157,26 @@ test("existing promotions switch off and on, and their discount, max per ride an
   await page.reload();
   await expect(page.getByLabel("Come back rides")).toHaveValue("5");
 });
+
+test("the promotion shows on the rider app home sheet and as old and new prices on the categories it covers", async ({ page }) => {
+  await session(page);
+  await page.goto("/riders?view=promotions");
+  await page.getByRole("button", { name: "New promotion" }).last().click();
+  await page.getByLabel("Promotion title").fill("Autumn offer");
+  await expect(page.getByLabel("Promotion in the rider app")).toContainText("30% off · Autumn offer");
+  await page.locator(".rd-builder-form").getByText("Movera", { exact: true }).click();
+  await page.getByRole("tab", { name: "Choose ride" }).click();
+  const cats = page.getByRole("list", { name: "Categories with prices" });
+  await expect(cats.getByRole("listitem").filter({ hasText: "Movera" }).locator("s")).toHaveCount(1);
+  await expect(cats.getByRole("listitem").filter({ hasText: "Premium" }).locator("s")).toHaveCount(0);
+  await expect(page.getByText("30% off applied on 1 category")).toBeVisible();
+
+  await page.getByLabel("Come back audience").selectOption("top");
+  await page.getByLabel("Come back Comfort").check();
+  await page.getByRole("button", { name: "Save automatic promotions" }).click();
+  await page.locator(".modal.open").last().getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Automatic promotions saved.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Come back audience")).toHaveValue("top");
+  await expect(page.getByLabel("Come back Comfort")).toBeChecked();
+});

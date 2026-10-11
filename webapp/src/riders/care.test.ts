@@ -1,4 +1,4 @@
-import { addCredit, editPromotion, setPromotionOn, addLostItem, advanceLostItem, ban, createPromotion, decideRefund, emptyRiderCare, isBanned, markPaid, maxCost, merge, normalizeCare, promoResults, promoUsed, reply, requestRefund, saveFilter, threadOf, unpaidMinor, waitingMinutes, type PromoDraft } from "./care.ts";
+import { addCredit, editPromotion, promoPrice, setPromotionOn, addLostItem, advanceLostItem, ban, createPromotion, decideRefund, emptyRiderCare, isBanned, markPaid, maxCost, merge, normalizeCare, promoResults, promoUsed, reply, requestRefund, saveFilter, threadOf, unpaidMinor, waitingMinutes, type PromoDraft } from "./care.ts";
 import { bookingCounts, joinedAt, riderBookings, riderCode, riderProfile, type RiderRecord } from "./profile.ts";
 import { buildRows, insights, matches, ridersCsv, segmentCounts, sortRows } from "./segments.ts";
 
@@ -99,4 +99,12 @@ assert(advanceLostItem(lost.care, "R0001", lost.care.lostFound.R0001[0].id).lost
 assert(merge(care, "R0001", "R0001").error && !merge(care, "R0001", "R0002").error, "merge needs another account");
 assert(saveFilter(care, { name: "Top in Norrmalm", by: "nora", segment: "top", query: "", sort: "rides", period: "month" }).care.savedFilters.length === 1, "filter saved");
 assert(normalizeCare(null).promotions.length === 2, "empty data falls back to defaults");
+// Old price and new price per category.
+const promo = { kind: "percent" as const, value: 30, maxPerRide: 50, minFare: 0, categories: ["economy", "comfort"] };
+assert(JSON.stringify(promoPrice(100, "economy", promo)) === JSON.stringify({ applies: true, discount: 30, newPrice: 70 }), "30% off 100 is 70");
+assert(promoPrice(400, "comfort", promo).newPrice === 350, "capped at max per ride");
+assert(!promoPrice(400, "premium", promo).applies, "categories outside the promotion keep their price");
+assert(!promoPrice(60, "economy", { ...promo, minFare: 80 }).applies, "below the minimum fare there is no discount");
+assert(promoPrice(40, "xl", { kind: "fixed", value: 50, maxPerRide: 50, minFare: 0, categories: [] }).newPrice === 0, "a fixed discount never goes below zero");
+assert(normalizeCare({ autoPromos: { firstRide: { on: false } } }).autoPromos.firstRide.audience === "new", "older saved automatic promotions get an audience");
 console.log("rider care ok");

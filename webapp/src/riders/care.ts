@@ -51,10 +51,19 @@ export type PromoTicket = {
   editedBy?: string;
   editedAt?: string;
 };
+export type AutoAudience = "all" | "new" | "inactive" | "top" | "loyal";
+export const AUTO_AUDIENCES: { id: AutoAudience; label: string }[] = [
+  { id: "all", label: "All riders" },
+  { id: "new", label: "New riders" },
+  { id: "inactive", label: "Inactive riders" },
+  { id: "top", label: "Top riders" },
+  { id: "loyal", label: "Loyal riders" },
+];
+type AutoBase = { on: boolean; percent: number; maxPerRide: number; rides: number; audience: AutoAudience; categories: string[] };
 export type AutoPromos = {
-  firstRide: { on: boolean; percent: number; maxPerRide: number; rides: number };
-  birthday: { on: boolean; percent: number; maxPerRide: number; rides: number };
-  winBack: { on: boolean; percent: number; afterDays: number; maxPerRide: number; rides: number };
+  firstRide: AutoBase;
+  birthday: AutoBase;
+  winBack: AutoBase & { afterDays: number };
 };
 export type BanEntry = { value: string; riderId: string; reason: string; by: string; at: string };
 export type LostItem = { id: string; item: string; bookingId: string; status: "reported" | "driver contacted" | "returned"; at: string; by: string };
@@ -94,9 +103,9 @@ export function emptyRiderCare(): RiderCare {
       { id: "P-SEED-2", code: "THANKYOU20", title: "Thank you for riding", kind: "percent", value: 20, rides: 10, maxPerRide: 40, minFare: 80, validFrom: "2026-09-15T00:00:00.000Z", validTo: "2026-11-30T23:00:00.000Z", country: "SE", zones: [], categories: ["economy", "comfort"], budget: 30000, riderIds: ["R0010", "R0020", "R0030", "R0040", "R0050", "R0060", "R0070", "R0080"], group: "Top riders", createdBy: "lena", createdAt: "2026-09-15T08:00:00.000Z", status: "active", image: "comfort" },
     ],
     autoPromos: {
-      firstRide: { on: true, percent: 50, maxPerRide: 100, rides: 1 },
-      birthday: { on: false, percent: 20, maxPerRide: 60, rides: 1 },
-      winBack: { on: true, percent: 25, afterDays: 30, maxPerRide: 60, rides: 3 },
+      firstRide: { on: true, percent: 50, maxPerRide: 100, rides: 1, audience: "new", categories: [] },
+      birthday: { on: false, percent: 20, maxPerRide: 60, rides: 1, audience: "all", categories: [] },
+      winBack: { on: true, percent: 25, afterDays: 30, maxPerRide: 60, rides: 3, audience: "inactive", categories: [] },
     },
     bans: { phones: [], cards: [] },
     lostFound: {},
@@ -317,6 +326,15 @@ export function editPromotion(care: RiderCare, id: string, edit: PromoEdit, by: 
 
 export function setAutoPromos(care: RiderCare, auto: AutoPromos): RiderCare {
   return bump(care, { autoPromos: auto });
+}
+
+/** What a promotion does to one category's price: the old price, the new price, or nothing. */
+export function promoPrice(price: number, categoryId: string, promo: { kind: PromoKind; value: number; maxPerRide: number; minFare: number; categories: readonly string[] }): { applies: boolean; discount: number; newPrice: number } {
+  const covered = !promo.categories.length || promo.categories.includes(categoryId);
+  if (!covered || price <= 0 || price < promo.minFare) return { applies: false, discount: 0, newPrice: price };
+  const discount = promo.kind === "percent" ? Math.min(promo.maxPerRide, (price * promo.value) / 100) : Math.min(promo.value, price);
+  const rounded = Math.round(discount * 100) / 100;
+  return { applies: rounded > 0, discount: rounded, newPrice: Math.round((price - rounded) * 100) / 100 };
 }
 
 /** How many rides of a promotion this rider already used. */

@@ -350,15 +350,42 @@
 .ra-where-main { flex: 1; display: flex; align-items: center; gap: 7px; padding: 6px 8px; font-size: 13px; font-weight: 600; color: #1d252c; }
 .ra-where-main svg { color: #215277; }
 .ra-later { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 12px; background: #fff; border: .8px solid #e7ebee; font-size: 10px; font-weight: 600; color: #1d252c; }
-.ra-promo { display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 7px; border-radius: 18px; background: #fff; border: .8px solid #e7ebee; box-shadow: 0 6px 16px rgba(0, 0, 0, .055); color: #5c656c; }
-.ra-promo-thumb { flex: none; width: 54px; height: 46px; border-radius: 13px; display: grid; place-items: center; align-content: center; color: #fff; background: linear-gradient(135deg, #215277, #2a78d6 60%, #0e9aa7); background-size: cover; background-position: center; position: relative; overflow: hidden; }
-.ra-promo-thumb.photo::before { content: ""; position: absolute; inset: 0; background: rgba(17, 22, 27, .45); }
-.ra-promo-thumb b, .ra-promo-thumb small { position: relative; }
-.ra-promo-thumb b { font-size: 15px; font-weight: 700; line-height: 1; }
-.ra-promo-thumb small { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
-.ra-promo-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.ra-promo-text strong { font-size: 11.5px; font-weight: 700; color: #1d252c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ra-promo-text span { font-size: 9px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ra-switch { display: inline-flex; padding: 3px; border-radius: 11px; background: #f1f2f3; gap: 2px; margin-bottom: 6px; }
+.ra-switch button { height: 28px; padding: 0 12px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-size: 12px; font-weight: 700; color: var(--dash-ink-2); cursor: pointer; }
+.ra-switch button.active { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(17, 22, 20, .14); }
+/* The promotion is a small tab attached to the top edge of the sheet. */
+.ra-sheet { overflow: visible; }
+.ra-promo-tab {
+  position: absolute; left: 22px; right: 22px; top: -38px; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 6px 10px 14px 6px;
+  border-radius: 16px 16px 0 0; color: #fff; background: linear-gradient(135deg, #215277, #2a78d6 60%, #0e9aa7); box-shadow: 0 -6px 18px rgba(33, 82, 119, .25);
+}
+.ra-promo-icon { flex: none; width: 26px; height: 26px; border-radius: 9px; display: grid; place-items: center; background: rgba(255, 255, 255, .2); background-size: cover; background-position: center; position: relative; overflow: hidden; }
+.ra-promo-icon.photo::before { content: ""; position: absolute; inset: 0; background: rgba(17, 22, 27, .35); }
+.ra-promo-icon svg { position: relative; }
+.ra-promo-text { flex: 1; min-width: 0; display: grid; gap: 0; }
+.ra-promo-text strong { font-size: 10.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ra-promo-text span { font-size: 8.5px; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ra-sheet > .ra-grabber { position: relative; z-index: 2; }
+
+.ra-ride { position: absolute; inset: 0; padding: 40px 14px 14px; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 8px; background: #fff; }
+.ra-route { display: grid; gap: 6px; padding: 10px 12px; border-radius: 16px; background: #f7f9f9; border: .8px solid #e8edef; font-size: 10.5px; font-weight: 600; color: #1d252c; }
+.ra-route span { display: flex; align-items: center; gap: 6px; }
+.ra-route .dot { width: 8px; height: 8px; border-radius: 50%; background: #0fa85b; display: inline-block; }
+.ra-route svg { color: #e31e37; }
+.ra-ride-banner { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; color: #215277; background: linear-gradient(90deg, #e6f0f8, #e3f6f7); }
+.ra-cats { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; align-content: start; overflow: hidden; }
+.ra-cats li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 10px; border-radius: 14px; border: .8px solid #e7ebee; }
+.ra-cats li.on { border-color: #215277; box-shadow: 0 0 0 1px #215277 inset; background: #f6f9fc; }
+.ra-cat-car { width: 34px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: #f3f6fb; color: #215277; }
+.ra-cat-name { display: grid; min-width: 0; }
+.ra-cat-name b { font-size: 11px; color: #1d252c; }
+.ra-cat-name small { display: inline-flex; align-items: center; gap: 3px; font-size: 8.5px; color: #5c656c; }
+.ra-cat-price { display: grid; justify-items: end; line-height: 1.15; }
+.ra-cat-price s { font-size: 8.5px; color: #8a9399; }
+.ra-cat-price b { font-size: 11.5px; color: #1d252c; }
+.ra-cat-price b.deal { color: #0fa85b; }
+.ra-choose { padding: 11px; border-radius: 16px; background: #215277; color: #fff; text-align: center; font-size: 12px; font-weight: 600; }
+
 .ra-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px 4px; border-radius: 26px; background: #fff; border: .8px solid #e7ebee; box-shadow: 0 10px 28px rgba(0, 0, 0, .12); }
 .ra-nav span { display: grid; justify-items: center; gap: 2px; font-size: 8.5px; font-weight: 600; color: #8a9399; }
 .ra-nav span.on { color: #215277; }

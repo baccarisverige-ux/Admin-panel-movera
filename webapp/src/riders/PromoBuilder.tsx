@@ -8,6 +8,7 @@ import { categoryName } from "./profile";
 import type { RiderRow, SegmentId } from "./segments";
 import { CURRENCY_SYMBOL, money, PromoTicketCard } from "./ui";
 import { CARD_IMAGES, RiderAppPreview, imageUrl } from "./RiderAppPreview";
+import { useCategoryPrices } from "./useCategoryPrices";
 
 const CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet", "child_seat"];
 const QUICK: { id: SegmentId; label: string }[] = [
@@ -56,6 +57,7 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
   const [group, setGroup] = useState(single ? "One rider" : preselected.length ? "Picked riders" : "");
   const [query, setQuery] = useState("");
   const [image, setImage] = useState("gradient");
+  const prices = useCategoryPrices(country);
 
   const draft: PromoDraft = {
     code: code.trim().toUpperCase(), title, kind, value, rides, maxPerRide: kind === "percent" ? maxPerRide : value, minFare,
@@ -97,7 +99,7 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
           <label className="field">Budget (optional)<NumberField label="Promotion budget" value={budget} unit={symbol} onChange={setBudget} /></label>
         </div>
         <fieldset className="rd-chips rd-pictures">
-          <legend>Picture on the rider app card</legend>
+          <legend>Picture on the promotion</legend>
           {CARD_IMAGES.map((item) => (
             <label key={item.id} className={image === item.id ? "rd-pic on" : "rd-pic"}>
               <input type="radio" name="promo-picture" aria-label={`Picture ${item.label}`} checked={image === item.id} onChange={() => setImage(item.id)} />
@@ -125,7 +127,7 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
       </div>
 
       <div className="rd-builder-side">
-        <RiderAppPreview promo={draft} />
+        <RiderAppPreview promo={draft} prices={prices.rows} zoneName={prices.zoneName} />
         <PromoTicketCard ticket={{ ...draft, status: "active" }} locale={market(country).locale} />
         <dl className="rd-cost">
           <div><dt>Riders</dt><dd>{picked.size}</dd></div>

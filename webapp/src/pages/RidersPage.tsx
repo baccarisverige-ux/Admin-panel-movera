@@ -27,9 +27,11 @@ import { can } from "../auth/permissions";
 import { AccountChip, Avatar, ContactActions } from "../fleet/ui";
 import { market, zoneById } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
-import { CARE_KEY, REPLY_TEMPLATES, editPromotion, messageGroup, promoResults, promoUsed, saveFilter, setAutoPromos, setPromotionOn, stopPromotion, type AutoPromos, type PromoEdit, type RiderCare } from "../riders/care";
+import { AUTO_AUDIENCES, CARE_KEY, REPLY_TEMPLATES, type AutoAudience, editPromotion, messageGroup, promoResults, promoUsed, saveFilter, setAutoPromos, setPromotionOn, stopPromotion, type AutoPromos, type PromoEdit, type RiderCare } from "../riders/care";
 import { PromoBuilder } from "../riders/PromoBuilder";
 import { RiderAppPreview } from "../riders/RiderAppPreview";
+import { useCategoryPrices } from "../riders/useCategoryPrices";
+import { categoryName } from "../riders/profile";
 import { PERIODS, SEGMENTS, SORTS, insights, matches, ridersCsv, segmentCounts, sortRows, type Period, type RiderRow, type SegmentId, type SortId } from "../riders/segments";
 import { LiveChip, PromoTicketCard, RiderBadges, Stars, money } from "../riders/ui";
 import { useRidersData } from "../riders/useRidersData";
@@ -288,6 +290,7 @@ function GroupMessage({ care, rows, agentId, now, onClose, onSent }: { care: Rid
 function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuilder, onNotice, now }: { care: RiderCare; rows: RiderRow[]; country: "SE" | "FR" | "TN"; agentId: string | null; canEdit: boolean; builder: string[] | null; onBuilder: (ids: string[] | null) => void; onNotice: (text: string) => void; now: number }) {
   const [editing, setEditing] = useState<{ id: string; edit: PromoEdit } | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const prices = useCategoryPrices(country);
   const byId = useMemo(() => new Map(rows.map((row) => [row.rider.id, row])), [rows]);
   const tickets = care.promotions.filter((ticket) => ticket.country === country);
   const locale = market(country).locale;
@@ -346,7 +349,7 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
                         </div>
                       </div>
                     ) : null}
-                    {previewId === ticket.id || draft ? <RiderAppPreview promo={draft ? { ...ticket, ...draft, maxPerRide: ticket.kind === "percent" ? draft.maxPerRide : draft.value } : ticket} off={ticket.status !== "active"} /> : null}
+                    {previewId === ticket.id || draft ? <RiderAppPreview promo={draft ? { ...ticket, ...draft, maxPerRide: ticket.kind === "percent" ? draft.maxPerRide : draft.value } : ticket} prices={prices.rows} zoneName={prices.zoneName} off={ticket.status !== "active"} /> : null}
                   </div>
                   <div className="rd-promo-stats">
                     <div><span>Riders</span><b>{results.reached}</b><small>{ticket.group}</small></div>
@@ -372,8 +375,12 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
 }
 
 /** Keyed on the saved settings, so the form shows them once they load or after a save. */
+const PROMO_CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet", "child_seat"];
+
 function AutoPromosCard({ care, country, canEdit, onNotice }: { care: RiderCare; country: "SE" | "FR" | "TN"; canEdit: boolean; onNotice: (text: string) => void }) {
   const [auto, setAuto] = useState<AutoPromos>(care.autoPromos);
+  const [preview, setPreview] = useState<keyof AutoPromos | null>(null);
+  const prices = useCategoryPrices(country);
   return (
         <section className="dash-card" aria-labelledby="auto-title">
           <div className="card-head">
@@ -394,7 +401,24 @@ function AutoPromosCard({ care, country, canEdit, onNotice }: { care: RiderCare;
                   <label className="field">Max per ride<NumberField label={`${label} max per ride`} value={auto[key].maxPerRide} unit={{ SE: "kr", FR: "€", TN: "DT" }[country]} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], maxPerRide: value } })} /></label>
                   <label className="field">For how many rides<NumberField label={`${label} rides`} value={auto[key].rides} unit="rides" max={20} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], rides: Math.max(1, Math.round(value)) } })} /></label>
                   {key === "winBack" ? <label className="field">After no ride for<NumberField label="Come back after days" value={auto.winBack.afterDays} unit="days" disabled={!canEdit} onChange={(value) => setAuto({ ...auto, winBack: { ...auto.winBack, afterDays: Math.round(value) } })} /></label> : null}
+                  <label className="field">Who gets it
+                    <select aria-label={`${label} audience`} value={auto[key].audience} disabled={!canEdit} onChange={(event) => setAuto({ ...auto, [key]: { ...auto[key], audience: event.target.value as AutoAudience } })}>
+                      {AUTO_AUDIENCES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                    </select>
+                  </label>
                 </div>
+                <fieldset className="rd-chips">
+                  <legend>Categories <small>(none = all)</small></legend>
+                  {PROMO_CATEGORIES.map((id) => (
+                    <label key={id} className={auto[key].categories.includes(id) ? "check-chip on" : "check-chip"}>
+                      <input type="checkbox" aria-label={`${label} ${categoryName(id)}`} disabled={!canEdit} checked={auto[key].categories.includes(id)} onChange={() => setAuto({ ...auto, [key]: { ...auto[key], categories: auto[key].categories.includes(id) ? auto[key].categories.filter((item) => item !== id) : [...auto[key].categories, id] } })} />{categoryName(id)}
+                    </label>
+                  ))}
+                </fieldset>
+                <button data-command="admin.ui.quickAction" type="button" className="dash-btn small ghost" aria-pressed={preview === key} onClick={() => setPreview(preview === key ? null : key)}>{preview === key ? "Hide app preview" : "See in rider app"}</button>
+                {preview === key ? (
+                  <RiderAppPreview promo={{ title: label, kind: "percent", value: auto[key].percent, rides: auto[key].rides, maxPerRide: auto[key].maxPerRide, minFare: 0, country, categories: auto[key].categories }} prices={prices.rows} zoneName={prices.zoneName} off={!auto[key].on} />
+                ) : null}
               </div>
             ))}
           </div>
