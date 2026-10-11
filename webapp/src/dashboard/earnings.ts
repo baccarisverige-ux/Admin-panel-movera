@@ -43,9 +43,9 @@ const MODEL: Record<MarketId, { peakTrips: number; fareMinor: number; airportFar
 };
 
 /** Share of trips by local hour (Mon–Thu shape; weekends lift the late evening). */
-const HOURLY = [0.22, 0.14, 0.09, 0.07, 0.08, 0.18, 0.42, 0.78, 0.92, 0.66, 0.52, 0.55, 0.6, 0.56, 0.54, 0.62, 0.8, 0.96, 1, 0.84, 0.66, 0.56, 0.48, 0.34];
-const WEEKDAY = [0.92, 0.94, 0.97, 1.02, 1.14, 1.08, 0.86];
-const NIGHT_LIFT = [1, 1, 1, 1, 1.3, 1.55, 1.2];
+export const HOURLY = [0.22, 0.14, 0.09, 0.07, 0.08, 0.18, 0.42, 0.78, 0.92, 0.66, 0.52, 0.55, 0.6, 0.56, 0.54, 0.62, 0.8, 0.96, 1, 0.84, 0.66, 0.56, 0.48, 0.34];
+export const WEEKDAY = [0.92, 0.94, 0.97, 1.02, 1.14, 1.08, 0.86];
+export const NIGHT_LIFT = [1, 1, 1, 1, 1.3, 1.55, 1.2];
 
 const CATEGORY_SHARE: [string, string, number][] = [
   ["economy", "Movera", 0.46],
