@@ -39,6 +39,7 @@ export type LiveTrip = {
   tripId: string;
   phase: "to_pickup" | "on_trip";
   rider: string;
+  riderId: string | null;
   riderPhone: string;
   pickup: Stop;
   dropoff: Stop;
@@ -94,6 +95,7 @@ export function liveTrip(
   const tripId = trip?.id ?? `T-${driver.id}`;
   const rider = trip?.name ?? records.riders[seed % Math.max(1, records.riders.length)]?.name ?? "Rider";
   const riderPhone = trip?.phone ?? "";
+  const riderId = (trip ? records.riders.find((row) => row.phone === trip.phone)?.id : records.riders[seed % Math.max(1, records.riders.length)]?.id) ?? null;
   const phase = driver.state === "pickup" ? "to_pickup" : "on_trip";
   const pickup: Stop = { label: zone?.kind === "airport" ? `${zoneName}, arrivals` : address(id, seed, zoneName), at: driver.route.pickup };
   const dropSeed = (seed >>> 5) % STREETS[id].length === seed % STREETS[id].length ? (seed >>> 5) + 3 : seed >>> 5;
@@ -168,6 +170,7 @@ export function liveTrip(
     tripId,
     phase,
     rider,
+    riderId,
     riderPhone,
     pickup,
     dropoff,

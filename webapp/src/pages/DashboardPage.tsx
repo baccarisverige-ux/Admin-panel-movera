@@ -31,6 +31,9 @@ import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { DriversMap, STATE_COLOR } from "../dashboard/DriversMap";
 import { liveTrip } from "../dashboard/liveTrip";
+import { AssignControls, LiveRiders } from "../dashboard/LiveRiders";
+import { candidatesFor, rideRequests, riderCounts, type RideRequest } from "../dashboard/riders";
+import { CATEGORIES } from "../domain/contract";
 import { driverOps, emptyDriverOpsBook, type DriverOpsBook } from "../drivers/ops";
 import { statusLabel } from "../domain/labels";
 import { driverPerformance } from "../fleet/performance";
@@ -172,6 +175,18 @@ export function DashboardPage() {
     [drivers.data, vehicles.data, trips.data, incidents.data, tick],
   );
   const liveCounts = countStates(live);
+  const [showRequests, setShowRequests] = useState(true);
+  const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null);
+  const [liveNotice, setLiveNotice] = useState("");
+  const allowedCategories = (driverId: string) => {
+    const record = (drivers.data ?? []).find((row) => row.id === driverId);
+    if (!record) return [];
+    const ops = driverOps(driverStore.value, { id: record.id, name: record.name, fleetId: record.fleetId, status: record.status, kind: record.kind });
+    return CATEGORIES.filter((category) => ops.categories[category.id]).map((category) => category.id);
+  };
+  const requests = useMemo(() => rideRequests(trips.data ?? [], riders.data ?? []), [trips.data, riders.data]);
+  const riderStats = riderCounts(requests, live, riders.data ?? []);
+  const candidatesOf = (request: RideRequest) => candidatesFor(request, live, allowedCategories);
 
   const shift = demoShift(now, api.demo);
   const rides = useMemo(() => scheduledRides(reservations.data ?? [], drivers.data ?? [], now, shift), [reservations.data, drivers.data, now, shift]);
@@ -351,9 +366,23 @@ export function DashboardPage() {
                 </button>
               );
             })}
+            <button
+              data-command="admin.ui.mapLayer"
+              type="button"
+              aria-pressed={showRequests}
+              className={showRequests ? "state-chip" : "state-chip off"}
+              onClick={() => setShowRequests((value) => !value)}
+            >
+              <i style={{ background: "#d55181" }} />Riders waiting<strong>{requests.length}</strong>
+            </button>
           </div>
+          {liveNotice ? <p className="fd-notice" role="status">{liveNotice}</p> : null}
           <DriversMap
             drivers={live}
+            requests={requests}
+            showRequests={showRequests}
+            focusRequest={focusRequest}
+            renderAssign={can(role, "trips.intervene") ? (request) => <AssignControls request={request} candidates={candidatesOf(request)} onDone={setLiveNotice} /> : undefined}
             market={market}
             zones={scope.zones}
             hidden={hidden}
@@ -375,6 +404,7 @@ export function DashboardPage() {
                 onlineHours: today.onlineHours,
                 acceptancePct: ops.ratings.acceptancePct,
                 cancellationPct: ops.ratings.cancellationPct,
+                categories: CATEGORIES.filter((category) => ops.categories[category.id]).map((category) => category.label),
               };
             }}
           />
@@ -396,6 +426,15 @@ export function DashboardPage() {
           </ul>
         </section>
       </div>
+
+      <LiveRiders
+        counts={riderStats}
+        requests={requests}
+        candidatesOf={candidatesOf}
+        onLocate={(id) => setFocusRequest({ id, nonce: Date.now() })}
+        canAssign={can(role, "trips.intervene")}
+        onAssigned={setLiveNotice}
+      />
 
       <div className="dash-row">
         <section className="dash-card rides-card" aria-labelledby="rides-title">

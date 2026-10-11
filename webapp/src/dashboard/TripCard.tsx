@@ -21,7 +21,7 @@ export function TripCard({ trip, locale, timeZone, routeShown, onToggleRoute, ro
   return (
     <section className="trip-card" aria-label="Current trip">
       <div className="trip-card-head">
-        <span className={toPickup ? "trip-phase pickup" : "trip-phase onboard"}>{toPickup ? "Heading to pickup" : "Rider on board"}</span>
+        <span className={toPickup ? "trip-phase pickup" : "trip-phase onboard"}>{toPickup ? `Going to pickup ${trip.rider}` : `Going to drop-off with ${trip.rider}`}</span>
         <span className="trip-eta"><Clock size={14} aria-hidden="true" />{trip.etaMin} min to {toPickup ? "pickup" : "drop-off"}</span>
       </div>
       <div className="trip-progress" role="progressbar" aria-label={toPickup ? "Way to pickup" : "Trip progress"} aria-valuenow={trip.progressPct} aria-valuemin={0} aria-valuemax={100}>
@@ -32,8 +32,8 @@ export function TripCard({ trip, locale, timeZone, routeShown, onToggleRoute, ro
         <li className="stop-b"><span aria-hidden="true">B</span><div><small>Drop-off</small><strong>{trip.dropoff.label}</strong></div></li>
       </ol>
       <dl className="trip-facts">
-        <div><dt><User size={13} aria-hidden="true" />Rider</dt><dd>{trip.rider}</dd></div>
-        <div><dt><Route size={13} aria-hidden="true" />Distance</dt><dd>{trip.distanceKm} km · {trip.category}</dd></div>
+        <div><dt><User size={13} aria-hidden="true" />Rider</dt><dd>{trip.riderId ? <Link to={`/riders/${trip.riderId}`}>{trip.rider}</Link> : trip.rider}</dd></div>
+        <div><dt><Route size={13} aria-hidden="true" />Category · distance</dt><dd><span className="cat-chip ride">{trip.category}</span> {trip.distanceKm} km</dd></div>
         <div><dt><CreditCard size={13} aria-hidden="true" />Fare</dt><dd>{trip.fare} · {trip.payment}</dd></div>
         <div><dt><Clock size={13} aria-hidden="true" />Started</dt><dd>{time.format(trip.startedAtMs)} · {trip.tripId}</dd></div>
       </dl>

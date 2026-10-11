@@ -26,6 +26,7 @@ import {
   vehicleOps,
   type DriverOpsBook,
 } from "../drivers/ops";
+import { CATEGORIES as CATEGORY_INFO } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
 import { countHealth, docHealth } from "../fleet/documents";
 import { driverPerformance, performanceWarning } from "../fleet/performance";
@@ -286,6 +287,43 @@ export function DriverDetailPage() {
       <Tabs tabs={TABS} activeId={tab} onChange={selectTab} />
       <div className="fd-panel">
         <TabPanel id="overview" activeId={tab}>
+          <section className="fd-box fd-cats" aria-labelledby="cats-title">
+            <div className="fd-section-head">
+              <div>
+                <h3 id="cats-title">Categories this driver can drive</h3>
+                <p>Switch each category on or off. Ride offers only come in for categories that are on{car ? "" : ", and a vehicle must be linked"}.</p>
+              </div>
+            </div>
+            <div className="cat-grid">
+              {CATEGORIES.map((category) => {
+                const enabled = ops.categories[category];
+                const info = CATEGORY_INFO.find((item) => item.id === category);
+                const fits = !car ? false : category === "xl" ? car.seats >= 6 : category === "electric" ? car.fuel === "electric" : category === "premium" ? car.year >= 2020 : true;
+                return (
+                  <CommandButton
+                    command="admin.driver.category"
+                    key={category}
+                    className={enabled ? "cat-toggle on" : "cat-toggle"}
+                    type="button"
+                    targetId={driver.id}
+                    confirmTarget={false}
+                    scope={driver.zoneId}
+                    before={enabled ? "enabled" : "disabled"}
+                    after={enabled ? "disabled" : "enabled"}
+                    expectedSliceRev={store.value.draftRev}
+                    sliceKey="driverOps"
+                    value={setDriverCategory(store.value, driverSeed, category, !enabled, agent?.id ?? "")}
+                    aria-label={`${info?.label ?? category}: ${enabled ? "on, turn off" : "off, turn on"}`}
+                    onDone={() => setNotice(`${info?.label ?? category} ${enabled ? "turned off" : "turned on"} for ${driver.name}.`)}
+                  >
+                    <span className="cat-name">{info?.label ?? category}</span>
+                    <span className="cat-switch" aria-hidden="true"><i /></span>
+                    <small>{info?.seats ?? 4} seats{fits ? "" : " · vehicle does not fit"}</small>
+                  </CommandButton>
+                );
+              })}
+            </div>
+          </section>
           {current ? (
             <div className="fd-current">
               <h3>Current trip</h3>
@@ -495,31 +533,7 @@ export function DriverDetailPage() {
               </div>
             );
           })}
-          <h3>Ride categories</h3>
-          <div className="fd-action-row">
-            {CATEGORIES.map((category) => {
-              const enabled = ops.categories[category];
-              return (
-                <CommandButton
-                  command="admin.driver.category"
-                  key={category}
-                  className={enabled ? "dash-btn small" : "dash-btn small ghost"}
-                  type="button"
-                  targetId={driver.id}
-                  confirmTarget={false}
-                  scope={driver.zoneId}
-                  before={enabled ? "enabled" : "disabled"}
-                  after={enabled ? "disabled" : "enabled"}
-                  expectedSliceRev={store.value.draftRev}
-                  sliceKey="driverOps"
-                  value={setDriverCategory(store.value, driverSeed, category, !enabled, agent?.id ?? "")}
-                  onDone={() => setNotice(`${category} ${enabled ? "turned off" : "turned on"}.`)}
-                >
-                  {category}: {enabled ? "on" : "off"}
-                </CommandButton>
-              );
-            })}
-          </div>
+          <p className="fd-sub">Which categories this driver may drive is set on the Overview tab.</p>
         </TabPanel>
 
         <TabPanel id="messages" activeId={tab}>

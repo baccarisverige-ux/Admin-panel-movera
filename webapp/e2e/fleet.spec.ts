@@ -112,7 +112,7 @@ test("a driver on a trip shows the trip, route, next pickup and waybill on the m
   const panel = page.getByRole("dialog", { name: "Driver Sara Wallin" });
   await expect(panel).toBeVisible();
   const trip = panel.getByRole("region", { name: "Current trip" });
-  await expect(trip).toContainText("Rider on board");
+  await expect(trip).toContainText("Going to drop-off with");
   await expect(trip).toContainText("Pickup");
   await expect(trip).toContainText("Drop-off");
   await expect(trip).toContainText("Next pickup");
@@ -134,8 +134,45 @@ test("the driver profile shows the current trip with a link to its route", async
   await signInAs(page);
   await page.goto("/drivers/D0002");
   const trip = page.getByRole("region", { name: "Current trip" });
-  await expect(trip).toContainText("Heading to pickup");
+  await expect(trip).toContainText("Going to pickup");
   await trip.getByRole("link", { name: "See route on map" }).click();
   await expect(page).toHaveURL(/focus=D0002/);
   await expect(page.getByRole("dialog", { name: "Driver Sara Nyström" }).getByRole("region", { name: "Current trip" })).toBeVisible();
+});
+
+test("riders waiting for a driver can be sent to the nearest driver with the radar", async ({ page }) => {
+  await signInAs(page);
+  await page.goto("/?country=SE");
+  const list = page.getByRole("list", { name: "Riders looking for a driver" });
+  await expect(list.locator("li").first()).toBeVisible();
+  const row = list.locator("li").filter({ has: page.getByRole("button", { name: "Driver radar", disabled: false }) }).first();
+  const rider = (await row.locator(".request-who strong").innerText()).trim();
+  await row.getByRole("button", { name: "Driver radar" }).click();
+  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText(new RegExp(`${rider}'s ride offered to .+ \\(MV-SE-\\d{4}\\)`))).toBeVisible();
+  await expect(list).toContainText("Offered to D");
+});
+
+test("a waiting rider opens on the map with assign actions and a link to the rider", async ({ page }) => {
+  await signInAs(page);
+  await page.goto("/?country=SE");
+  const first = page.getByRole("list", { name: "Riders looking for a driver" }).locator("li").first();
+  await first.getByRole("button", { name: /on the map$/ }).click();
+  const panel = page.getByRole("dialog", { name: /^Rider / });
+  await expect(panel).toContainText("Looking for a driver");
+  await expect(panel.getByRole("button", { name: "Assign" })).toBeVisible();
+  await panel.getByRole("link").first().click();
+  await expect(page).toHaveURL(/\/riders\/R\d{4}/);
+});
+
+test("admins choose which categories a driver can drive", async ({ page }) => {
+  await signInAs(page);
+  await page.goto("/drivers/D0002");
+  const premium = page.getByRole("button", { name: /^Premium: off/ });
+  await premium.click();
+  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Premium turned on for Sara Nyström.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Premium: on/ })).toBeVisible();
+  await page.goto("/drivers");
+  await expect(page.locator("tbody tr").filter({ hasText: "MV-SE-0002" })).toContainText("Premium");
 });

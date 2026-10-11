@@ -17,6 +17,8 @@ export type DriverInfo = {
   onlineHours: number;
   acceptancePct: number;
   cancellationPct: number;
+  /** Categories the driver is allowed to drive. */
+  categories: string[];
 };
 
 type Props = {
@@ -86,6 +88,7 @@ export function DriverPanel({ driver, color, info, trip, locale, timeZone, route
             <div><dt>Acceptance · cancel</dt><dd>{info.acceptancePct}% · {info.cancellationPct}%</dd></div>
             <div><dt>Today</dt><dd>{info.todayTrips} trips · {info.todayNet}</dd></div>
             <div><dt>Online today</dt><dd>{info.onlineHours} h</dd></div>
+            <div className="wide"><dt>Can drive</dt><dd className="cat-list">{info.categories.length ? info.categories.map((label) => <span key={label} className="cat-chip">{label}</span>) : "No category allowed"}</dd></div>
           </>
         ) : null}
       </dl>

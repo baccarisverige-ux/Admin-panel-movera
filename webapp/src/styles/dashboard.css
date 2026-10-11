@@ -700,3 +700,32 @@
   .driver-panel { position: static; width: 100%; margin-top: 10px; box-shadow: none; border: 1px solid var(--line); }
   .waybill-rows div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+/* Live riders */
+.live-riders .card-head h3 { display: inline-flex; gap: 8px; align-items: center; }
+.rider-counters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.rider-counters span { padding: 8px 12px; border-radius: 12px; background: #f5f7f7; font-size: 12px; color: var(--dash-ink-2); }
+.rider-counters strong { color: var(--text); font-size: 15px; margin-right: 4px; }
+.rider-counters .warn { background: #fdf0f6; color: #9b2f5a; }
+.rider-counters .warn strong { color: #9b2f5a; }
+.rider-counters .danger { background: #fdecec; color: #9b2020; }
+.rider-counters .danger strong { color: #9b2020; }
+.request-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.request-list li { display: grid; grid-template-columns: minmax(170px, 1.4fr) auto auto minmax(150px, 1fr) auto minmax(320px, auto); gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.request-list li.long { background: linear-gradient(90deg, #fdf3f3, transparent 50%); }
+.request-who { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.request-who svg { color: #d55181; flex: none; }
+.request-who div { display: grid; }
+.request-who small { color: var(--muted); font-size: 11px; }
+.request-wait { display: inline-flex; gap: 4px; align-items: center; font-weight: 700; }
+.request-wait.long { color: #b42727; }
+.request-status { color: var(--dash-ink-2); font-size: 12px; }
+.assign { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.assign select { height: 32px; border-radius: 9px; max-width: 220px; font-size: 12px; }
+.assign .state-line { display: none; }
+.request-avatar { width: 48px; height: 48px; border-radius: 50%; background: #fdecf3; color: #d55181; display: grid; place-items: center; }
+@media (max-width: 1100px) {
+  .request-list li { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .request-status { grid-column: 1 / -1; }
+  .request-list .assign { grid-column: 1 / -1; }
+}

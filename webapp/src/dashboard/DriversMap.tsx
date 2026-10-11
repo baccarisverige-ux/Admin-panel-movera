@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router";
+import { Clock, UserRound, X } from "lucide-react";
 import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Market } from "../markets/markets";
@@ -6,6 +8,7 @@ import { zoneById } from "../markets/markets";
 import { DriverPanel, type DriverInfo } from "./DriverPanel";
 import { LIVE_STATES, type LiveDriver, type LiveState } from "./live";
 import type { LiveTrip } from "./liveTrip";
+import type { RideRequest } from "./riders";
 import { along, type LatLng } from "./route";
 import { WaybillDialog } from "./TripCard";
 
@@ -40,7 +43,24 @@ type Props = {
   focusId?: string | null;
   tripFor?: (driver: LiveDriver) => LiveTrip | null;
   infoFor?: (driverId: string) => DriverInfo | null;
+  /** Riders waiting for a driver, drawn as pink pins. */
+  requests?: RideRequest[];
+  showRequests?: boolean;
+  /** Open a waiting rider from outside the map (the Live riders list). */
+  focusRequest?: { id: string; nonce: number } | null;
+  renderAssign?: (request: RideRequest) => ReactNode;
 };
+
+function requestGeo(requests: readonly RideRequest[], shown: boolean) {
+  return {
+    type: "FeatureCollection" as const,
+    features: (shown ? requests : []).map((request) => ({
+      type: "Feature" as const,
+      properties: { id: request.tripId, long: request.waitingMin > 5 },
+      geometry: { type: "Point" as const, coordinates: [request.at[1], request.at[0]] },
+    })),
+  };
+}
 
 const ROUTE_COLOR = { done: "#9aa3a8", left: "#2a78d6", approach: "#d9730d", upcoming: "#2a78d6", next: "#6250d6" };
 
@@ -90,10 +110,11 @@ function geo(drivers: LiveDriver[], hidden: Set<LiveState>) {
 }
 
 /** Live drivers on a MapLibre map, coloured by state; click a driver for details. */
-export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null, tripFor, infoFor }: Props) {
+export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null, tripFor, infoFor, requests = [], showRequests = true, focusRequest = null, renderAssign }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const latest = useRef({ drivers, hidden });
+  const latest = useRef({ drivers, hidden, requests, showRequests });
+  const [requestId, setRequestId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -101,10 +122,11 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
   const [following, setFollowing] = useState(false);
   const [waybillOpen, setWaybillOpen] = useState(false);
   const pins = useRef<maplibregl.Marker[]>([]);
-  latest.current = { drivers, hidden };
+  latest.current = { drivers, hidden, requests, showRequests };
 
   function select(id: string | null) {
     setSelectedId(id);
+    if (id) setRequestId(null);
     setRouteShown(true);
     setFollowing(false);
     setWaybillOpen(false);
@@ -139,6 +161,28 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
       });
       routeLayer("route-solid", ["done", "left"], false, 5);
       routeLayer("route-dashed", ["approach", "upcoming", "next"], true, 4);
+      map.addSource("requests", { type: "geojson", data: requestGeo(latest.current.requests, latest.current.showRequests) });
+      map.addLayer({
+        id: "request-halo",
+        type: "circle",
+        source: "requests",
+        paint: { "circle-radius": 13, "circle-color": ["case", ["get", "long"], "#d03b3b", "#e87ba4"], "circle-opacity": 0.22 },
+      });
+      map.addLayer({
+        id: "requests",
+        type: "circle",
+        source: "requests",
+        paint: { "circle-radius": 6, "circle-color": ["case", ["get", "long"], "#d03b3b", "#d55181"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 },
+      });
+      map.on("click", "requests", (event) => {
+        const id = event.features?.[0]?.properties?.id;
+        if (typeof id === "string") {
+          setSelectedId(null);
+          setRequestId(id);
+        }
+      });
+      map.on("mouseenter", "requests", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "requests", () => { map.getCanvas().style.cursor = ""; });
       map.addLayer({
         id: "sos-halo",
         type: "circle",
@@ -179,17 +223,34 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
   }, [drivers, hidden, ready]);
 
   useEffect(() => {
+    const source = mapRef.current?.getSource("requests") as GeoJSONSource | undefined;
+    if (ready && source) source.setData(requestGeo(requests, showRequests));
+  }, [requests, showRequests, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !focusRequest) return;
+    const target = latest.current.requests.find((request) => request.tripId === focusRequest.id);
+    if (!target) return;
+    setSelectedId(null);
+    setRequestId(target.tripId);
+    map.flyTo({ center: [target.at[1], target.at[0]], zoom: 14.5, duration: 900 });
+    host.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusRequest, ready]);
+
+  const zoneKey = zones.join(",");
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const centers = zones.map((id) => zoneById(id)?.center).filter((center): center is [number, number] => Boolean(center));
-    if (!zones.length || !centers.length) {
+    const centers = (zoneKey ? zoneKey.split(",") : []).map((id) => zoneById(id)?.center).filter((center): center is [number, number] => Boolean(center));
+    if (!centers.length) {
       map.easeTo({ center: [market.center[1], market.center[0]], zoom: market.zoom, duration: 600 });
       return;
     }
     const bounds = new maplibregl.LngLatBounds();
     for (const [lat, lng] of centers) bounds.extend([lng, lat]);
     map.fitBounds(bounds, { padding: 70, maxZoom: 13.5, duration: 600 });
-  }, [zones, market, ready]);
+  }, [zoneKey, market, ready]);
 
   const focused = useRef<string | null>(null);
   useEffect(() => {
@@ -204,6 +265,7 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
   }, [focusId, ready, drivers]);
 
   const selected = drivers.find((driver) => driver.id === selectedId) ?? null;
+  const request = requestId ? requests.find((item) => item.tripId === requestId) ?? null : null;
   const trip = selected && tripFor ? tripFor(selected) : null;
   const info = selected && infoFor ? infoFor(selected.id) : null;
 
@@ -272,6 +334,26 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
           onClose={() => select(null)}
           withScope={withScope}
         />
+      ) : null}
+      {request && !selected ? (
+        <aside className="driver-panel" role="dialog" aria-label={`Rider ${request.rider}`}>
+          <div className="driver-panel-head">
+            <span className="request-avatar"><UserRound size={22} aria-hidden="true" /></span>
+            <div className="driver-panel-title">
+              {request.riderId ? <Link to={`/riders/${request.riderId}`}><strong>{request.rider}</strong></Link> : <strong>{request.rider}</strong>}
+              <small className="map-popup-code">{request.tripId}</small>
+              <span className="map-popup-state"><i style={{ background: request.waitingMin > 5 ? "#d03b3b" : "#d55181" }} />{request.status === "offered" ? `Offered to ${request.offeredTo}` : "Looking for a driver"}</span>
+            </div>
+            <button data-command="admin.ui.mapClose" type="button" className="map-popup-close" aria-label="Close" onClick={() => setRequestId(null)}><X size={14} /></button>
+          </div>
+          <dl className="driver-panel-facts">
+            <div><dt>Pickup zone</dt><dd>{request.zoneName}</dd></div>
+            <div><dt>Category</dt><dd>{request.categoryLabel}</dd></div>
+            <div><dt>Waiting</dt><dd><Clock size={12} aria-hidden="true" /> {request.waitingMin} min</dd></div>
+            <div><dt>Trip</dt><dd><Link to={withScope(`/trips/${request.tripId}`)}>{request.tripId}</Link></dd></div>
+          </dl>
+          {renderAssign ? renderAssign(request) : null}
+        </aside>
       ) : null}
       {waybillOpen && trip ? <WaybillDialog waybill={trip.waybill} onClose={() => setWaybillOpen(false)} /> : null}
     </div>

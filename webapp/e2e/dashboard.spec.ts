@@ -18,7 +18,7 @@ test("country first, then zones, then period drive the dashboard", async ({ page
   const allZones = await page.getByTestId("gross-bookings").innerText();
 
   await page.getByRole("button", { name: /Zones:/ }).click();
-  await page.getByText("La Défense").click();
+  await page.getByRole("group", { name: "Zones in France" }).getByText("La Défense").click();
   await expect(page).toHaveURL(/scope=FR-LD/);
   await expect(page.getByRole("button", { name: "Zones: La Défense" })).toBeVisible();
   await expect(page.getByTestId("gross-bookings")).not.toHaveText(allZones);
