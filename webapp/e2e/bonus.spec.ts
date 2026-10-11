@@ -94,6 +94,8 @@ test("an area bonus drawn on the map: a place with a distance and a circle", asy
   await page.goto("/drivers?view=bonuses");
   await page.getByRole("button", { name: /New area bonus/ }).click();
   await page.getByLabel("Bonus name").fill("Station rush");
+  await page.getByLabel("Message to drivers").fill("Trains arrive every 10 min. Wait at the taxi lane, exit 3.");
+  await expect(page.getByLabel("Driver app preview").getByLabel("Message on the map")).toHaveText("Trains arrive every 10 min. Wait at the taxi lane, exit 3.");
   await expect(page.getByRole("alert")).toHaveText("Draw at least one area on the map.");
   await page.getByRole("button", { name: /Around a place/ }).click();
   await page.getByLabel("Bonus place").selectOption("Stockholm Central Station");
@@ -137,6 +139,11 @@ test("an area bonus drawn on the map: a place with a distance and a circle", asy
   const item = page.getByRole("list", { name: "Driver bonuses" }).getByRole("listitem").filter({ hasText: "Station rush" });
   await expect(item).toContainText("Area bonus");
   await expect(item).toContainText("Stockholm Central Station");
+  await expect(item).toContainText("Wait at the taxi lane, exit 3.");
+  await item.getByRole("button", { name: "See in driver app" }).click();
+  await expect(item.getByLabel("Message on the map")).toContainText("exit 3");
+  await item.getByRole("tab", { name: "Bonus details" }).click();
+  await expect(item.getByLabel("Message from Movera")).toContainText("exit 3");
 });
 
 test("switch a bonus off and on, change it, end it", async ({ page }) => {

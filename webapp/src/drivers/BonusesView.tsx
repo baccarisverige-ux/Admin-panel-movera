@@ -115,6 +115,7 @@ export function BonusesView({ country, drivers, fleets, agentId, canEdit }: { co
                       </span>
                       <b>{bonus.name}</b>
                       <span className="db-item-line">{rewardLine(bonus, money)}</span>
+                      {bonus.note ? <span className="db-item-note">“{bonus.note}”</span> : null}
                       <small>{timeLine(bonus)} · {bonus.from}{bonus.until ? ` – ${bonus.until}` : " onwards"}{bonus.kind === "area" ? ` · ${bonus.areas.map((area) => area.name).join(", ")}` : bonus.zones.length ? ` · ${bonus.zones.length} zones` : " · all zones"}</small>
                     </div>
                     <div className="db-item-actions">

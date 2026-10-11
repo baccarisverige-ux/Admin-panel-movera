@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Car, ChevronRight, Clock, Flame, Info, MapPin } from "lucide-react";
+import { Car, ChevronRight, Clock, Flame, Info, MapPin, MessageSquare } from "lucide-react";
 import { maxPerDriver, ruleLines, rewardLine, timeLine, type DriverBonus } from "./bonus";
 
 /** How the bonus looks in the driver app: the map with the glowing area, and the bonus card with progress. */
@@ -13,7 +13,7 @@ export function DriverAppPreview({ bonus, money, categoryName, done = 1 }: { bon
   const all = bonus.areas.flatMap((area) => area.ring);
   const lats = all.map(([lat]) => lat);
   const lngs = all.map(([, lng]) => lng);
-  const box = { w: 260, h: 300 };
+  const box = { w: 242, h: 476 };
   let path: string[] = [];
   let car = { x: box.w / 2, y: box.h / 2 + 30 };
   if (all.length) {
@@ -24,7 +24,7 @@ export function DriverAppPreview({ bonus, money, categoryName, done = 1 }: { bon
     const scaleX = Math.cos((((south + north) / 2) * Math.PI) / 180);
     const w = Math.max((east - west) * scaleX, 1e-6);
     const h = Math.max(north - south, 1e-6);
-    const k = Math.min((box.w * 0.62) / w, (box.h * 0.5) / h);
+    const k = Math.min((box.w * 0.62) / w, (box.h * 0.32) / h);
     const ox = (box.w - w * k) / 2;
     const oy = (box.h - h * k) / 2 - 20;
     const x = (lng: number) => ox + (lng - west) * scaleX * k;
@@ -64,6 +64,7 @@ export function DriverAppPreview({ bonus, money, categoryName, done = 1 }: { bon
               <Car x={car.x - 7} y={car.y - 7} width={14} height={14} color="#fff" />
             </svg>
             {bonus.kind === "area" && bonus.areas[0] ? <span className="dp-map-tag"><Flame size={11} aria-hidden="true" /> {bonus.areas[0].name}</span> : null}
+            {bonus.note.trim() ? <span className="dp-map-note" aria-label="Message on the map"><MessageSquare size={11} aria-hidden="true" /> {bonus.note}</span> : null}
             <div className="dp-card" aria-label="Bonus card">
               <span className="dp-card-icon"><Flame size={16} aria-hidden="true" /></span>
               <span className="dp-card-text">
@@ -87,6 +88,7 @@ export function DriverAppPreview({ bonus, money, categoryName, done = 1 }: { bon
             <span className="dp-card-icon big"><Flame size={20} aria-hidden="true" /></span>
             <b>{bonus.name || "Bonus"}</b>
             <p className="dp-reward">{rewardLine(bonus, money)}</p>
+            {bonus.note.trim() ? <p className="dp-note" aria-label="Message from Movera"><MessageSquare size={12} aria-hidden="true" /> {bonus.note}</p> : null}
             <p><Clock size={12} aria-hidden="true" /> {timeLine(bonus)}</p>
             {bonus.kind === "area" ? <p><MapPin size={12} aria-hidden="true" /> {bonus.areas.map((area) => area.name).join(", ") || "Draw an area"}</p> : null}
             {most !== null ? <p className="dp-most">You can earn up to {money(most)}</p> : null}

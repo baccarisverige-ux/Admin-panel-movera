@@ -36,6 +36,8 @@ export type BonusRules = {
 export type DriverBonus = {
   id: string;
   name: string;
+  /** A short message from the admin, shown to drivers on the bonus card and on the map. */
+  note: string;
   kind: BonusKind;
   country: MarketId;
   /** Zones where rides count, for ride bonuses. Empty means the whole country. */
@@ -102,6 +104,7 @@ export function newBonus(kind: BonusKind, country: MarketId, by: string, now: nu
   return {
     id: "",
     name: kind === "area" ? "Area bonus" : "Morning rush",
+    note: "",
     kind,
     country,
     zones: [],
@@ -154,6 +157,7 @@ export function emptyBonusBook(): BonusBook {
         ...arlanda,
         id: "B-SEED-2",
         name: "Arlanda evening",
+        note: "Many flights land 17–20. Wait at Terminal 5, door 4.",
         areas: [{ id: "A1", name: "Arlanda terminals", ring: circle(59.649, 17.929, 2.5) }],
         areaCounts: "pickup",
         reward: { ...arlanda.reward, type: "per_ride", amount: 40, rides: 3 },
@@ -258,6 +262,7 @@ function ring(points: [number, number][]) {
 
 export function validateBonus(bonus: DriverBonus): string | null {
   if (!bonus.name.trim()) return "Give the bonus a name drivers see.";
+  if (bonus.note.length > 140) return "Keep the message to drivers under 140 characters.";
   const { reward } = bonus;
   if (reward.type === "target") {
     if (!(reward.rides >= 1 && reward.rides <= 50)) return "The number of rides must be between 1 and 50.";

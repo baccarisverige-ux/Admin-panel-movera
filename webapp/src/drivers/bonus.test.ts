@@ -124,6 +124,7 @@ assert(inAudience({ ...rush, audience: "picked", driverIds: ["D1"] }, driver) &&
 
 // Validation and saving.
 assert(validateBonus(rush) === null, "the default bonus is valid");
+assert(validateBonus({ ...rush, note: "x".repeat(141) })?.includes("140 characters") && validateBonus({ ...rush, note: "Wait at door 4" }) === null, "message to drivers up to 140 characters");
 assert(validateBonus({ ...rush, start: "9:5" }) === "Times look like 07:00.", "time format");
 assert(validateBonus({ ...rush, start: "08:00", end: "08:00" })?.includes("cannot be the same"), "empty window");
 assert(validateBonus({ ...rush, days: [] }) === "Pick at least one day.", "days");

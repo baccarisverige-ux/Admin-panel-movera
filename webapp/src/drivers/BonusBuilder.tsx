@@ -118,6 +118,10 @@ export function BonusBuilder({ country, book, agentId, canEdit, drivers, fleets,
             </button>
           </div>
           <label className="field">Name drivers see<input aria-label="Bonus name" value={bonus.name} maxLength={40} onChange={(event) => set({ name: event.target.value })} placeholder="Morning rush" /></label>
+          <label className="field">Message to drivers <small>(optional, shown in the app and on the map)</small>
+            <textarea aria-label="Message to drivers" rows={2} maxLength={140} value={bonus.note} onChange={(event) => set({ note: event.target.value })} placeholder={bonus.kind === "area" ? "Concert ends at 22:00. Wait at the north exit." : "Busy morning. Stay online near the station."} />
+            <small className="fine">{bonus.note.length} / 140</small>
+          </label>
         </Section>
 
         <Section n={2} title="Reward" icon={<Trophy size={15} />}>
