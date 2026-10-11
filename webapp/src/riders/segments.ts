@@ -1,4 +1,4 @@
-import { complaintOf, driverReports, promoUsed, threadOf, unpaidMinor, waitingMinutes, walletMinor, type CareMessage, type PromoTicket, type RiderCare } from "./care.ts";
+import { complaintOf, driverReports, promoUsed, randomRiders, threadOf, unpaidMinor, waitingMinutes, walletMinor, type CareMessage, type PromoTicket, type RiderCare } from "./care.ts";
 import { hash, riderBookings, riderProfile, type Booking, type RiderProfile, type RiderRecord } from "./profile.ts";
 
 /** One row per rider for the list, plus the categories each rider belongs to. */
@@ -186,4 +186,24 @@ export function ridersCsv(rows: readonly RiderRow[], money: (row: RiderRow, mino
     new Date(row.profile.joinedAt).toISOString().slice(0, 10),
   ].map(escape).join(","));
   return [head.join(","), ...lines].join("\n");
+}
+
+export type AudienceKind = "new" | "top" | "loyal" | "inactive" | "all" | "random" | "newest";
+
+export const AUDIENCE_KINDS: { id: AudienceKind; label: string; count?: boolean }[] = [
+  { id: "new", label: "New riders" },
+  { id: "top", label: "Top riders" },
+  { id: "loyal", label: "Loyal riders" },
+  { id: "inactive", label: "Inactive riders" },
+  { id: "all", label: "Everyone" },
+  { id: "random", label: "Random riders", count: true },
+  { id: "newest", label: "Newest riders", count: true },
+];
+
+/** Riders for a group, never blocked accounts. Random and newest take the number given. */
+export function pickAudience(rows: readonly RiderRow[], kind: AudienceKind, count: number, seed: number): RiderRow[] {
+  const open = rows.filter((row) => !row.segments.has("blocked"));
+  if (kind === "random") return randomRiders(open.map((row) => ({ ...row, id: row.rider.id })), count, seed);
+  if (kind === "newest") return [...open].sort((a, b) => b.profile.joinedAt - a.profile.joinedAt).slice(0, Math.max(0, Math.round(count)));
+  return open.filter((row) => row.segments.has(kind));
 }

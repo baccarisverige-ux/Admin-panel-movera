@@ -26,6 +26,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^1.52.0",
     "maplibre-gl": "^5.15.0",
+    "qrcode-generator": "^2.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.89.0",

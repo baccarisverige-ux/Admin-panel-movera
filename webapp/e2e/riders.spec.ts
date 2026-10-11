@@ -150,11 +150,13 @@ test("existing promotions switch off and on, and their discount, max per ride an
   await page.reload();
   await expect(page.getByRole("list", { name: "Promotions" }).getByLabel("Promotion THANKYOU20")).toContainText("25% off your next 6 rides · max 60 kr per ride");
 
+  await page.getByRole("tab", { name: /Automatic/ }).click();
   await page.getByLabel("Come back rides").fill("5");
   await page.getByRole("button", { name: "Save automatic promotions" }).click();
   await confirm(page);
   await expect(page.getByText("Automatic promotions saved.")).toBeVisible();
   await page.reload();
+  await page.getByRole("tab", { name: /Automatic/ }).click();
   await expect(page.getByLabel("Come back rides")).toHaveValue("5");
 });
 
@@ -171,12 +173,85 @@ test("the promotion shows on the rider app home sheet and as old and new prices 
   await expect(cats.getByRole("listitem").filter({ hasText: "Premium" }).locator("s")).toHaveCount(0);
   await expect(page.getByText("30% off applied on 1 category")).toBeVisible();
 
+  await page.getByRole("button", { name: "Close promotion" }).click();
+  await page.getByRole("tab", { name: /Automatic/ }).click();
   await page.getByLabel("Come back audience").selectOption("top");
   await page.getByLabel("Come back Comfort").check();
   await page.getByRole("button", { name: "Save automatic promotions" }).click();
   await page.locator(".modal.open").last().getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByText("Automatic promotions saved.")).toBeVisible();
   await page.reload();
+  await page.getByRole("tab", { name: /Automatic/ }).click();
   await expect(page.getByLabel("Come back audience")).toHaveValue("top");
   await expect(page.getByLabel("Come back Comfort")).toBeChecked();
+});
+
+test("a code anyone can use, sent by push, app message, popup and email, with a flyer", async ({ page }) => {
+  test.setTimeout(60_000);
+  await session(page);
+  await page.goto("/riders?view=promotions");
+  await page.getByRole("button", { name: "New promotion" }).last().click();
+  await page.getByLabel("Promotion code").fill("CITY25");
+  await page.getByLabel("Promotion title").fill("City week");
+
+  const modes = page.getByRole("radiogroup", { name: "Who gets it" });
+  await modes.getByRole("radio", { name: /Random riders/ }).click();
+  await page.getByLabel("How many riders").fill("15");
+  await expect(page.getByText("Who gets it · 15 selected")).toBeVisible();
+  await modes.getByRole("radio", { name: /Newest riders/ }).click();
+  await expect(page.getByText("Who gets it · 15 selected")).toBeVisible();
+  await modes.getByRole("radio", { name: /Anyone with the code/ }).click();
+  await page.getByLabel("Code uses").fill("300");
+  await expect(page.locator(".rd-cost")).toContainText("Can use it300");
+  await page.getByRole("button", { name: "Give promotion" }).click();
+  await confirm(page);
+  await expect(page.getByText("Promotion CITY25 ready: up to 300 riders can use the code.")).toBeVisible();
+
+  const share = page.getByRole("dialog", { name: "Send and share CITY25" });
+  await expect(share).toBeVisible();
+  await share.getByLabel("Send to").selectOption("newest");
+  await share.getByLabel("Number of riders").fill("12");
+  await share.getByText("Popup in the app", { exact: true }).click();
+  await share.getByText("Email", { exact: true }).click();
+  await share.getByLabel("Email addresses").fill("anna@mail.com, omar@mail.com, wrong");
+  await expect(share).toContainText("2 valid · 1 not valid: wrong");
+  await expect(share.getByLabel("Popup in the rider app")).toContainText("CITY25");
+  await share.getByRole("button", { name: "Send to 14" }).click();
+  await confirm(page);
+  await expect(page.getByText(/CITY25 sent to 14 by push notification, message in the app, popup in the app, email/)).toBeVisible();
+
+  const card = page.getByRole("list", { name: "Promotions" }).getByRole("listitem").filter({ hasText: "CITY25" });
+  await expect(card).toContainText("Popup on");
+  await expect(card).toContainText("Sent 1 time · 14 people");
+  await expect(card).toContainText("Code can be used by300");
+  await page.reload();
+  await expect(page.getByRole("list", { name: "Promotions" }).getByRole("listitem").filter({ hasText: "CITY25" })).toContainText("Sent 1 time");
+
+  await page.getByRole("list", { name: "Promotions" }).getByRole("listitem").filter({ hasText: "CITY25" }).getByRole("button", { name: "Send and share" }).click();
+  await share.getByRole("tab", { name: "Flyer" }).click();
+  await expect(share.getByRole("img", { name: "Flyer for CITY25" })).toBeVisible();
+  const download = page.waitForEvent("download");
+  await share.getByRole("button", { name: "Download picture" }).click();
+  expect((await download).suggestedFilename()).toBe("movera-city25-flyer.svg");
+});
+
+test("automatic promotions have start and end days", async ({ page }) => {
+  await session(page);
+  await page.goto("/riders?view=promotions");
+  await page.getByRole("tab", { name: /Automatic/ }).click();
+  const birthday = page.locator(".rd-auto-card").filter({ hasText: "Birthday" });
+  await birthday.locator(".mini-switch b").click();
+  await expect(page.getByLabel("Birthday promotion on")).toBeChecked();
+  await expect(birthday.locator(".rd-auto-state")).toHaveText("Running now");
+  await page.getByLabel("Birthday starts").fill("2099-12-01");
+  await expect(birthday.locator(".rd-auto-state")).toHaveText("Starts later");
+  await page.getByLabel("Birthday ends").fill("2099-11-01");
+  await expect(page.getByRole("alert")).toHaveText("The end day must be after the start day.");
+  await page.getByLabel("Birthday ends").fill("2099-12-31");
+  await page.getByRole("button", { name: "Save automatic promotions" }).click();
+  await confirm(page);
+  await expect(page.getByText("Automatic promotions saved.")).toBeVisible();
+  await page.reload();
+  await page.getByRole("tab", { name: /Automatic/ }).click();
+  await expect(page.getByLabel("Birthday ends")).toHaveValue("2099-12-31");
 });

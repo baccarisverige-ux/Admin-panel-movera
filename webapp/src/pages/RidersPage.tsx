@@ -14,6 +14,7 @@ import {
   Plus,
   Radio,
   Search,
+  Send,
   ShieldOff,
   Sparkles,
   Ticket,
@@ -27,8 +28,9 @@ import { can } from "../auth/permissions";
 import { AccountChip, Avatar, ContactActions } from "../fleet/ui";
 import { market, zoneById } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
-import { AUTO_AUDIENCES, CARE_KEY, REPLY_TEMPLATES, type AutoAudience, editPromotion, messageGroup, promoResults, promoUsed, saveFilter, setAutoPromos, setPromotionOn, stopPromotion, type AutoPromos, type PromoEdit, type RiderCare } from "../riders/care";
+import { AUTO_AUDIENCES, CARE_KEY, REPLY_TEMPLATES, autoState, type AutoAudience, editPromotion, messageGroup, promoResults, promoUsed, saveFilter, setAutoPromos, setPromotionOn, stopPromotion, type AutoPromos, type PromoEdit, type RiderCare } from "../riders/care";
 import { PromoBuilder } from "../riders/PromoBuilder";
+import { PromoShare } from "../riders/PromoShare";
 import { RiderAppPreview } from "../riders/RiderAppPreview";
 import { useCategoryPrices } from "../riders/useCategoryPrices";
 import { categoryName } from "../riders/profile";
@@ -290,6 +292,11 @@ function GroupMessage({ care, rows, agentId, now, onClose, onSent }: { care: Rid
 function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuilder, onNotice, now }: { care: RiderCare; rows: RiderRow[]; country: "SE" | "FR" | "TN"; agentId: string | null; canEdit: boolean; builder: string[] | null; onBuilder: (ids: string[] | null) => void; onNotice: (text: string) => void; now: number }) {
   const [editing, setEditing] = useState<{ id: string; edit: PromoEdit } | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [chosenPart, setPart] = useState<"list" | "auto">("list");
+  // A new promotion always opens in the list part, whichever button started it.
+  const part = builder ? "list" : chosenPart;
+  const [sharingId, setSharingId] = useState<string | null>(null);
+  const sharing = care.promotions.find((ticket) => ticket.id === sharingId) ?? null;
   const prices = useCategoryPrices(country);
   const byId = useMemo(() => new Map(rows.map((row) => [row.rider.id, row])), [rows]);
   const tickets = care.promotions.filter((ticket) => ticket.country === country);
@@ -297,13 +304,18 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
   const date = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" });
   return (
     <div className="rd-promos">
+      <div className="dash-tabs small rd-promo-parts" role="tablist" aria-label="Promotion types">
+        <button data-command="admin.ui.quickAction" type="button" role="tab" aria-selected={part === "list"} className={part === "list" ? "active" : undefined} onClick={() => setPart("list")}><Ticket size={14} aria-hidden="true" /> Promotions and codes <b className="rd-count">{tickets.length}</b></button>
+        <button data-command="admin.ui.quickAction" type="button" role="tab" aria-selected={part === "auto"} className={part === "auto" ? "active" : undefined} onClick={() => { onBuilder(null); setPart("auto"); }}><Sparkles size={14} aria-hidden="true" /> Automatic <b className="rd-count">{Object.values(care.autoPromos).filter((item) => autoState(item, now) === "running").length} running</b></button>
+      </div>
+      {part === "auto" ? <AutoPromosCard key={JSON.stringify(care.autoPromos)} care={care} country={country} canEdit={canEdit} onNotice={onNotice} now={now} /> : <>
       {builder ? (
         <section className="dash-card">
-          <PromoBuilder country={country} care={care} agentId={agentId} canEdit={canEdit} rows={rows} preselected={builder} onClose={() => onBuilder(null)} onCreated={(text) => { onBuilder(null); onNotice(text); }} />
+          <PromoBuilder country={country} care={care} agentId={agentId} canEdit={canEdit} rows={rows} preselected={builder} onClose={() => onBuilder(null)} onCreated={(text, id) => { onBuilder(null); onNotice(text); if (id) setSharingId(id); }} />
         </section>
       ) : (
         <button data-command="admin.riders.promoCreate" type="button" className="rd-new-promo" disabled={!canEdit} onClick={() => onBuilder([])}>
-          <Plus size={18} aria-hidden="true" /> <span><b>New promotion</b><small>For one group: new, top, inactive, a zone or riders you pick</small></span>
+          <Plus size={18} aria-hidden="true" /> <span><b>New promotion</b><small>For riders you pick, random or newest riders, or a code anyone can use</small></span>
         </button>
       )}
 
@@ -335,6 +347,7 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
                         </CommandButton>
                         {draft ? null : <button data-command="admin.riders.promoEdit" type="button" className="dash-btn small ghost" disabled={!canEdit} onClick={() => setEditing({ id: ticket.id, edit: { value: ticket.value, maxPerRide: ticket.maxPerRide, rides: ticket.rides } })}>Edit</button>}
                         <button data-command="admin.ui.quickAction" type="button" className="dash-btn small ghost" aria-pressed={previewId === ticket.id} onClick={() => setPreviewId(previewId === ticket.id ? null : ticket.id)}>{previewId === ticket.id ? "Hide app preview" : "See in rider app"}</button>
+                        {on ? <button data-command="admin.riders.promoSend" type="button" className="dash-btn small" disabled={!canEdit} onClick={() => setSharingId(ticket.id)}><Send size={13} aria-hidden="true" /> Send and share</button> : null}
                       </div>
                     ) : null}
                     {draft ? (
@@ -349,14 +362,22 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
                         </div>
                       </div>
                     ) : null}
-                    {previewId === ticket.id || draft ? <RiderAppPreview promo={draft ? { ...ticket, ...draft, maxPerRide: ticket.kind === "percent" ? draft.maxPerRide : draft.value } : ticket} prices={prices.rows} zoneName={prices.zoneName} off={ticket.status !== "active"} /> : null}
+                    {previewId === ticket.id || draft ? <RiderAppPreview promo={draft ? { ...ticket, ...draft, maxPerRide: ticket.kind === "percent" ? draft.maxPerRide : draft.value } : ticket} prices={prices.rows} zoneName={prices.zoneName} off={ticket.status !== "active"} popup={ticket.popup} /> : null}
                   </div>
                   <div className="rd-promo-stats">
-                    <div><span>Riders</span><b>{results.reached}</b><small>{ticket.group}</small></div>
+                    {ticket.audience === "code"
+                      ? <div><span>Code can be used by</span><b>{ticket.maxUses ?? 0}</b><small>Anyone with the code</small></div>
+                      : <div><span>Riders</span><b>{results.reached}</b><small>{ticket.group}</small></div>}
                     <div><span>Used by</span><b>{results.usedBy}</b><small>{results.reached ? Math.round((results.usedBy / results.reached) * 100) : 0}%</small></div>
                     <div><span>Rides with promo</span><b>{results.ridesUsed}</b><small>+{results.ridesGained} extra rides</small></div>
                     <div><span>Cost so far</span><b>{money(results.cost * market(country).minorUnits, country, true)}</b><small>{ticket.budget ? `of ${money(ticket.budget * market(country).minorUnits, country, true)}` : "no budget"}</small></div>
                     {spent !== null ? <span className="rd-budget" aria-label={`${Math.round(spent)}% of budget used`}><i style={{ width: `${spent}%` }} /></span> : null}
+                    {ticket.sends?.length || ticket.popup ? (
+                      <p className="rd-sent-line">
+                        {ticket.popup ? <span className="rd-badge promo">Popup on</span> : null}
+                        {ticket.sends?.length ? <span>Sent {ticket.sends.length} time{ticket.sends.length === 1 ? "" : "s"} · {ticket.sends.reduce((sum, item) => sum + item.riders + item.emails, 0)} people</span> : null}
+                      </p>
+                    ) : null}
                     <p className="fine">Created {date.format(Date.parse(ticket.createdAt))} by {ticket.createdBy}{ticket.editedBy ? ` · changed by ${ticket.editedBy}` : ""} · {ticket.status === "stopped" ? "Stopped" : ticket.status === "paused" ? "Off: riders cannot use it now" : `Ends ${date.format(Date.parse(ticket.validTo))}`}</p>
                     {ticket.status !== "stopped" ? (
                       <CommandButton command="admin.riders.promoStop" className="dash-btn small ghost" targetId={ticket.code} confirmTarget={false} scope="all" before="active" after="stopped" expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={stopPromotion(care, ticket.id)} disabled={!canEdit} onDone={() => onNotice(`Promotion ${ticket.code} stopped.`)}>Stop promotion</CommandButton>
@@ -369,7 +390,8 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
         )}
       </section>
 
-      <AutoPromosCard key={JSON.stringify(care.autoPromos)} care={care} country={country} canEdit={canEdit} onNotice={onNotice} />
+      </>}
+      {sharing ? <PromoShare ticket={sharing} care={care} rows={rows} country={country} agentId={agentId} canEdit={canEdit} now={now} onClose={() => setSharingId(null)} onNotice={onNotice} /> : null}
     </div>
   );
 }
@@ -377,9 +399,12 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
 /** Keyed on the saved settings, so the form shows them once they load or after a save. */
 const PROMO_CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet", "child_seat"];
 
-function AutoPromosCard({ care, country, canEdit, onNotice }: { care: RiderCare; country: "SE" | "FR" | "TN"; canEdit: boolean; onNotice: (text: string) => void }) {
+const AUTO_STATE: Record<ReturnType<typeof autoState>, string> = { off: "Off", running: "Running now", waiting: "Starts later", ended: "Ended" };
+
+function AutoPromosCard({ care, country, canEdit, onNotice, now }: { care: RiderCare; country: "SE" | "FR" | "TN"; canEdit: boolean; onNotice: (text: string) => void; now: number }) {
   const [auto, setAuto] = useState<AutoPromos>(care.autoPromos);
   const [preview, setPreview] = useState<keyof AutoPromos | null>(null);
+  const saved = setAutoPromos(care, auto);
   const prices = useCategoryPrices(country);
   return (
         <section className="dash-card" aria-labelledby="auto-title">
@@ -390,11 +415,14 @@ function AutoPromosCard({ care, country, canEdit, onNotice }: { care: RiderCare;
           <div className="rd-auto">
             {([["firstRide", "First ride", "New riders get a discount on their first ride"], ["birthday", "Birthday", "A gift on the rider's birthday"], ["winBack", "Come back", "Riders with no ride for a while"]] as const).map(([key, label, hint]) => (
               <div key={key} className={auto[key].on ? "rd-auto-card on" : "rd-auto-card"}>
+                <div className="rd-auto-top">
                 <label className="mini-switch big">
                   <input type="checkbox" aria-label={`${label} promotion on`} checked={auto[key].on} disabled={!canEdit} onChange={(event) => setAuto({ ...auto, [key]: { ...auto[key], on: event.target.checked } })} />
                   <span aria-hidden="true"><i /></span>
                   <b>{label}</b>
                 </label>
+                <span className={`rd-auto-state ${autoState(auto[key], now)}`}>{AUTO_STATE[autoState(auto[key], now)]}</span>
+                </div>
                 <small>{hint}</small>
                 <div className="rd-form-grid">
                   <label className="field">Discount<NumberField label={`${label} discount`} value={auto[key].percent} unit="%" max={100} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], percent: value } })} /></label>
@@ -407,6 +435,11 @@ function AutoPromosCard({ care, country, canEdit, onNotice }: { care: RiderCare;
                     </select>
                   </label>
                 </div>
+                <fieldset className="rd-when">
+                  <legend>When it runs <small>(empty = always)</small></legend>
+                  <label className="field">Starts<input type="date" aria-label={`${label} starts`} value={auto[key].from} disabled={!canEdit} onChange={(event) => setAuto({ ...auto, [key]: { ...auto[key], from: event.target.value } })} /></label>
+                  <label className="field">Ends<input type="date" aria-label={`${label} ends`} value={auto[key].to} disabled={!canEdit} onChange={(event) => setAuto({ ...auto, [key]: { ...auto[key], to: event.target.value } })} /></label>
+                </fieldset>
                 <fieldset className="rd-chips">
                   <legend>Categories <small>(none = all)</small></legend>
                   {PROMO_CATEGORIES.map((id) => (
@@ -422,7 +455,8 @@ function AutoPromosCard({ care, country, canEdit, onNotice }: { care: RiderCare;
               </div>
             ))}
           </div>
-          <CommandButton command="admin.riders.autoPromo" className="dash-btn" targetId="auto-promotions" confirmTarget={false} scope="all" before={JSON.stringify(care.autoPromos)} after={JSON.stringify(auto)} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={setAutoPromos(care, auto)} disabled={!canEdit || JSON.stringify(auto) === JSON.stringify(care.autoPromos)} onDone={() => onNotice("Automatic promotions saved.")}>
+          {saved.error ? <p className="rd-form-error" role="alert">{saved.error}</p> : null}
+          <CommandButton command="admin.riders.autoPromo" className="dash-btn" targetId="auto-promotions" confirmTarget={false} scope="all" before={JSON.stringify(care.autoPromos)} after={JSON.stringify(auto)} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={saved.care} disabled={!canEdit || Boolean(saved.error) || JSON.stringify(auto) === JSON.stringify(care.autoPromos)} title={saved.error} onDone={() => onNotice("Automatic promotions saved.")}>
             Save automatic promotions
           </CommandButton>
         </section>

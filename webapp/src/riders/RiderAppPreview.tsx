@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CalendarClock, Car, ChevronRight, Clock, CreditCard, Gift, Map, MapPin, Search, UserRound, Users } from "lucide-react";
+import { CalendarClock, Car, ChevronRight, Clock, CreditCard, Gift, Map, MapPin, Search, UserRound, Users, X } from "lucide-react";
 import { formatMoney, market, type MarketId } from "../markets/markets";
 import { promoPrice, type PromoTicket } from "./care";
 import type { CategoryPrice } from "./useCategoryPrices";
@@ -20,7 +20,7 @@ export function imageUrl(id: string | undefined): string | null {
   return file ? `${import.meta.env.BASE_URL}rider-app/${file}` : null;
 }
 
-type Promo = Pick<PromoTicket, "title" | "kind" | "value" | "rides" | "maxPerRide" | "minFare" | "country" | "categories"> & { image?: string };
+type Promo = Pick<PromoTicket, "title" | "kind" | "value" | "rides" | "maxPerRide" | "minFare" | "country" | "categories"> & { image?: string; code?: string };
 
 export function promoSubtitle(promo: Promo): string {
   const symbol = CURRENCY_SYMBOL[promo.country as MarketId];
@@ -36,8 +36,9 @@ function money(value: number, country: MarketId): string {
  * The rider app with the promotion: on Home it is a small tab on top of the sheet;
  * on Choose ride every category it covers shows the old price crossed out and the new price.
  */
-export function RiderAppPreview({ promo, prices = [], zoneName = "", off = false }: { promo: Promo; prices?: CategoryPrice[]; zoneName?: string; off?: boolean }) {
-  const [screen, setScreen] = useState<"home" | "ride">("home");
+export function RiderAppPreview({ promo, prices = [], zoneName = "", off = false, popup = false }: { promo: Promo; prices?: CategoryPrice[]; zoneName?: string; off?: boolean; popup?: boolean }) {
+  const [picked, setScreen] = useState<"home" | "ride" | "popup">(popup ? "popup" : "home");
+  const screen = picked === "popup" && !popup ? "home" : picked;
   const country = promo.country as MarketId;
   const url = imageUrl(promo.image);
   const deal = promo.kind === "percent" ? `${promo.value}%` : `${promo.value} ${CURRENCY_SYMBOL[country]}`;
@@ -47,10 +48,28 @@ export function RiderAppPreview({ promo, prices = [], zoneName = "", off = false
       <div className="ra-switch" role="tablist" aria-label="Rider app screen">
         <button data-command="admin.ui.quickAction" type="button" role="tab" aria-selected={screen === "home"} className={screen === "home" ? "active" : undefined} onClick={() => setScreen("home")}>Home</button>
         <button data-command="admin.ui.quickAction" type="button" role="tab" aria-selected={screen === "ride"} className={screen === "ride" ? "active" : undefined} onClick={() => setScreen("ride")}>Choose ride</button>
+        {popup ? <button data-command="admin.ui.quickAction" type="button" role="tab" aria-selected={screen === "popup"} className={screen === "popup" ? "active" : undefined} onClick={() => setScreen("popup")}>Popup</button> : null}
       </div>
       <div className="ra-screen">
         <div className="ra-status"><span>9:41</span><span className="ra-notch" aria-hidden="true" /><span>5G</span></div>
-        {screen === "home" ? (
+        {screen === "popup" ? (
+          <>
+            <div className="ra-map dim" aria-hidden="true">
+              <i className="ra-road r1" /><i className="ra-road r2" /><i className="ra-road r3" /><i className="ra-road r4" />
+            </div>
+            <div className="ra-popup" role="group" aria-label="Popup in the rider app">
+              <span className="ra-popup-close" aria-hidden="true"><X size={12} /></span>
+              <div className={url ? "ra-popup-art photo" : "ra-popup-art"} style={url ? { backgroundImage: `url(${url})` } : undefined}>
+                <strong>{deal}</strong><span>off</span>
+              </div>
+              <b>{promo.title || "Movera offer"}</b>
+              <span>{promoSubtitle(promo)}</span>
+              {promo.code ? <em className="ra-popup-code">{promo.code}</em> : null}
+              <span className="ra-popup-btn">Use it now</span>
+              <small>Maybe later</small>
+            </div>
+          </>
+        ) : screen === "home" ? (
           <>
             <div className="ra-map" aria-hidden="true">
               <i className="ra-road r1" /><i className="ra-road r2" /><i className="ra-road r3" /><i className="ra-road r4" />
@@ -106,7 +125,7 @@ export function RiderAppPreview({ promo, prices = [], zoneName = "", off = false
           </div>
         )}
       </div>
-      <figcaption>{off ? "Promotion is off: riders do not see it." : screen === "home" ? "Home · sheet down, promotion on top" : `Choose ride · sample 8 km trip in ${zoneName}`}</figcaption>
+      <figcaption>{off ? "Promotion is off: riders do not see it." : screen === "popup" ? "Popup · shows once when the rider opens the app" : screen === "home" ? "Home · sheet down, promotion on top" : `Choose ride · sample 8 km trip in ${zoneName}`}</figcaption>
     </figure>
   );
 }

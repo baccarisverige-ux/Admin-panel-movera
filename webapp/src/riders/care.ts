@@ -50,7 +50,23 @@ export type PromoTicket = {
   image?: string;
   editedBy?: string;
   editedAt?: string;
+  /** "riders": given to the riders listed. "code": anyone who types the code in the app, up to maxUses riders. */
+  audience?: PromoAudience;
+  maxUses?: number | null;
+  /** Shown as a popup when riders open the app, until the promotion ends. */
+  popup?: boolean;
+  sends?: PromoSend[];
 };
+export type PromoAudience = "riders" | "code";
+export type SendChannel = "push" | "inapp" | "popup" | "sms" | "email";
+export const SEND_CHANNELS: { id: SendChannel; label: string; hint: string }[] = [
+  { id: "push", label: "Push notification", hint: "On the phone lock screen" },
+  { id: "inapp", label: "Message in the app", hint: "In the rider's messages" },
+  { id: "popup", label: "Popup in the app", hint: "Shows when the rider opens the app" },
+  { id: "sms", label: "SMS", hint: "Text message to the phone number" },
+  { id: "email", label: "Email", hint: "To the rider's email" },
+];
+export type PromoSend = { id: string; channels: SendChannel[]; riders: number; emails: number; subject: string; message: string; by: string; at: string };
 export type AutoAudience = "all" | "new" | "inactive" | "top" | "loyal";
 export const AUTO_AUDIENCES: { id: AutoAudience; label: string }[] = [
   { id: "all", label: "All riders" },
@@ -59,7 +75,8 @@ export const AUTO_AUDIENCES: { id: AutoAudience; label: string }[] = [
   { id: "top", label: "Top riders" },
   { id: "loyal", label: "Loyal riders" },
 ];
-type AutoBase = { on: boolean; percent: number; maxPerRide: number; rides: number; audience: AutoAudience; categories: string[] };
+/** from / to are days (2026-10-01). Empty means no start or no end. */
+type AutoBase = { on: boolean; percent: number; maxPerRide: number; rides: number; audience: AutoAudience; categories: string[]; from: string; to: string };
 export type AutoPromos = {
   firstRide: AutoBase;
   birthday: AutoBase;
@@ -103,9 +120,9 @@ export function emptyRiderCare(): RiderCare {
       { id: "P-SEED-2", code: "THANKYOU20", title: "Thank you for riding", kind: "percent", value: 20, rides: 10, maxPerRide: 40, minFare: 80, validFrom: "2026-09-15T00:00:00.000Z", validTo: "2026-11-30T23:00:00.000Z", country: "SE", zones: [], categories: ["economy", "comfort"], budget: 30000, riderIds: ["R0010", "R0020", "R0030", "R0040", "R0050", "R0060", "R0070", "R0080"], group: "Top riders", createdBy: "lena", createdAt: "2026-09-15T08:00:00.000Z", status: "active", image: "comfort" },
     ],
     autoPromos: {
-      firstRide: { on: true, percent: 50, maxPerRide: 100, rides: 1, audience: "new", categories: [] },
-      birthday: { on: false, percent: 20, maxPerRide: 60, rides: 1, audience: "all", categories: [] },
-      winBack: { on: true, percent: 25, afterDays: 30, maxPerRide: 60, rides: 3, audience: "inactive", categories: [] },
+      firstRide: { on: true, percent: 50, maxPerRide: 100, rides: 1, audience: "new", categories: [], from: "", to: "" },
+      birthday: { on: false, percent: 20, maxPerRide: 60, rides: 1, audience: "all", categories: [], from: "", to: "" },
+      winBack: { on: true, percent: 25, afterDays: 30, maxPerRide: 60, rides: 3, audience: "inactive", categories: [], from: "", to: "" },
     },
     bans: { phones: [], cards: [] },
     lostFound: {},
@@ -283,15 +300,22 @@ export function validatePromo(draft: PromoDraft): string | null {
   if (!(draft.rides >= 1 && draft.rides <= 100)) return "Number of rides must be between 1 and 100.";
   if (draft.kind === "percent" && !(draft.maxPerRide > 0)) return "Set the most a rider can save per ride.";
   if (!draft.validFrom || !draft.validTo || Date.parse(draft.validTo) <= Date.parse(draft.validFrom)) return "The end date must be after the start date.";
-  if (!draft.riderIds.length) return "Pick at least one rider.";
+  if (draft.audience === "code") {
+    if (!(draft.maxUses && draft.maxUses >= 1)) return "Set how many riders can use the code.";
+  } else if (!draft.riderIds.length) return "Pick at least one rider.";
   if (draft.budget !== null && draft.budget > 0 && maxCost(draft) > draft.budget) return `The most it can cost (${Math.round(maxCost(draft))}) is above the budget of ${draft.budget}.`;
   return null;
 }
 
 /** The most the promotion can cost if every rider uses every ride at the top discount. */
-export function maxCost(draft: Pick<PromoTicket, "kind" | "value" | "rides" | "maxPerRide" | "riderIds">): number {
+export function maxCost(draft: Pick<PromoTicket, "kind" | "value" | "rides" | "maxPerRide" | "riderIds" | "audience" | "maxUses">): number {
   const perRide = draft.kind === "percent" ? draft.maxPerRide : draft.value;
-  return draft.riderIds.length * draft.rides * perRide;
+  return promoReach(draft) * draft.rides * perRide;
+}
+
+/** How many riders the promotion can reach: the riders listed, or the code's limit. */
+export function promoReach(ticket: Pick<PromoTicket, "riderIds" | "audience" | "maxUses">): number {
+  return ticket.audience === "code" ? ticket.maxUses ?? 0 : ticket.riderIds.length;
 }
 
 export function createPromotion(care: RiderCare, draft: PromoDraft, by: string, now: number): { care: RiderCare; error?: string; ticket?: PromoTicket } {
@@ -324,8 +348,71 @@ export function editPromotion(care: RiderCare, id: string, edit: PromoEdit, by: 
   return { care: bump(care, { promotions: care.promotions.map((item) => (item.id === id ? { ...next, editedBy: by, editedAt: new Date(now).toISOString() } : item)) }) };
 }
 
-export function setAutoPromos(care: RiderCare, auto: AutoPromos): RiderCare {
-  return bump(care, { autoPromos: auto });
+export function setAutoPromos(care: RiderCare, auto: AutoPromos): { care: RiderCare; error?: string } {
+  for (const item of Object.values(auto)) if (item.from && item.to && item.to < item.from) return { care, error: "The end day must be after the start day." };
+  return { care: bump(care, { autoPromos: auto }) };
+}
+
+/** Whether an automatic promotion runs on this day. */
+export function autoState(item: Pick<AutoBase, "on" | "from" | "to">, now: number): "off" | "running" | "waiting" | "ended" {
+  if (!item.on) return "off";
+  const today = new Date(now).toISOString().slice(0, 10);
+  if (item.from && today < item.from) return "waiting";
+  if (item.to && today > item.to) return "ended";
+  return "running";
+}
+
+/** Riders picked at random (no blocked accounts). The same seed gives the same riders. */
+export function randomRiders<T extends { id: string }>(riders: readonly T[], count: number, seed: number): T[] {
+  return [...riders].sort((a, b) => hash(`${seed}:${a.id}`) - hash(`${seed}:${b.id}`)).slice(0, Math.max(0, Math.round(count)));
+}
+
+export function parseEmails(text: string): { valid: string[]; invalid: string[] } {
+  const parts = text.split(/[\s,;]+/).map((part) => part.trim()).filter(Boolean);
+  const valid = [...new Set(parts.filter((part) => /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(part)).map((part) => part.toLowerCase()))];
+  return { valid, invalid: parts.filter((part) => !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(part)) };
+}
+
+export function promoMessage(ticket: Pick<PromoTicket, "title" | "kind" | "value" | "rides" | "maxPerRide" | "code" | "validTo" | "country">, locale: string): string {
+  const symbol = { SE: "kr", FR: "€", TN: "DT" }[ticket.country];
+  const deal = ticket.kind === "percent" ? `${ticket.value}%` : `${ticket.value} ${symbol}`;
+  const until = ticket.validTo ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "long" }).format(Date.parse(ticket.validTo)) : "";
+  return `${ticket.title}: ${deal} off your next ${ticket.rides} ride${ticket.rides === 1 ? "" : "s"} with Movera. Use code ${ticket.code}${until ? ` before ${until}` : ""}.`;
+}
+
+/**
+ * Send the code by the chosen channels. In-app messages land in each rider's messages;
+ * a popup stays on until the promotion ends.
+ */
+export function sendPromotion(
+  care: RiderCare,
+  id: string,
+  send: { channels: SendChannel[]; riders: readonly RiderRecord[]; emails: readonly string[]; subject: string; message: string },
+  by: string,
+  now: number,
+): { care: RiderCare; error?: string } {
+  const ticket = care.promotions.find((item) => item.id === id);
+  if (!ticket || ticket.status !== "active") return { care, error: "Only an active promotion can be sent." };
+  if (!send.channels.length) return { care, error: "Pick at least one way to send it." };
+  if (!send.message.trim()) return { care, error: "Write the message." };
+  if (!send.message.includes(ticket.code)) return { care, error: `Put the code ${ticket.code} in the message.` };
+  const appChannels = send.channels.filter((channel) => channel !== "email");
+  if (appChannels.length && !send.riders.length) return { care, error: "Pick the riders to send it to." };
+  if (!send.riders.length && !send.emails.length) return { care, error: "Pick riders or add email addresses." };
+  if (send.emails.length && !send.channels.includes("email")) return { care, error: "Tick Email to send to the email addresses." };
+  if (send.channels.includes("email") && !send.subject.trim()) return { care, error: "Write the email subject." };
+  const entry: PromoSend = { id: `S-${ticket.id}-${(ticket.sends?.length ?? 0) + 1}`, channels: send.channels, riders: send.riders.length, emails: send.emails.length, subject: send.subject.trim(), message: send.message.trim(), by, at: new Date(now).toISOString() };
+  const messages = send.channels.includes("inapp") ? messageGroup(care, send.riders, send.message, by, now).messages : care.messages;
+  return {
+    care: bump(care, {
+      messages,
+      promotions: care.promotions.map((item) => (item.id === id ? { ...item, popup: item.popup || send.channels.includes("popup"), sends: [entry, ...(item.sends ?? [])] } : item)),
+    }),
+  };
+}
+
+export function setPopup(care: RiderCare, id: string, on: boolean): RiderCare {
+  return bump(care, { promotions: care.promotions.map((item) => (item.id === id ? { ...item, popup: on } : item)) });
 }
 
 /** What a promotion does to one category's price: the old price, the new price, or nothing. */

@@ -1,6 +1,6 @@
-import { addCredit, editPromotion, promoPrice, setPromotionOn, addLostItem, advanceLostItem, ban, createPromotion, decideRefund, emptyRiderCare, isBanned, markPaid, maxCost, merge, normalizeCare, promoResults, promoUsed, reply, requestRefund, saveFilter, threadOf, unpaidMinor, waitingMinutes, type PromoDraft } from "./care.ts";
+import { addCredit, validatePromo, autoState, parseEmails, promoMessage, promoReach, randomRiders, sendPromotion, setAutoPromos, setPopup, editPromotion, promoPrice, setPromotionOn, addLostItem, advanceLostItem, ban, createPromotion, decideRefund, emptyRiderCare, isBanned, markPaid, maxCost, merge, normalizeCare, promoResults, promoUsed, reply, requestRefund, saveFilter, threadOf, unpaidMinor, waitingMinutes, type PromoDraft } from "./care.ts";
 import { bookingCounts, joinedAt, riderBookings, riderCode, riderProfile, type RiderRecord } from "./profile.ts";
-import { buildRows, insights, matches, ridersCsv, segmentCounts, sortRows } from "./segments.ts";
+import { buildRows, pickAudience, insights, matches, ridersCsv, segmentCounts, sortRows } from "./segments.ts";
 
 const assert = (ok: unknown, message: string) => {
   if (!ok) throw new Error(message);
@@ -107,4 +107,34 @@ assert(!promoPrice(400, "premium", promo).applies, "categories outside the promo
 assert(!promoPrice(60, "economy", { ...promo, minFare: 80 }).applies, "below the minimum fare there is no discount");
 assert(promoPrice(40, "xl", { kind: "fixed", value: 50, maxPerRide: 50, minFare: 0, categories: [] }).newPrice === 0, "a fixed discount never goes below zero");
 assert(normalizeCare({ autoPromos: { firstRide: { on: false } } }).autoPromos.firstRide.audience === "new", "older saved automatic promotions get an audience");
+
+// Code promotions, random and newest riders, sending, automatic dates.
+const codeDraft: PromoDraft = { ...draft, code: "CITY25", audience: "code", maxUses: 200, riderIds: [], group: "Anyone with the code" };
+assert(validatePromo(codeDraft) === null && promoReach(codeDraft) === 200 && maxCost(codeDraft) === 200 * codeDraft.rides * codeDraft.maxPerRide, "a code promotion needs no rider list and costs by its limit");
+assert(validatePromo({ ...codeDraft, maxUses: 0 }), "a code promotion needs a limit");
+const codeMade = createPromotion(emptyRiderCare(), codeDraft, "nora", NOW);
+const codeTicket = codeMade.ticket!;
+const lucky = randomRiders(people, 10, 1);
+assert(lucky.length === 10 && new Set(lucky.map((rider) => rider.id)).size === 10, "ten different random riders");
+assert(JSON.stringify(randomRiders(people, 10, 1)) === JSON.stringify(lucky) && JSON.stringify(randomRiders(people, 10, 2)) !== JSON.stringify(lucky), "same seed, same riders; new seed, others");
+const audienceRows = buildRows(people, emptyRiderCare(), NOW, "month", new Set());
+const newest = pickAudience(audienceRows, "newest", 5, 1);
+assert(newest.length === 5 && newest.every((row, index) => index === 0 || row.profile.joinedAt <= newest[index - 1].profile.joinedAt), "newest riders come first");
+assert(pickAudience(audienceRows, "random", 300, 1).every((row) => !row.segments.has("blocked")), "blocked riders are never picked");
+const mails = parseEmails("anna@mail.com, ANNA@mail.com; omar@site.fr nope");
+assert(mails.valid.length === 2 && mails.invalid[0] === "nope", "emails are checked and kept once");
+const text = promoMessage(codeTicket, "sv-SE");
+assert(text.includes("CITY25"), "the message has the code");
+const sent = sendPromotion(codeMade.care, codeTicket.id, { channels: ["push", "inapp", "popup"], riders: people.slice(0, 3), emails: [], subject: "", message: text }, "nora", NOW);
+const sentTicket = sent.care.promotions.find((item) => item.id === codeTicket.id)!;
+assert(!sent.error && sentTicket.popup && sentTicket.sends?.[0].riders === 3, "sending is recorded and turns the popup on");
+assert(sent.care.messages.R0001.at(-1)?.text === text && sent.care.draftRev === codeMade.care.draftRev + 1, "app messages land in the rider's messages, one save");
+assert(sendPromotion(codeMade.care, codeTicket.id, { channels: ["email"], riders: [], emails: ["anna@mail.com"], subject: "", message: text }, "nora", NOW).error, "an email needs a subject");
+assert(!sendPromotion(codeMade.care, codeTicket.id, { channels: ["email"], riders: [], emails: ["anna@mail.com"], subject: "Gift", message: text }, "nora", NOW).error, "email addresses alone are fine");
+assert(sendPromotion(codeMade.care, codeTicket.id, { channels: ["sms"], riders: [], emails: [], subject: "", message: text }, "nora", NOW).error, "SMS needs riders");
+assert(sendPromotion(codeMade.care, codeTicket.id, { channels: ["push"], riders: people.slice(0, 1), emails: [], subject: "", message: "Hello" }, "nora", NOW).error, "the message must have the code");
+assert(!setPopup(sent.care, codeTicket.id, false).promotions.find((item) => item.id === codeTicket.id)!.popup, "popup can be turned off");
+const auto = emptyRiderCare().autoPromos;
+assert(autoState({ ...auto.birthday, on: true }, NOW) === "running" && autoState({ ...auto.firstRide, from: "2026-11-01" }, NOW) === "waiting" && autoState({ ...auto.firstRide, to: "2026-10-01" }, NOW) === "ended" && autoState(auto.birthday, NOW) === "off", "automatic promotions follow their days");
+assert(setAutoPromos(emptyRiderCare(), { ...auto, birthday: { ...auto.birthday, from: "2026-12-01", to: "2026-11-01" } }).error, "end day after start day");
 console.log("rider care ok");

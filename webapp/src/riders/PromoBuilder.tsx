@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { Crown, Search, Sparkles, Users, X } from "lucide-react";
+import { Crown, Dices, KeyRound, ListChecks, Search, Sparkles, UserPlus, Users, X } from "lucide-react";
 import { market, type MarketId } from "../markets/markets";
 import { NumberField } from "../pricing/NumberField";
 import { CommandButton } from "../ui/CommandButton";
-import { CARE_KEY, createPromotion, maxCost, validatePromo, type PromoDraft, type RiderCare } from "./care";
+import { CARE_KEY, createPromotion, maxCost, promoReach, validatePromo, type PromoDraft, type RiderCare } from "./care";
 import { categoryName } from "./profile";
-import type { RiderRow, SegmentId } from "./segments";
+import { pickAudience, type RiderRow, type SegmentId } from "./segments";
 import { CURRENCY_SYMBOL, money, PromoTicketCard } from "./ui";
 import { CARD_IMAGES, RiderAppPreview, imageUrl } from "./RiderAppPreview";
 import { useCategoryPrices } from "./useCategoryPrices";
@@ -19,6 +19,14 @@ const QUICK: { id: SegmentId; label: string }[] = [
   { id: "all", label: "Everyone" },
 ];
 
+type Mode = "pick" | "random" | "newest" | "code";
+const MODES: { id: Mode; label: string; hint: string; icon: typeof Users }[] = [
+  { id: "pick", label: "Riders I pick", hint: "A group or riders by name", icon: ListChecks },
+  { id: "random", label: "Random riders", hint: "Type how many", icon: Dices },
+  { id: "newest", label: "Newest riders", hint: "The last ones who joined", icon: UserPlus },
+  { id: "code", label: "Anyone with the code", hint: "Riders type it in the app", icon: KeyRound },
+];
+
 type Props = {
   country: MarketId;
   care: RiderCare;
@@ -28,7 +36,8 @@ type Props = {
   rows: RiderRow[];
   preselected?: string[];
   single?: boolean;
-  onCreated: (message: string) => void;
+  /** ticketId is given for a code promotion, so it can be sent right away. */
+  onCreated: (message: string, ticketId?: string) => void;
   onClose?: () => void;
 };
 
@@ -57,17 +66,34 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
   const [group, setGroup] = useState(single ? "One rider" : preselected.length ? "Picked riders" : "");
   const [query, setQuery] = useState("");
   const [image, setImage] = useState("gradient");
+  const [mode, setMode] = useState<Mode>("pick");
+  const [count, setCount] = useState(20);
+  const [seed, setSeed] = useState(1);
+  const [maxUses, setMaxUses] = useState(500);
   const prices = useCategoryPrices(country);
 
   const draft: PromoDraft = {
     code: code.trim().toUpperCase(), title, kind, value, rides, maxPerRide: kind === "percent" ? maxPerRide : value, minFare,
     validFrom: from ? new Date(`${from}T00:00:00`).toISOString() : "", validTo: to ? new Date(`${to}T23:59:00`).toISOString() : "",
-    country, zones, categories, budget: budget > 0 ? budget : null, riderIds: [...picked], group: group || "Picked riders", image,
+    country, zones, categories, budget: budget > 0 ? budget : null, image,
+    audience: mode === "code" ? "code" : "riders", maxUses: mode === "code" ? maxUses : null,
+    riderIds: mode === "code" ? [] : [...picked], group: mode === "code" ? "Anyone with the code" : group || "Picked riders",
   };
   const error = validatePromo(draft);
   const created = agentId ? createPromotion(care, draft, agentId, Date.now()) : { care, error: "Sign in again." };
   const shown = useMemo(() => rows.filter((row) => !query.trim() || `${row.rider.name} ${row.profile.code}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 80), [rows, query]);
   const toggle = <T,>(list: T[], item: T) => (list.includes(item) ? list.filter((value) => value !== item) : [...list, item]);
+
+  function pickMany(next: Mode, many: number, round: number) {
+    if (next !== "random" && next !== "newest") return;
+    setPicked(new Set(pickAudience(rows, next, many, round).map((row) => row.rider.id)));
+    setGroup(next === "random" ? `${many} random riders` : `${many} newest riders`);
+  }
+
+  function chooseMode(next: Mode) {
+    setMode(next);
+    pickMany(next, count, seed);
+  }
 
   function quickPick(id: SegmentId, label: string) {
     setPicked(new Set(rows.filter((row) => row.segments.has(id) && !row.segments.has("blocked")).map((row) => row.rider.id)));
@@ -130,25 +156,47 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
         <RiderAppPreview promo={draft} prices={prices.rows} zoneName={prices.zoneName} />
         <PromoTicketCard ticket={{ ...draft, status: "active" }} locale={market(country).locale} />
         <dl className="rd-cost">
-          <div><dt>Riders</dt><dd>{picked.size}</dd></div>
+          <div><dt>{mode === "code" ? "Can use it" : "Riders"}</dt><dd>{promoReach(draft)}</dd></div>
           <div><dt>Most it can cost</dt><dd>{money(Math.round(maxCost(draft) * market(country).minorUnits), country)}</dd></div>
           <div><dt>Budget</dt><dd>{budget > 0 ? money(budget * market(country).minorUnits, country) : "No limit"}</dd></div>
         </dl>
         {error ? <p className="rd-form-error" role="alert">{error}</p> : null}
-        <CommandButton command="admin.riders.promoCreate" className="dash-btn publish" targetId={draft.code || "promotion"} confirmTarget={false} scope="all" before="none" after={`${draft.code} for ${picked.size} riders`} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={created.care} disabled={!canEdit || Boolean(error) || Boolean(created.error)} title={error ?? created.error} onDone={() => onCreated(`Promotion ${draft.code} given to ${picked.size} rider${picked.size === 1 ? "" : "s"}.`)}>
+        <CommandButton command="admin.riders.promoCreate" className="dash-btn publish" targetId={draft.code || "promotion"} confirmTarget={false} scope="all" before="none" after={`${draft.code} for ${picked.size} riders`} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={created.care} disabled={!canEdit || Boolean(error) || Boolean(created.error)} title={error ?? created.error} onDone={() => onCreated(mode === "code" ? `Promotion ${draft.code} ready: up to ${maxUses} riders can use the code.` : `Promotion ${draft.code} given to ${picked.size} rider${picked.size === 1 ? "" : "s"}.`, mode === "code" ? created.ticket?.id : undefined)}>
           <Sparkles size={15} aria-hidden="true" /> Give promotion
         </CommandButton>
       </div>
 
       {!single ? (
         <div className="rd-audience">
-          <div className="rd-audience-head">
-            <h4><Users size={15} aria-hidden="true" /> Who gets it · {picked.size} selected</h4>
+          <h4><Users size={15} aria-hidden="true" /> Who gets it{mode === "code" ? "" : ` · ${picked.size} selected`}</h4>
+          <div className="rd-modes" role="radiogroup" aria-label="Who gets it">
+            {MODES.map((item) => (
+              <button data-command="admin.riders.select" key={item.id} type="button" role="radio" aria-checked={mode === item.id} className={mode === item.id ? "rd-mode on" : "rd-mode"} onClick={() => chooseMode(item.id)}>
+                <item.icon size={16} aria-hidden="true" />
+                <span><b>{item.label}</b><small>{item.hint}</small></span>
+              </button>
+            ))}
+          </div>
+          {mode === "pick" ? (
             <div className="rd-quick" role="group" aria-label="Quick groups">
               {QUICK.map((item) => <button data-command="admin.riders.select" key={item.id} type="button" className={group === item.label ? "check-chip on" : "check-chip"} onClick={() => quickPick(item.id, item.label)}>{item.label}</button>)}
               <button data-command="admin.riders.select" type="button" className="check-chip" onClick={() => { setPicked(new Set()); setGroup(""); }}>Clear</button>
             </div>
-          </div>
+          ) : null}
+          {mode === "random" || mode === "newest" ? (
+            <div className="rd-mode-row">
+              <label className="field">How many riders<NumberField label="How many riders" value={count} unit="riders" max={10000} onChange={(value) => { const next = Math.max(1, Math.round(value)); setCount(next); pickMany(mode, next, seed); }} /></label>
+              {mode === "random" ? <button data-command="admin.riders.select" type="button" className="dash-btn small ghost" onClick={() => { setSeed(seed + 1); pickMany(mode, count, seed + 1); }}><Dices size={13} aria-hidden="true" /> Pick others</button> : null}
+              <small className="fine">{mode === "random" ? "Picked by chance among riders who are not blocked." : "The riders who joined last."} You can still untick riders below.</small>
+            </div>
+          ) : null}
+          {mode === "code" ? (
+            <div className="rd-mode-row">
+              <label className="field">How many riders can use it<NumberField label="Code uses" value={maxUses} unit="riders" max={100000} onChange={(value) => setMaxUses(Math.max(1, Math.round(value)))} /></label>
+              <small className="fine">No list: riders type the code in the app (Account, then Vouchers). Each rider can use it once. Send it after: push, SMS, email, popup or a flyer.</small>
+            </div>
+          ) : null}
+          {mode === "code" ? null : <>
           <label className="rd-search small"><Search size={14} aria-hidden="true" /><input aria-label="Find riders for the promotion" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find by name or code" /></label>
           <ul className="rd-audience-list" aria-label="Riders for the promotion">
             {shown.map((row) => (
@@ -173,6 +221,7 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
             ))}
           </ul>
           {rows.length > shown.length ? <small className="fine">Showing {shown.length} of {rows.length}. Use a quick group or search to reach the rest.</small> : null}
+          </>}
         </div>
       ) : null}
     </div>
