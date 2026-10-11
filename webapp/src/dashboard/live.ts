@@ -1,5 +1,6 @@
 import type { DemoRecord } from "../api/seed.ts";
 import { zoneById } from "../markets/markets.ts";
+import { along, tripRoute, type TripRoute } from "./route.ts";
 
 export type LiveState = "free" | "pickup" | "trip" | "stale" | "sos";
 
@@ -23,6 +24,10 @@ export type LiveDriver = {
   vehicle: string | null;
   plate: string | null;
   tripId: string | null;
+  /** Current trip geometry for drivers heading to a pickup or carrying a rider. */
+  route: TripRoute | null;
+  /** How far along: the approach while heading to the pickup, the trip path once on board. */
+  progress: number;
 };
 
 function hash(text: string): number {
@@ -67,8 +72,13 @@ export function liveDrivers(
       const radius = spread * (0.25 + ((seed >>> 9) % 100) / 130);
       const moving = state === "pickup" || state === "trip";
       const drift = moving ? tick * 0.035 * (seed % 2 ? 1 : -1) : 0;
-      const lat = zone.center[0] + Math.sin(angle + drift) * radius;
-      const lng = zone.center[1] + (Math.cos(angle + drift) * radius) / Math.cos((zone.center[0] * Math.PI) / 180);
+      let lat = zone.center[0] + Math.sin(angle + drift) * radius;
+      let lng = zone.center[1] + (Math.cos(angle + drift) * radius) / Math.cos((zone.center[0] * Math.PI) / 180);
+      const withTrip = state === "pickup" || state === "trip" || state === "sos";
+      const route = withTrip ? tripRoute(zone.center, seed, zone.kind === "airport") : null;
+      // Drivers advance along their route a little every tick and start over when they arrive.
+      const progress = route ? (0.08 + (((seed >>> 11) % 60) / 100) + tick * (state === "pickup" ? 0.012 : 0.006)) % 0.92 : 0;
+      if (route) [lat, lng] = along(state === "pickup" ? route.approach : route.path, progress).point;
       const vehicle = vehicles.find((row) => row.driverId === driver.id);
       const trip = state === "trip" || state === "pickup" || state === "sos"
         ? trips.find((row) => row.driverId === driver.id && ACTIVE_TRIP.has(row.status)) ?? trips.find((row) => row.driverId === driver.id)
@@ -85,6 +95,8 @@ export function liveDrivers(
         vehicle: vehicle ? `${vehicle.make ?? ""} ${vehicle.model ?? ""}`.trim() || null : null,
         plate: vehicle?.plate ?? null,
         tripId: trip?.id ?? null,
+        route,
+        progress,
       };
     });
 }

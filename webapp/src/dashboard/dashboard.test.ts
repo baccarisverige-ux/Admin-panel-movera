@@ -68,3 +68,28 @@ test("live map and scheduled rides read the scoped records", () => {
   assert.ok(rides.every((ride, index) => index === 0 || rides[index - 1].pickupAt <= ride.pickupAt), "sorted by pickup");
   assert.ok(rides.some((ride) => ride.warning === "red"), "an unassigned ride inside the hour is flagged");
 });
+
+test("drivers on a trip move along their route and carry trip details and a waybill", async () => {
+  const { liveTrip } = await import("./liveTrip.ts");
+  const { lengthKm } = await import("./route.ts");
+  const seed = createSeed();
+  const rows = (list: typeof seed.drivers) => list.filter((row) => marketZoneIds("FR").includes(row.zoneId));
+  const live = liveDrivers(rows(seed.drivers), rows(seed.vehicles), rows(seed.trips), rows(seed.incidents), 3);
+  const moving = live.filter((row) => row.state === "trip" || row.state === "pickup");
+  assert.ok(moving.length > 0, "some French drivers are on a trip");
+  for (const driver of moving) {
+    assert.ok(driver.route && driver.route.path.length > 10, "a trip has a path");
+    assert.ok(lengthKm(driver.route!.path) > 0.5, "the path has a real length");
+    const trip = liveTrip(driver, { trips: seed.trips, reservations: seed.reservations, vehicles: seed.vehicles, fleets: seed.fleets, riders: seed.riders }, NOW);
+    assert.ok(trip, "a moving driver has a current trip");
+    assert.equal(trip!.phase, driver.state === "pickup" ? "to_pickup" : "on_trip");
+    assert.ok(trip!.etaMin >= 1);
+    assert.match(trip!.waybill.number, /^WB-FR-\d{8}-\d{4}$/);
+    assert.equal(trip!.waybill.operator, "Movera France SAS");
+    assert.match(trip!.fare, /€/);
+  }
+  const later = liveDrivers(rows(seed.drivers), rows(seed.vehicles), rows(seed.trips), rows(seed.incidents), 4).find((row) => row.id === moving[0].id)!;
+  assert.notDeepEqual([later.lat, later.lng], [moving[0].lat, moving[0].lng], "the driver moves on the next tick");
+  const free = live.find((row) => row.state === "free");
+  if (free) assert.equal(liveTrip(free, { trips: [], reservations: [], vehicles: [], fleets: [], riders: [] }, NOW), null, "a free driver has no trip");
+});

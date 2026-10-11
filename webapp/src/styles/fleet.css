@@ -264,3 +264,6 @@
 .fd-icon-btn.off, .dash-btn.off { color: #b8bcbf; cursor: default; }
 .fd-contact .state-line { display: none; }
 .map-popup-code { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+
+.fd-current { margin-bottom: 16px; }
+.fd-current .trip-card { max-width: 720px; }

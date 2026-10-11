@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { AlertTriangle, ArrowLeft, Building2, Car, CheckCircle2, Hash, Mail, MapPin, MessageSquare, Phone, Star, StickyNote } from "lucide-react";
+import { useAdminApi } from "../api/AdminApiContext";
 import { useAudit, useRecords, useSlice } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
@@ -29,6 +30,9 @@ import { statusLabel } from "../domain/labels";
 import { countHealth, docHealth } from "../fleet/documents";
 import { driverPerformance, performanceWarning } from "../fleet/performance";
 import { liveDrivers } from "../dashboard/live";
+import { liveTrip } from "../dashboard/liveTrip";
+import { demoShift } from "../dashboard/scheduled";
+import { TripCard, WaybillDialog } from "../dashboard/TripCard";
 import { driverCode } from "../fleet/codes";
 import { AccountChip, Avatar, DocSummary, DocumentsTable, Field, HealthPill, MessagesPanel, OnlinePill, Stat, type DocRow, type Presence } from "../fleet/ui";
 import { formatMoney, market as marketById, marketOfZone, zoneById } from "../markets/markets";
@@ -56,6 +60,10 @@ export function DriverDetailPage() {
   const fleets = useRecords("fleets", null);
   const tickets = useRecords("tickets", null);
   const incidents = useRecords("incidents", null);
+  const reservations = useRecords("reservations", null);
+  const riders = useRecords("riders", null);
+  const api = useAdminApi();
+  const [waybillOpen, setWaybillOpen] = useState(false);
   const audit = useAudit();
   const store = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
   const [tab, setTab] = useState(() => params.get("tab") ?? "overview");
@@ -134,6 +142,7 @@ export function DriverDetailPage() {
   const presence: Presence = live?.state ?? "offline";
   const code = driverCode(driver);
   const mapTo = live ? `/?country=${country}&focus=${driver.id}` : null;
+  const current = live ? liveTrip(live, { trips: trips.data ?? [], reservations: reservations.data ?? [], vehicles: vehicles.data ?? [], fleets: fleets.data ?? [], riders: riders.data ?? [] }, now, demoShift(now, api.demo)) : null;
   const lastOnline = live ? "Online now" : driver.status === "active" ? (seed % 3 === 0 ? "Online now" : `${5 + (seed % 50)} min ago`) : driver.status === "pending" ? "Never" : `${7 + (seed % 9)} days ago`;
 
   function selectTab(id: string) {
@@ -277,6 +286,20 @@ export function DriverDetailPage() {
       <Tabs tabs={TABS} activeId={tab} onChange={selectTab} />
       <div className="fd-panel">
         <TabPanel id="overview" activeId={tab}>
+          {current ? (
+            <div className="fd-current">
+              <h3>Current trip</h3>
+              <TripCard
+                trip={current}
+                locale={market.locale}
+                timeZone={market.timeZone}
+                routeLink={mapTo ?? undefined}
+                onWaybill={() => setWaybillOpen(true)}
+                tripLink={current.tripId.startsWith("T-") ? `/drivers/${driver.id}?tab=trips` : `/trips/${current.tripId}`}
+              />
+            </div>
+          ) : null}
+          {waybillOpen && current ? <WaybillDialog waybill={current.waybill} onClose={() => setWaybillOpen(false)} /> : null}
           <div className="fd-grid-2">
             <section className="fd-box">
               <h3>Documents</h3>

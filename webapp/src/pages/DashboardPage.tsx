@@ -26,10 +26,14 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAdminApi } from "../api/AdminApiContext";
-import { useRecords } from "../api/hooks";
+import { useRecords, useSlice } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { DriversMap, STATE_COLOR } from "../dashboard/DriversMap";
+import { liveTrip } from "../dashboard/liveTrip";
+import { driverOps, emptyDriverOpsBook, type DriverOpsBook } from "../drivers/ops";
+import { statusLabel } from "../domain/labels";
+import { driverPerformance } from "../fleet/performance";
 import { EarningsChart } from "../dashboard/EarningsChart";
 import { PeriodPicker } from "../dashboard/PeriodPicker";
 import { change, COMMISSION_PLACEHOLDER, earningsReport, type Share } from "../dashboard/earnings";
@@ -137,6 +141,9 @@ export function DashboardPage() {
   const reservations = useRecords("reservations");
   const payouts = useRecords("payouts");
   const payments = useRecords("payments");
+  const fleets = useRecords("fleets");
+  const riders = useRecords("riders");
+  const driverStore = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
   const failed = [drivers, trips, incidents, tickets, reservations].find((query) => query.error);
 
   const money = (minor: number) => formatMoney(minor, country);
@@ -345,7 +352,32 @@ export function DashboardPage() {
               );
             })}
           </div>
-          <DriversMap drivers={live} market={market} zones={scope.zones} hidden={hidden} withScope={withScope} focusId={params.get("focus")} />
+          <DriversMap
+            drivers={live}
+            market={market}
+            zones={scope.zones}
+            hidden={hidden}
+            withScope={withScope}
+            focusId={params.get("focus")}
+            tripFor={(driver) => liveTrip(driver, { trips: trips.data ?? [], reservations: reservations.data ?? [], vehicles: vehicles.data ?? [], fleets: fleets.data ?? [], riders: riders.data ?? [] }, now, shift)}
+            infoFor={(driverId) => {
+              const record = (drivers.data ?? []).find((row) => row.id === driverId);
+              if (!record) return null;
+              const ops = driverOps(driverStore.value, { id: record.id, name: record.name, fleetId: record.fleetId, status: record.status, kind: record.kind });
+              const today = driverPerformance({ id: record.id, zoneId: record.zoneId, status: record.status, stars: ops.ratings.stars, acceptancePct: ops.ratings.acceptancePct, cancellationPct: ops.ratings.cancellationPct }, periodWindow({ kind: "today" }, now, market.timeZone, market.locale), false).current;
+              return {
+                phone: record.phone,
+                account: statusLabel(record.status),
+                rating: ops.ratings.stars,
+                fleet: (fleets.data ?? []).find((row) => row.id === record.fleetId)?.name ?? null,
+                todayTrips: today.trips,
+                todayNet: formatMoney(today.netMinor, country, { compact: true }),
+                onlineHours: today.onlineHours,
+                acceptancePct: ops.ratings.acceptancePct,
+                cancellationPct: ops.ratings.cancellationPct,
+              };
+            }}
+          />
           <p className="fine-print">{api.demo ? "Simulated positions from demo data. " : ""}Refreshes every 5 seconds.</p>
         </section>
 

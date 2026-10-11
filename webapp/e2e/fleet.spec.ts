@@ -105,3 +105,37 @@ test("the message shortcut opens the driver's conversation", async ({ page }) =>
   await expect(page).toHaveURL(/\/drivers\/D\d{4}\?tab=messages/);
   await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
 });
+
+test("a driver on a trip shows the trip, route, next pickup and waybill on the map", async ({ page }) => {
+  await signInAs(page);
+  await page.goto("/?country=SE&focus=D0050");
+  const panel = page.getByRole("dialog", { name: "Driver Sara Wallin" });
+  await expect(panel).toBeVisible();
+  const trip = panel.getByRole("region", { name: "Current trip" });
+  await expect(trip).toContainText("Rider on board");
+  await expect(trip).toContainText("Pickup");
+  await expect(trip).toContainText("Drop-off");
+  await expect(trip).toContainText("Next pickup");
+  await expect(trip.getByRole("button", { name: "Hide route" })).toBeVisible();
+  await trip.getByRole("button", { name: "Hide route" }).click();
+  await expect(trip.getByRole("button", { name: "Show route" })).toBeVisible();
+  await panel.getByRole("button", { name: "Follow live" }).click();
+  await expect(panel.getByRole("button", { name: "Following live" })).toBeVisible();
+  await expect(panel.getByRole("link", { name: "Open driver" })).toBeVisible();
+  await trip.getByRole("button", { name: "Waybill" }).click();
+  const waybill = page.getByRole("dialog", { name: /^Waybill WB-SE-/ });
+  await expect(waybill).toContainText("Movera Sverige AB");
+  await expect(waybill).toContainText("MV-SE-0050");
+  await page.keyboard.press("Escape");
+  await expect(waybill).toHaveCount(0);
+});
+
+test("the driver profile shows the current trip with a link to its route", async ({ page }) => {
+  await signInAs(page);
+  await page.goto("/drivers/D0002");
+  const trip = page.getByRole("region", { name: "Current trip" });
+  await expect(trip).toContainText("Heading to pickup");
+  await trip.getByRole("link", { name: "See route on map" }).click();
+  await expect(page).toHaveURL(/focus=D0002/);
+  await expect(page.getByRole("dialog", { name: "Driver Sara Nyström" }).getByRole("region", { name: "Current trip" })).toBeVisible();
+});
