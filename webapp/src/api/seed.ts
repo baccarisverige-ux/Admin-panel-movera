@@ -1,6 +1,7 @@
 import { TRIP_STATUSES } from "../domain/contract.ts";
 import { MARKETS } from "../markets/markets.ts";
 import { marketRows } from "./marketSeed.ts";
+import { sosDriverId } from "./presence.ts";
 
 export const PLATE = "ABC 123";
 export const TRIP_ID = "T0001";
@@ -179,6 +180,27 @@ export function createSeed(now = SEED_NOW): DemoDb {
       model: index % 2 === 0 ? "XC40" : "E-Class",
     };
   });
+  // Every driver has a car: the last fifteen Stockholm drivers get theirs after the original 45.
+  const extraVehicles = drivers.slice(vehicles.length).map((driver, offset) => {
+    const index = vehicles.length + offset;
+    const category = vehicleCategories[index % vehicleCategories.length];
+    return {
+      id: `V${String(index + 1).padStart(4, "0")}`,
+      name: driver.name,
+      phone: "",
+      zoneId: driver.zoneId,
+      status: "eligible",
+      plate: `MVR ${String(100 + index)}`,
+      driverId: driver.id,
+      fleetId: driver.fleetId ?? null,
+      year: 2019 + (index % 6),
+      seats: category === "xl" ? 6 : 4,
+      fuel: category === "electric" ? "electric" as const : "hybrid" as const,
+      category,
+      make: index % 2 === 0 ? "Volvo" : "Toyota",
+      model: index % 2 === 0 ? "XC60" : "Corolla",
+    };
+  });
   const riders = Array.from({ length: 250 }, (_, index) => ({
     id: `R${String(index + 1).padStart(4, "0")}`,
     name: person(index + 3),
@@ -225,6 +247,7 @@ export function createSeed(now = SEED_NOW): DemoDb {
     phone: riders[index].phone,
     zoneId: zoneId(index),
     status: index === 0 ? "queued" : "closed",
+    driverId: index === 0 ? sosDriverId(drivers, zoneId(index)) : null,
   }));
   const payments = Array.from({ length: 300 }, (_, index) => ({
     id: `PAY${String(index + 1).padStart(4, "0")}`,
@@ -309,7 +332,7 @@ export function createSeed(now = SEED_NOW): DemoDb {
     zones: MARKETS.flatMap((item) => item.zones.map(({ id, name }) => ({ id, name }))),
     drivers: [...drivers, ...abroad.drivers],
     riders: [...riders, ...abroad.riders],
-    vehicles: [...vehicles, ...abroad.vehicles],
+    vehicles: [...vehicles, ...extraVehicles, ...abroad.vehicles],
     fleets: [...fleets, ...abroad.fleets],
     fleetOwners: abroad.fleetOwners,
     trips: [...trips, ...abroad.trips],

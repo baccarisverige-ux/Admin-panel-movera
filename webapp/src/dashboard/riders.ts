@@ -39,7 +39,8 @@ function distanceKm(a: LatLng, b: LatLng): number {
   return Math.sqrt(x * x + y * y) * 111.32 * 1.25;
 }
 
-export function rideRequests(trips: readonly DemoRecord[], riders: readonly DemoRecord[]): RideRequest[] {
+/** `canTake` says whether a driver could really have the ride offered (active and online). */
+export function rideRequests(trips: readonly DemoRecord[], riders: readonly DemoRecord[], canTake: (driverId: string) => boolean = () => true): RideRequest[] {
   return trips
     // Older demo requests are long gone; about one in seven is still waiting right now.
     .filter((trip) => WAITING.has(trip.status) && zoneById(trip.zoneId) && (hash(`wait:${trip.id}`) >>> 4) % 7 === 0)
@@ -60,8 +61,8 @@ export function rideRequests(trips: readonly DemoRecord[], riders: readonly Demo
         category: category.id,
         categoryLabel: category.label,
         waitingMin: 1 + (seed % 9),
-        status: trip.status === "offered" && trip.driverId ? "offered" as const : "searching" as const,
-        offeredTo: trip.status === "offered" ? trip.driverId ?? null : null,
+        status: trip.status === "offered" && trip.driverId && canTake(trip.driverId) ? "offered" as const : "searching" as const,
+        offeredTo: trip.status === "offered" && trip.driverId && canTake(trip.driverId) ? trip.driverId : null,
       };
     })
     .sort((a, b) => b.waitingMin - a.waitingMin);

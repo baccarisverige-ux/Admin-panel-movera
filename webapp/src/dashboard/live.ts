@@ -1,4 +1,5 @@
 import type { DemoRecord } from "../api/seed.ts";
+import { isOnline } from "../api/presence.ts";
 import { zoneById } from "../markets/markets.ts";
 import { along, tripRoute, type TripRoute } from "./route.ts";
 
@@ -36,10 +37,7 @@ function hash(text: string): number {
   return value >>> 0;
 }
 
-/** Active drivers who have the app open right now; about a quarter are offline at any moment. */
-export function isOnline(driver: Pick<DemoRecord, "id" | "status">): boolean {
-  return driver.status === "active" && (hash(driver.id) >>> 13) % 100 >= 24;
-}
+export { isOnline };
 
 const ACTIVE_TRIP = new Set(["accepted", "driver_to_pickup", "arrived", "rider_onboard", "in_trip", "approaching_dropoff"]);
 
@@ -54,7 +52,9 @@ export function liveDrivers(
   incidents: readonly DemoRecord[],
   tick: number,
 ): LiveDriver[] {
-  const sosZones = new Set(incidents.filter((row) => row.status === "queued").map((row) => row.zoneId));
+  // An SOS sits on the exact driver it belongs to; older records without one fall back to the zone.
+  const sosDrivers = new Set(incidents.filter((row) => row.status === "queued" && row.driverId).map((row) => row.driverId!));
+  const sosZones = new Set(incidents.filter((row) => row.status === "queued" && !row.driverId).map((row) => row.zoneId));
   const flagged = new Set<string>();
   return drivers
     .filter((driver) => isOnline(driver) && zoneById(driver.zoneId))
@@ -63,7 +63,8 @@ export function liveDrivers(
       const seed = hash(driver.id);
       const roll = seed % 100;
       let state: LiveState = roll < 38 ? "free" : roll < 54 ? "pickup" : roll < 91 ? "trip" : "stale";
-      if (sosZones.has(driver.zoneId) && !flagged.has(driver.zoneId) && state !== "stale") {
+      if (sosDrivers.has(driver.id)) state = "sos";
+      else if (sosZones.has(driver.zoneId) && !flagged.has(driver.zoneId) && state !== "stale") {
         flagged.add(driver.zoneId);
         state = "sos";
       }

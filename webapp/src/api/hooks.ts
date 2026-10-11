@@ -32,7 +32,8 @@ export type { ConfigBook, EffectiveContext, FeatureKey, OverrideLevel, OverrideR
 export { activeScheduledBoost, defaultPricingBook, enabledCategoryIds, normalizePricingBook, pricingDiff, removeBoostSchedule, restorePricingVersion, saveBoostSchedule, savePriceZone, validateZonePrice } from "../pricing/book.ts";
 export type { BoostSchedule, PricingBook, PricingSnapshot } from "../pricing/book.ts";
 
-export function useRecords(name: string, scope?: string | null) {
+/** `refetchMs` keeps live screens up to date by reloading on a timer. */
+export function useRecords(name: string, scope?: string | null, options: { refetchMs?: number } = {}) {
   const api = useAdminApi();
   const session = useSession();
   const resolved = useMarketScope(scope);
@@ -41,6 +42,7 @@ export function useRecords(name: string, scope?: string | null) {
   const query = useQuery({
     queryKey: ["records", name, JSON.stringify(effectiveScope), session.agent?.id ?? "signed-out"],
     queryFn: () => api.list(name, effectiveScope),
+    refetchInterval: options.refetchMs,
   });
   return { ...query, scopeDenied, effectiveScope };
 }
@@ -90,14 +92,14 @@ export function useRevision() {
   return useQuery({ queryKey: ["revision"], queryFn: () => api.revision() });
 }
 
-export function useAudit() {
+export function useAudit(refetchMs?: number) {
   const api = useAdminApi();
-  return useQuery({ queryKey: ["audit"], queryFn: () => api.audit() });
+  return useQuery({ queryKey: ["audit"], queryFn: () => api.audit(), refetchInterval: refetchMs });
 }
 
-export function useApprovals() {
+export function useApprovals(refetchMs?: number) {
   const api = useAdminApi();
-  return useQuery({ queryKey: ["approvals"], queryFn: () => api.approvals() });
+  return useQuery({ queryKey: ["approvals"], queryFn: () => api.approvals(), refetchInterval: refetchMs });
 }
 
 type Attempt = {

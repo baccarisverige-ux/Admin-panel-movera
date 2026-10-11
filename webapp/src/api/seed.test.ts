@@ -10,7 +10,9 @@ const assert = (ok: unknown, message: string) => {
 const seed = createSeed();
 const sweden = <T extends { zoneId: string }>(rows: T[]) => rows.filter((row) => marketOfZone(row.zoneId)?.id === "SE");
 assert(sweden(seed.drivers).length === 60, "60 Stockholm drivers");
-assert(sweden(seed.vehicles).length === 45, "45 Stockholm vehicles");
+assert(sweden(seed.vehicles).length === 60, "every Stockholm driver has a vehicle");
+assert(seed.drivers.every((driver) => seed.vehicles.some((vehicle) => vehicle.driverId === driver.id)), "no driver without a vehicle");
+assert(seed.incidents.filter((row) => row.status === "queued").every((row) => row.driverId), "every open SOS names its driver");
 assert(sweden(seed.fleets).length === 3, "3 Stockholm fleets");
 assert(seed.fleets.every((fleet) => seed.fleetOwners.some((owner) => owner.id === fleet.ownerId)), "every fleet has an owner");
 assert(seed.drivers.filter((row) => row.fleetId).every((row) => seed.fleets.some((fleet) => fleet.id === row.fleetId)), "fleet drivers point at a real fleet");
