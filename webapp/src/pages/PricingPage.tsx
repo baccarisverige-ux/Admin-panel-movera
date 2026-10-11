@@ -1,436 +1,374 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import {
-  defaultPricingBook,
-  normalizePricingBook,
-  removeBoostSchedule,
-  restorePricingVersion,
-  saveBoostSchedule,
-  savePriceZone,
-  useCommands,
-  useSlice,
-  validateZonePrice,
-  type BoostSchedule,
-  type PricingBook,
-} from "../api/hooks";
-import { can } from "../auth/permissions";
+  AlertTriangle,
+  BadgePercent,
+  Calculator,
+  CircleDollarSign,
+  Copy,
+  History,
+  Plane,
+  Receipt,
+  Route,
+  Save,
+  Square,
+  Tags,
+  Undo2,
+  Zap,
+} from "lucide-react";
+import { useRecords, useSlice } from "../api/hooks";
+import { can, canUseZone } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
+import { supplyDemand } from "../dashboard/insights";
+import { liveDrivers } from "../dashboard/live";
+import { rideRequests } from "../dashboard/riders";
+import { CATEGORIES } from "../domain/contract";
+import { zoneById } from "../markets/markets";
+import { useMarketScope } from "../markets/useMarketScope";
+import { CategoryManager } from "../pricing/CategoryManager";
+import { CommissionPanel } from "../pricing/CommissionPanel";
+import { CopyZones } from "../pricing/CopyZones";
+import { FeesPanel, FixedRoutes } from "../pricing/FeesPanel";
+import { HistoryPanel } from "../pricing/HistoryPanel";
+import { PriceTable } from "../pricing/PriceTable";
+import { alertsFor, surgeRows } from "../pricing/rows";
+import { LEVEL_COLOR } from "../pricing/surge";
+import { SurgePanel } from "../pricing/SurgePanel";
+import { TestRide } from "../pricing/TestRide";
+import { useSurgePref } from "../pricing/useSurgePref";
 import {
-  CATEGORY_INFO,
-  RIDE_OPTION_INFO,
-  defaultPriceBook,
-  type PriceBook,
-  type ZonePrice,
-} from "../pricing/sets";
-import { PageHeading } from "../ui/PageHeading";
+  SLICE_KEY,
+  activeCategories,
+  copyInto,
+  currencyOf,
+  emptyPricingStore,
+  normalizeStore,
+  publishZones,
+  stopManualSurges,
+  undoLastPublish,
+  validateZoneBook,
+  zoneBook,
+  zoneLive,
+  type CategoryPrice,
+  type CategoryUsage,
+  type ZoneBook,
+} from "../pricing/zonePricing";
 import { CommandButton } from "../ui/CommandButton";
-import { TabPanel, Tabs } from "../ui/Tabs";
-import { PriceEditor } from "./PriceEditor";
-import { QuotePreview } from "./QuotePreview";
+import { Flag } from "../ui/Flag";
 
-const PRICING_TABS = [
-  { id: "categories", label: "Vehicle Categories" },
-  { id: "booking", label: "Booking Controls" },
-  { id: "rules", label: "Fare Calculation Rules" },
-  { id: "boost", label: "Boost Pricing" },
-  { id: "commission", label: "Commission" },
-  { id: "history", label: "History" },
+const TABS = [
+  { id: "prices", label: "Prices", icon: CircleDollarSign },
+  { id: "fees", label: "Fees", icon: Receipt },
+  { id: "surge", label: "Surge", icon: Zap },
+  { id: "commission", label: "Commission", icon: BadgePercent },
+  { id: "history", label: "History", icon: History },
 ] as const;
+type Tab = (typeof TABS)[number]["id"];
 
-type PricingTabId = (typeof PRICING_TABS)[number]["id"];
+const ACTIVE_TRIP = new Set(["requested", "searching", "offered", "accepted", "driver_to_pickup", "arrived", "rider_onboard", "in_trip", "approaching_dropoff"]);
+const OPEN_RESERVATION = new Set(["waiting", "booked", "assigned"]);
 
-function isoValue(value: string): string {
-  return value ? new Date(value).toISOString() : "";
+function hash(text: string): number {
+  let value = 2166136261;
+  for (const char of text) value = Math.imul(value ^ char.charCodeAt(0), 16777619);
+  return value >>> 0;
+}
+
+function useNow(stepMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), stepMs);
+    return () => window.clearInterval(timer);
+  }, [stepMs]);
+  return now;
 }
 
 export function PricingPage() {
   const { agent } = useSession();
-  const commands = useCommands();
-  const slice = useSlice<PricingBook | PriceBook>("prices", defaultPricingBook());
-  const persisted = useMemo(() => normalizePricingBook(slice.value), [slice.value]);
-  const [tab, setTab] = useState<PricingTabId>("categories");
-  const [zoneId, setZoneId] = useState("Z001");
-  const [draft, setDraft] = useState<PriceBook | null>(null);
-  const [scheduleMultiplier, setScheduleMultiplier] = useState("1.8");
-  const [scheduleStart, setScheduleStart] = useState("");
-  const [scheduleEnd, setScheduleEnd] = useState("");
-  const [scheduleEnabled, setScheduleEnabled] = useState(true);
-  const [notice, setNotice] = useState("Pricing is simulation-backed frontend data. No backend or app configuration is changed.");
+  const [params, setParams] = useSearchParams();
+  const { market, country, zones: scopedZones } = useMarketScope();
+  const role = agent?.role ?? "viewer";
+  const canPublish = can(role, "settings.publish");
+  const slice = useSlice<unknown>(SLICE_KEY, emptyPricingStore());
+  const store = useMemo(() => normalizeStore(slice.value), [slice.value]);
+  const [drafts, setDrafts] = useState<Record<string, ZoneBook>>({});
+  const [notice, setNotice] = useState("");
+  const [testOpen, setTestOpen] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [catsOpen, setCatsOpen] = useState(false);
+  const surgeMap = useSurgePref("pricing", { shown: true, style: "zones" });
+  const now = useNow(15_000);
+  const minute = Math.floor(now / 60_000) * 60_000;
 
-  const book = draft ?? persisted.book ?? defaultPriceBook();
-  const zone = book.zones.find((item) => item.zoneId === zoneId) ?? book.zones[0];
-  const persistedZone = persisted.book.zones.find((item) => item.zoneId === zone?.zoneId);
-  const canPublish = Boolean(agent && can(agent.role, "settings.publish"));
-  const validationError = zone ? validateZonePrice(zone) : "No price zone is available.";
-  const dirty = Boolean(zone && persistedZone && JSON.stringify(zone) !== JSON.stringify(persistedZone));
+  const zones = market.zones.filter((zone) => !agent || canUseZone(agent, zone.id));
+  const requested = params.get("zone");
+  const zoneId = zones.find((zone) => zone.id === requested)?.id ?? (scopedZones.length === 1 && zones.some((zone) => zone.id === scopedZones[0]) ? scopedZones[0] : zones[0]?.id ?? "Z001");
+  const zone = market.zones.find((item) => item.id === zoneId);
+  const tab: Tab = TABS.find((item) => item.id === params.get("tab"))?.id ?? "prices";
+  const currency = currencyOf(zoneId);
 
-  function patchZone(patch: Partial<ZonePrice>) {
-    if (!zone || !canPublish) return;
-    setDraft({
-      ...book,
-      zones: book.zones.map((item) => item.zoneId === zone.zoneId ? { ...item, ...patch } : item),
+  function go(next: { zone?: string; tab?: Tab }) {
+    const search = new URLSearchParams(params);
+    if (next.zone) search.set("zone", next.zone);
+    if (next.tab) search.set("tab", next.tab);
+    setParams(search, { replace: !next.tab });
+  }
+
+  const categories = activeCategories(store);
+  const published = zoneBook(store, zoneId);
+  const book = drafts[zoneId] ?? published;
+  const problems = validateZoneBook(book, store.categories);
+  const dirty = Object.values(drafts).filter((draft) => JSON.stringify(draft) !== JSON.stringify(zoneBook(store, draft.zoneId)));
+  const dirtyProblems = dirty.flatMap((draft) => validateZoneBook(draft, store.categories).map((problem) => ({ ...problem, zoneId: draft.zoneId })));
+  const at = new Date(now).toISOString();
+  const publish = agent ? publishZones(store, drafts, agent.id, "Pricing update", at) : { store, error: "Sign in again.", changes: [] };
+  const undo = agent ? undoLastPublish(store, agent.id, at) : { store, error: "Sign in again." };
+  const countryZoneIds = zones.map((item) => item.id);
+  const stopAll = agent ? stopManualSurges(store, countryZoneIds, agent.id, "Stop all surges", at) : { store, error: "Sign in again.", stopped: [] };
+  const lastRevision = store.history.find((item) => item.zoneIds.includes(zoneId));
+
+  function update(change: (draft: ZoneBook) => void) {
+    if (!canPublish) return;
+    setDrafts((current) => {
+      const next = structuredClone(current[zoneId] ?? published);
+      change(next);
+      return { ...current, [zoneId]: next };
     });
   }
 
-  async function saveZone(reason: string) {
-    if (!agent || !zone) return;
-    const prepared = savePriceZone(persisted, book, zone.zoneId, agent.id, reason, new Date().toISOString());
-    if (prepared.error) {
-      setNotice(prepared.error);
-      return;
-    }
-    const result = await commands.run("admin.pricing.saveZone", {
-      reason,
-      targetId: zone.zoneId,
-      scope: zone.zoneId,
-      before: `${zone.zoneName} v${persistedZone?.version ?? 0} · pricing rev ${persisted.draftRev}`,
-      after: `${zone.zoneName} v${prepared.book.book.zones.find((item) => item.zoneId === zone.zoneId)?.version ?? 0} · pricing rev ${prepared.book.draftRev}`,
-      expectedSliceRev: persisted.draftRev,
-      sliceKey: "prices",
-      value: prepared.book,
-    });
-    if (result) {
-      setDraft(null);
-      setNotice(`${zone.zoneName} price set saved as pricing revision ${prepared.book.draftRev}.`);
-    }
+  // Live counts feed the surge view: riders waiting and free drivers per zone.
+  const drivers = useRecords("drivers", undefined, { refetchMs: 30_000 });
+  const trips = useRecords("trips", undefined, { refetchMs: 30_000 });
+  const riders = useRecords("riders");
+  const vehicles = useRecords("vehicles");
+  const incidents = useRecords("incidents", undefined, { refetchMs: 30_000 });
+  const reservations = useRecords("reservations");
+  const live = useMemo(() => liveDrivers(drivers.data ?? [], vehicles.data ?? [], trips.data ?? [], incidents.data ?? [], 0), [drivers.data, vehicles.data, trips.data, incidents.data]);
+  const online = useMemo(() => new Set(live.map((driver) => driver.id)), [live]);
+  const requests = useMemo(() => rideRequests(trips.data ?? [], riders.data ?? [], (id) => online.has(id)), [trips.data, riders.data, online]);
+  const counts = useMemo(() => new Map(supplyDemand(country, [], requests, live).map((row) => [row.zoneId, { waiting: row.waiting, free: row.free }])), [country, requests, live]);
+  const zoneKey = countryZoneIds.join(",");
+  const rows = useMemo(() => surgeRows(store, zoneKey.split(","), counts, minute), [store, zoneKey, counts, minute]);
+  const alerts = alertsFor(rows, minute);
+  const surgeOf = (id: string) => rows.find((row) => row.surge.zoneId === id)?.surge;
+
+  function usageOf(categoryId: string): CategoryUsage {
+    const fallback = (id: string) => CATEGORIES[hash(id) % CATEGORIES.length].id;
+    return {
+      activeRides: (trips.data ?? []).filter((row) => ACTIVE_TRIP.has(row.status) && (row.category ?? fallback(row.id)) === categoryId).length,
+      reservations: (reservations.data ?? []).filter((row) => OPEN_RESERVATION.has(row.status) && row.category === categoryId).length,
+      vehicles: (vehicles.data ?? []).filter((row) => row.category === categoryId).length,
+    };
   }
 
   if (slice.loading) return <p className="state-line">Loading pricing.</p>;
-  if (!zone) return <p className="state-line">No price zone is available.</p>;
 
-  const activeSchedules = persisted.schedules.filter((item) => item.zoneId === zone.zoneId);
-  const schedule: BoostSchedule = {
-    id: `${zone.zoneId}-${scheduleStart || "new"}-${scheduleMultiplier}`,
-    zoneId: zone.zoneId,
-    multiplier: Number(scheduleMultiplier),
-    startsAt: isoValue(scheduleStart),
-    endsAt: isoValue(scheduleEnd),
-    enabled: scheduleEnabled,
-  };
-  const schedulePrepared = agent
-    ? saveBoostSchedule(persisted, schedule, agent.id, "Scheduled boost update", new Date().toISOString())
-    : { book: persisted, error: "Sign in again." };
+  const changedCount = dirty.length;
+  const currentSurge = surgeOf(zoneId);
 
   return (
-    <>
-      <PageHeading
-        title="Pricing & categories"
-        subtitle={`One persisted price book controls rates, availability, options, fees, adjustment range, boosts, commission and quote preview. Pricing revision ${persisted.draftRev}.`}
-      />
-
-      <p className="state-line" data-pricing-dirty={dirty ? "yes" : "no"}>
-        {notice} {commands.message} {canPublish ? "" : "Your role is read-only for pricing."}
-        {dirty ? " Unsaved changes." : " Saved price set."}
-      </p>
-
-      <PriceEditor
-        book={book}
-        zoneId={zone.zoneId}
-        onZoneChange={(id) => {
-          setZoneId(id);
-          setDraft(null);
-        }}
-        onChange={setDraft}
-        onSave={() => void saveZone("Price set update")}
-        canEdit={canPublish}
-        saving={commands.busy || commands.phase === "submitting"}
-        validationError={validationError}
-      />
-
-      <QuotePreview pricing={{ ...persisted, book }} />
-
-      <Tabs tabs={PRICING_TABS} activeId={tab} onChange={(id) => setTab(id as PricingTabId)} />
-
-      <TabPanel id="categories" activeId={tab}>
-        <article className="panel">
-          <h3>Seven fixed app categories</h3>
-          <p className="state-line">IDs are contractual and cannot be renamed in this frontend phase. Availability is controlled per zone in the price-set editor above.</p>
-          <ul className="version-list">
-            {CATEGORY_INFO.map((item) => (
-              <li key={item.id}>
-                <strong>{item.label}</strong> · {item.id} · {zone.enabledCategories[item.id] ? "enabled" : "disabled"} · {item.line} · {item.eligibility}
-              </li>
-            ))}
-          </ul>
-          <h3>Ride options</h3>
-          <ul className="version-list">
-            {RIDE_OPTION_INFO.map((item) => (
-              <li key={item.id}>
-                {item.label} · {zone.enabledOptions[item.id] ? "enabled" : "disabled"} · fee {zone.optionFee[item.id]} kr · {item.note}
-              </li>
-            ))}
-          </ul>
-        </article>
-      </TabPanel>
-
-      <TabPanel id="booking" activeId={tab}>
-        <article className="panel">
-          <h3>Booking, fees and adjustment controls · {zone.zoneName}</h3>
-          <div className="field-grid">
-            <label>
-              Adjustment minimum (%)
-              <input disabled={!canPublish} aria-label="Adjustment minimum" type="number" value={zone.adjustMin} onChange={(event) => patchZone({ adjustMin: Number(event.target.value) })} />
-            </label>
-            <label>
-              Adjustment maximum (%)
-              <input disabled={!canPublish} aria-label="Adjustment maximum" type="number" value={zone.adjustMax} onChange={(event) => patchZone({ adjustMax: Number(event.target.value) })} />
-            </label>
-            <label>
-              Adjustment step (%)
-              <input disabled={!canPublish} aria-label="Adjustment step" type="number" value={zone.adjustStep} onChange={(event) => patchZone({ adjustStep: Number(event.target.value) })} />
-            </label>
-            <label>
-              Quote validity (s)
-              <input disabled={!canPublish} aria-label="Quote validity" type="number" value={zone.quoteSeconds} onChange={(event) => patchZone({ quoteSeconds: Number(event.target.value) })} />
-            </label>
-            <label>
-              Waiting (kr/min)
-              <input disabled={!canPublish} aria-label="Waiting per minute" type="number" value={zone.waitingPerMin} onChange={(event) => patchZone({ waitingPerMin: Number(event.target.value) })} />
-            </label>
-            <label>
-              Cancellation fee
-              <input disabled={!canPublish} aria-label="Cancellation fee" type="number" value={zone.cancelFee} onChange={(event) => patchZone({ cancelFee: Number(event.target.value) })} />
-            </label>
-            <label>
-              Reservation fee
-              <input disabled={!canPublish} aria-label="Reservation fee" type="number" value={zone.reservationFee} onChange={(event) => patchZone({ reservationFee: Number(event.target.value) })} />
-            </label>
-            <label>
-              Booking fee
-              <input disabled={!canPublish} aria-label="Booking fee" type="number" value={zone.bookingFee} onChange={(event) => patchZone({ bookingFee: Number(event.target.value) })} />
-            </label>
-            <label>
-              Airport fee
-              <input disabled={!canPublish} aria-label="Airport fee" type="number" value={zone.airportFee} onChange={(event) => patchZone({ airportFee: Number(event.target.value) })} />
-            </label>
-            <label>
-              Event fee
-              <input disabled={!canPublish} aria-label="Event fee" type="number" value={zone.eventFee} onChange={(event) => patchZone({ eventFee: Number(event.target.value) })} />
-            </label>
-            <label>
-              Tip presets (kr, comma separated)
-              <input
-                disabled={!canPublish}
-                aria-label="Tip presets"
-                value={zone.tips.join(", ")}
-                onChange={(event) => patchZone({
-                  tips: event.target.value.split(",").map((part) => Number(part.trim())).filter((value) => Number.isFinite(value)),
-                })}
-              />
-            </label>
-          </div>
-          {validationError ? <p className="state-line">{validationError}</p> : null}
-          <button
-            data-command="admin.pricing.saveBooking"
-            className="primary-btn"
-            type="button"
-            disabled={!canPublish || !dirty || Boolean(validationError) || commands.busy}
-            onClick={() => void saveZone("Booking and fee controls update")}
-          >
-            Save booking controls
+    <div className="pricing">
+      <header className="pricing-hero">
+        <div className="pricing-title">
+          <h2>Pricing</h2>
+          <p>
+            <Flag id={country} /> {market.name} · prices in {market.currency}, VAT included · revision {store.draftRev}
+          </p>
+        </div>
+        <div className="pricing-zone-now">
+          <span className="eyebrow">Editing zone</span>
+          <strong>{zone?.kind === "airport" ? <Plane size={16} aria-hidden="true" /> : null}{zone?.name ?? zoneId}</strong>
+          <small>{lastRevision ? `v${published.version} · published ${new Intl.DateTimeFormat(market.locale, { dateStyle: "medium", timeStyle: "short", timeZone: market.timeZone }).format(Date.parse(lastRevision.at))} by ${lastRevision.actorId}` : "v1 · Movera default prices"}</small>
+        </div>
+        {currentSurge ? (
+          <button data-command="admin.pricing.tab" type="button" className={`hero-surge lvl-${currentSurge.level}`} onClick={() => go({ tab: "surge" })}>
+            <Zap size={15} aria-hidden="true" />
+            <b>×{currentSurge.multiplier.toFixed(1)}</b>
+            <span>{currentSurge.source === "off" ? "No surge" : `${currentSurge.source} surge`}</span>
           </button>
-        </article>
-      </TabPanel>
+        ) : null}
+      </header>
 
-      <TabPanel id="rules" activeId={tab}>
-        <article className="panel">
-          <h3>Fare calculation order</h3>
-          <ol className="rules-list">
-            <li>Pickup + distance + time.</li>
-            <li>Rider adjustment clamped to the zone minimum and maximum percentage.</li>
-            <li>Selected boost multiplier, capped by the zone boost cap.</li>
-            <li>System category minimum and maximum fare.</li>
-            <li>Waiting, booking, reservation, airport, event and enabled ride-option fees.</li>
-            <li>Tip presets remain suggestions and are not included in the ride quote.</li>
-          </ol>
-          <p className="state-line">Quote preview reads the same unsaved draft so operators can validate impact before saving.</p>
-        </article>
-      </TabPanel>
+      <nav className="zone-rail" aria-label="Zones">
+        {zones.map((item) => {
+          const surge = surgeOf(item.id);
+          const hasDraft = dirty.some((draft) => draft.zoneId === item.id);
+          return (
+            <button data-command="admin.pricing.zone" key={item.id} type="button" aria-pressed={item.id === zoneId} className={item.id === zoneId ? "zone-pill active" : "zone-pill"} onClick={() => go({ zone: item.id })}>
+              {item.kind === "airport" ? <Plane size={13} aria-hidden="true" /> : <i style={{ background: LEVEL_COLOR[surge?.level ?? "none"] }} aria-hidden="true" />}
+              <span>{item.name}</span>
+              {surge && surge.multiplier > 1 ? <b>×{surge.multiplier.toFixed(1)}</b> : null}
+              {hasDraft ? <em title="Unpublished changes">edited</em> : null}
+            </button>
+          );
+        })}
+      </nav>
 
-      <TabPanel id="boost" activeId={tab}>
-        <article className="panel">
-          <h3>Boost pricing · {zone.zoneName}</h3>
-          <div className="field-grid">
-            <label>
-              Manual boost
-              <input disabled={!canPublish} aria-label="Manual boost" type="number" step="0.1" value={zone.boostManual} onChange={(event) => patchZone({ boostManual: Number(event.target.value) })} />
-            </label>
-            <label>
-              Scheduled default
-              <input disabled={!canPublish} aria-label="Scheduled boost" type="number" step="0.1" value={zone.boostScheduled} onChange={(event) => patchZone({ boostScheduled: Number(event.target.value) })} />
-            </label>
-            <label>
-              Automatic boost
-              <input disabled={!canPublish} aria-label="Automatic boost" type="number" step="0.1" value={zone.boostAuto} onChange={(event) => patchZone({ boostAuto: Number(event.target.value) })} />
-            </label>
-            <label>
-              Boost cap
-              <input disabled={!canPublish} aria-label="Boost cap" type="number" step="0.1" value={zone.boostCap} onChange={(event) => patchZone({ boostCap: Number(event.target.value) })} />
-            </label>
-          </div>
-          <button
-            data-command="admin.pricing.saveBoost"
-            className="primary-btn"
-            type="button"
-            disabled={!canPublish || !dirty || Boolean(validationError) || commands.busy}
-            onClick={() => void saveZone("Boost controls update")}
-          >
-            Save boost controls
-          </button>
+      <section className="pricing-actions" aria-label="Quick actions">
+        <button data-command="admin.pricing.startSurge" type="button" className="quick-tile surge" disabled={!canPublish} onClick={() => { go({ tab: "surge" }); window.setTimeout(() => document.getElementById("manual-title")?.scrollIntoView({ behavior: "smooth", block: "center" }), 80); }}>
+          <Zap size={18} aria-hidden="true" /><span><b>Start surge</b><small>Manual, in {zone?.name}</small></span>
+        </button>
+        <CommandButton command="admin.pricing.stopAllSurges" className="quick-tile stop" targetId={market.id} confirmTarget={false} scope="all" before={`${stopAll.stopped.length} manual surges`} after="none" expectedSliceRev={store.draftRev} sliceKey={SLICE_KEY} value={stopAll.store} disabled={!canPublish || Boolean(stopAll.error)} title={stopAll.error} onDone={() => setNotice(`Stopped ${stopAll.stopped.length} manual surge${stopAll.stopped.length === 1 ? "" : "s"} in ${market.name}.`)}>
+          <Square size={18} aria-hidden="true" /><span><b>Stop all surges</b><small>{stopAll.stopped.length ? `${stopAll.stopped.length} manual running` : "None running"}</small></span>
+        </CommandButton>
+        <button data-command="admin.pricing.copyZones" type="button" className="quick-tile" disabled={!canPublish} onClick={() => setCopyOpen(true)}>
+          <Copy size={18} aria-hidden="true" /><span><b>Copy to zones</b><small>As drafts to review</small></span>
+        </button>
+        <button data-command="admin.pricing.testRide" type="button" className="quick-tile" onClick={() => setTestOpen((open) => !open)}>
+          <Calculator size={18} aria-hidden="true" /><span><b>Test a ride</b><small>See the price</small></span>
+        </button>
+        <button data-command="admin.pricing.addCategory" type="button" className="quick-tile" onClick={() => setCatsOpen(true)}>
+          <Tags size={18} aria-hidden="true" /><span><b>Categories</b><small>{categories.length} active</small></span>
+        </button>
+        <CommandButton command="admin.pricing.undo" className="quick-tile" targetId={`pricing-rev-${store.history[0]?.rev ?? 0}`} confirmTarget={false} scope="all" before={`pricing rev ${store.draftRev}`} after="undo last publish" expectedSliceRev={store.draftRev} sliceKey={SLICE_KEY} value={undo.store} disabled={!canPublish || Boolean(undo.error)} title={undo.error} onDone={() => setNotice(`Revision ${store.history[0]?.rev} undone.`)}>
+          <Undo2 size={18} aria-hidden="true" /><span><b>Undo last publish</b><small>{store.history[0] ? `Revision ${store.history[0].rev}` : "Nothing yet"}</small></span>
+        </CommandButton>
+      </section>
 
-          <h4>Scheduled boost window</h4>
-          <div className="field-grid">
-            <label>
-              Multiplier
-              <input aria-label="Schedule multiplier" disabled={!canPublish} type="number" min="1" max={zone.boostCap} step="0.1" value={scheduleMultiplier} onChange={(event) => setScheduleMultiplier(event.target.value)} />
-            </label>
-            <label>
-              Starts
-              <input aria-label="Schedule start" disabled={!canPublish} type="datetime-local" value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} />
-            </label>
-            <label>
-              Ends
-              <input aria-label="Schedule end" disabled={!canPublish} type="datetime-local" value={scheduleEnd} onChange={(event) => setScheduleEnd(event.target.value)} />
-            </label>
-            <label className="check-row">
-              <input aria-label="Schedule enabled" disabled={!canPublish} type="checkbox" checked={scheduleEnabled} onChange={(event) => setScheduleEnabled(event.target.checked)} />
-              Enabled
-            </label>
-          </div>
-          <CommandButton
-            command="admin.pricing.schedule"
-            className="secondary-btn"
-            type="button"
-            targetId={schedule.id}
-            confirmTarget={false}
-            scope={zone.zoneId}
-            before={`pricing rev ${persisted.draftRev}`}
-            after={`${zone.zoneName} boost ${schedule.multiplier}× ${schedule.startsAt} → ${schedule.endsAt}`}
-            expectedSliceRev={persisted.draftRev}
-            sliceKey="prices"
-            value={schedulePrepared.book}
-            disabled={!canPublish || Boolean(schedulePrepared.error)}
-            title={schedulePrepared.error}
-            onDone={() => {
-              setNotice("Boost schedule saved.");
-              setScheduleStart("");
-              setScheduleEnd("");
-            }}
-          >
-            Save boost schedule
-          </CommandButton>
+      {alerts.length ? (
+        <button data-command="admin.pricing.tab" type="button" className="pricing-alert-bar" onClick={() => go({ tab: "surge" })}>
+          <AlertTriangle size={16} aria-hidden="true" />
+          <b>{alerts.length} surge alert{alerts.length === 1 ? "" : "s"}</b>
+          <span>{alerts[0].title}{alerts.length > 1 ? ` and ${alerts.length - 1} more` : ""}</span>
+        </button>
+      ) : null}
 
-          {activeSchedules.length === 0 ? (
-            <p className="state-line">No scheduled boosts for this zone.</p>
-          ) : (
-            <ul aria-label="Boost schedules" className="version-list">
-              {activeSchedules.map((item) => {
-                const removal = agent
-                  ? removeBoostSchedule(persisted, item.id, agent.id, "Remove scheduled boost", new Date().toISOString())
-                  : { book: persisted, error: "Sign in again." };
-                return (
-                  <li key={item.id}>
-                    {item.multiplier}× · {item.startsAt} → {item.endsAt} · {item.enabled ? "enabled" : "disabled"}
-                    <CommandButton
-                      command="admin.pricing.removeSchedule"
-                      className="link-action"
-                      type="button"
-                      targetId={item.id}
-                      confirmTarget={false}
-                      scope={item.zoneId}
-                      before="scheduled"
-                      after="removed"
-                      expectedSliceRev={persisted.draftRev}
-                      sliceKey="prices"
-                      value={removal.book}
-                      disabled={!canPublish || Boolean(removal.error)}
-                      title={removal.error}
-                      onDone={() => setNotice("Boost schedule removed.")}
-                    >
-                      remove
-                    </CommandButton>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </article>
-      </TabPanel>
+      {notice || slice.message ? <p className="pricing-notice" role="status">{notice} {slice.message}</p> : null}
+      {!canPublish ? <p className="pricing-notice readonly" role="note">Your role is read-only for pricing. You can look and test rides, not change prices.</p> : null}
 
-      <TabPanel id="commission" activeId={tab}>
-        <article className="panel">
-          <h3>Commission · {zone.zoneName}</h3>
-          <div className="field-grid">
-            {CATEGORY_INFO.map((item) => (
-              <label key={item.id}>
-                {item.label} commission (%)
-                <input
-                  aria-label={`${item.label} commission`}
-                  disabled={!canPublish}
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={zone.commission[item.id]}
-                  onChange={(event) => patchZone({ commission: { ...zone.commission, [item.id]: Number(event.target.value) } })}
+      <div className="dash-tabs pricing-tabs" role="tablist" aria-label="Pricing sections">
+        {TABS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button data-command="admin.pricing.tab" key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "active" : undefined} onClick={() => go({ tab: item.id })}>
+              <Icon size={15} aria-hidden="true" />
+              {item.label}
+              {item.id === "surge" && alerts.length ? <span className="tab-count">{alerts.length}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={testOpen ? "pricing-body with-test" : "pricing-body"}>
+        <div className="pricing-main">
+          {tab === "prices" ? (
+            <>
+              <section className="dash-card" aria-labelledby="prices-title">
+                <div className="card-head">
+                  <h3 id="prices-title"><CircleDollarSign size={16} aria-hidden="true" /> Prices · {zone?.name}</h3>
+                  <span className="card-head-tools">
+                    <span className="legend-chip changed">Changed, not published</span>
+                    <button data-command="admin.pricing.addCategory" type="button" className="link-action" onClick={() => setCatsOpen(true)}>Manage categories</button>
+                  </span>
+                </div>
+                <PriceTable
+                  zoneName={zone?.name ?? zoneId}
+                  currency={currency}
+                  categories={categories}
+                  book={book}
+                  published={published}
+                  problems={problems}
+                  canEdit={canPublish}
+                  onChange={(categoryId, patch: Partial<CategoryPrice>) => update((draft) => { draft.prices[categoryId] = { ...draft.prices[categoryId], ...patch }; })}
                 />
-              </label>
-            ))}
-            <label>
-              Fleet commission (%)
-              <input disabled={!canPublish} aria-label="Fleet commission" type="number" min="0" max="100" value={zone.fleetCommission} onChange={(event) => patchZone({ fleetCommission: Number(event.target.value) })} />
-            </label>
-          </div>
-          <button
-            data-command="admin.pricing.saveRules"
-            className="primary-btn"
-            type="button"
-            disabled={!canPublish || !dirty || Boolean(validationError) || commands.busy}
-            onClick={() => void saveZone("Commission update")}
-          >
-            Save commission
-          </button>
-        </article>
-      </TabPanel>
+              </section>
+              <section className="dash-card" aria-labelledby="routes-title">
+                <div className="card-head">
+                  <h3 id="routes-title"><Route size={16} aria-hidden="true" /> Fixed-price routes</h3>
+                  <span className="fine-print">A flat price instead of km and min</span>
+                </div>
+                <FixedRoutes currency={currency} categories={categories} routes={book.routes} problems={problems} canEdit={canPublish} zoneId={zoneId} onChange={(routes) => update((draft) => { draft.routes = routes; })} />
+              </section>
+            </>
+          ) : null}
 
-      <TabPanel id="history" activeId={tab}>
-        <article className="panel">
-          <h3>Pricing history</h3>
-          {persisted.history.length === 0 ? (
-            <p className="state-line">No saved pricing revision yet.</p>
-          ) : (
-            <ol className="version-list" aria-label="Pricing history">
-              {persisted.history.map((version) => {
-                const restore = agent ? restorePricingVersion(persisted, version.rev, agent.id, new Date().toISOString()) : { book: persisted, error: "Sign in again." };
-                return (
-                  <li key={version.rev}>
-                    Revision {version.rev} · {version.at} · {version.actorId} · {version.reason}
-                    <CommandButton
-                      command="admin.pricing.restore"
-                      className="link-action"
-                      type="button"
-                      targetId={`pricing-rev-${version.rev}`}
-                      confirmTarget={false}
-                      scope="all"
-                      before={`pricing rev ${persisted.draftRev}`}
-                      after={`restore pricing rev ${version.rev} as ${restore.book.draftRev}`}
-                      expectedSliceRev={persisted.draftRev}
-                      sliceKey="prices"
-                      value={restore.book}
-                      disabled={!canPublish || Boolean(restore.error)}
-                      title={restore.error}
-                      onDone={() => {
-                        setDraft(null);
-                        setNotice(`Pricing revision ${version.rev} restored as revision ${restore.book.draftRev}.`);
-                      }}
-                    >
-                      restore
-                    </CommandButton>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </article>
-      </TabPanel>
-    </>
+          {tab === "fees" ? (
+            <section className="dash-card" aria-labelledby="fees-title">
+              <div className="card-head">
+                <h3 id="fees-title"><Receipt size={16} aria-hidden="true" /> Fees · {zone?.name}</h3>
+                <span className="fine-print">Same for every category</span>
+              </div>
+              <FeesPanel zoneName={zone?.name ?? zoneId} airport={zone?.kind === "airport"} currency={currency} book={book} published={published} problems={problems} canEdit={canPublish} onChange={(patch) => update((draft) => { draft.fees = { ...draft.fees, ...patch }; })} />
+            </section>
+          ) : null}
+
+          {tab === "surge" ? (
+            <SurgePanel
+              market={market}
+              zoneId={zoneId}
+              zoneName={zone?.name ?? zoneId}
+              rows={rows}
+              alerts={alerts}
+              book={book}
+              live={zoneLive(store, zoneId)}
+              store={store}
+              problems={problems}
+              agentId={agent?.id ?? null}
+              canEdit={canPublish}
+              now={minute}
+              map={surgeMap}
+              onSmart={(patch) => update((draft) => { draft.smart = { ...draft.smart, ...patch }; })}
+              onScheduled={(list) => update((draft) => { draft.scheduled = list; })}
+              onSelectZone={(id) => go({ zone: id })}
+              onNotice={setNotice}
+            />
+          ) : null}
+
+          {tab === "commission" ? (
+            <section className="dash-card" aria-labelledby="commission-title">
+              <div className="card-head">
+                <h3 id="commission-title"><BadgePercent size={16} aria-hidden="true" /> Commission · {zone?.name}</h3>
+                <span className="fine-print">What Movera keeps from the trip price</span>
+              </div>
+              <CommissionPanel zoneName={zone?.name ?? zoneId} currency={currency} categories={categories} book={book} published={published} problems={problems} canEdit={canPublish} onCommission={(id, value) => update((draft) => { draft.commission[id] = value; })} onFleet={(value) => update((draft) => { draft.fleetCommissionPct = value; })} />
+            </section>
+          ) : null}
+
+          {tab === "history" ? (
+            <section className="dash-card" aria-labelledby="history-title">
+              <div className="card-head">
+                <h3 id="history-title"><History size={16} aria-hidden="true" /> History</h3>
+                <span className="fine-print">Every publish, newest first</span>
+              </div>
+              <HistoryPanel store={store} zoneId={zoneId} agentId={agent?.id ?? null} canEdit={canPublish} locale={market.locale} timeZone={market.timeZone} onRestored={(message) => { setDrafts({}); setNotice(message); }} />
+            </section>
+          ) : null}
+        </div>
+        {testOpen ? <TestRide zoneName={zone?.name ?? zoneId} currency={currency} categories={categories} book={book} liveSurge={currentSurge?.multiplier ?? 1} draft={dirty.some((draft) => draft.zoneId === zoneId)} onClose={() => setTestOpen(false)} /> : null}
+      </div>
+
+      {changedCount ? (
+        <div className="draft-bar" role="region" aria-label="Unpublished changes">
+          <span className="draft-dot" aria-hidden="true" />
+          <div className="draft-text">
+            <strong>Unpublished changes in {dirty.map((draft) => zoneById(draft.zoneId)?.name ?? draft.zoneId).join(", ")}</strong>
+            <small>{dirtyProblems.length ? dirtyProblems[0].message : `${publish.changes.length} change${publish.changes.length === 1 ? "" : "s"} · riders see them after you publish`}</small>
+          </div>
+          <button data-command="admin.pricing.discard" type="button" className="dash-btn ghost" onClick={() => { setDrafts({}); setNotice("Changes discarded."); }}>Discard</button>
+          <CommandButton command="admin.pricing.publish" className="dash-btn publish" targetId={`pricing-rev-${store.draftRev + 1}`} confirmTarget={false} scope="all" before={`pricing rev ${store.draftRev}`} after={`pricing rev ${store.draftRev + 1}: ${publish.changes.slice(0, 3).join("; ")}`} expectedSliceRev={store.draftRev} sliceKey={SLICE_KEY} value={publish.store} disabled={!canPublish || Boolean(publish.error) || dirtyProblems.length > 0} title={publish.error ?? dirtyProblems[0]?.message} onDone={() => { setDrafts({}); setNotice(`Published as pricing revision ${publish.store.draftRev}.`); }}>
+            <Save size={15} aria-hidden="true" /> Publish changes
+          </CommandButton>
+        </div>
+      ) : null}
+
+      {copyOpen ? (
+        <CopyZones
+          fromZoneId={zoneId}
+          fromName={zone?.name ?? zoneId}
+          allowed={(id) => !agent || canUseZone(agent, id)}
+          onClose={() => setCopyOpen(false)}
+          onCopy={(targets, parts) => {
+            setDrafts((current) => {
+              const next = { ...current };
+              for (const target of targets) next[target] = copyInto(book, current[target] ?? zoneBook(store, target), parts);
+              return next;
+            });
+            setCopyOpen(false);
+            setNotice(`Copied ${zone?.name} to ${targets.length} zone${targets.length === 1 ? "" : "s"} as drafts. Review and publish.`);
+          }}
+        />
+      ) : null}
+      {catsOpen ? <CategoryManager store={store} usageOf={usageOf} agentId={agent?.id ?? null} canEdit={canPublish} locale={market.locale} onClose={() => setCatsOpen(false)} onNotice={setNotice} /> : null}
+    </div>
   );
 }

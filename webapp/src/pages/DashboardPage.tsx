@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -53,6 +53,10 @@ import { driverPerformance } from "../fleet/performance";
 import { formatMoney } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
 import { openFailures } from "../payments/failures";
+import { surgeRows } from "../pricing/rows";
+import { SurgeControls, SurgeLegend } from "../pricing/SurgeControls";
+import { useSurgePref } from "../pricing/useSurgePref";
+import { SLICE_KEY, emptyPricingStore, normalizeStore } from "../pricing/zonePricing";
 import { Flag } from "../ui/Flag";
 
 const FIVE_MIN = 5 * 60_000;
@@ -122,6 +126,7 @@ type Action = { id: string; label: string; icon: ReactNode; path?: string; permi
 
 export function DashboardPage() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const client = useQueryClient();
   const api = useAdminApi();
   const { agent } = useSession();
@@ -231,6 +236,15 @@ export function DashboardPage() {
   const riderStats = riderCounts(requests, live, riders.data ?? []);
   const candidatesOf = (request: RideRequest) => candidatesFor(request, live, allowedCategories);
   const balance = useMemo(() => supplyDemand(country, scope.zones, requests, live), [country, scope.zones, requests, live]);
+  const pricingSlice = useSlice<unknown>(SLICE_KEY, emptyPricingStore());
+  const pricing = useMemo(() => normalizeStore(pricingSlice.value), [pricingSlice.value]);
+  const surgePref = useSurgePref("dashboard", { shown: false, style: "zones" });
+  const surgeMinute = Math.floor(now / 60_000) * 60_000;
+  const surgeZoneKey = (scope.zones.length ? scope.zones : market.zones.map((zone) => zone.id)).join(",");
+  const surge = useMemo(
+    () => surgeRows(pricing, surgeZoneKey.split(","), new Map(balance.map((row) => [row.zoneId, { waiting: row.waiting, free: row.free }])), surgeMinute).map((row) => row.surge),
+    [pricing, surgeZoneKey, balance, surgeMinute],
+  );
 
   const shift = demoShift(now, api.demo);
   const rides = useMemo(() => scheduledRides(reservations.data ?? [], drivers.data ?? [], now, shift), [reservations.data, drivers.data, now, shift]);
@@ -306,7 +320,7 @@ export function DashboardPage() {
   const loading = drivers.isLoading || trips.isLoading;
   const timeFormat = new Intl.DateTimeFormat(market.locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: market.timeZone });
   const dayFormat = new Intl.DateTimeFormat(market.locale, { weekday: "short", day: "numeric", month: "short", timeZone: market.timeZone });
-  const surgeLink = (zoneId: string) => (can(role, "settings.edit") ? withScope(`/pricing?zone=${zoneId}`) : null);
+  const surgeLink = (zoneId: string) => (can(role, "settings.read") ? withScope(`/pricing?zone=${zoneId}&tab=surge`) : null);
   const busy = liveCounts.trip + liveCounts.pickup;
 
   const calendarDays = Array.from({ length: 7 }, (_, index) => {
@@ -499,6 +513,7 @@ export function DashboardPage() {
                 <button data-command="admin.ui.mapLayer" type="button" aria-pressed={showBalance} className={showBalance ? "state-chip" : "state-chip off"} onClick={() => setShowBalance((value) => !value)}>
                   <i style={{ background: "linear-gradient(90deg,#0ca30c,#eda100,#d03b3b)" }} />Supply vs demand
                 </button>
+                <SurgeControls compact shown={surgePref.shown} style={surgePref.style} onShown={surgePref.setShown} onStyle={surgePref.setStyle} />
               </div>
               {liveNotice ? <p className="fd-notice" role="status">{liveNotice}</p> : null}
               <DriversMap
@@ -508,6 +523,10 @@ export function DashboardPage() {
                 focusRequest={focusRequest}
                 balance={balance}
                 showBalance={showBalance}
+                surge={surge}
+                surgeShown={surgePref.shown}
+                surgeStyle={surgePref.style}
+                onSurgeZone={(zoneId) => { const link = surgeLink(zoneId); if (link) navigate(link); }}
                 renderAssign={can(role, "trips.intervene") ? (request) => <AssignControls request={request} candidates={candidatesOf(request)} onDone={setLiveNotice} /> : undefined}
                 market={market}
                 zones={scope.zones}
@@ -534,6 +553,7 @@ export function DashboardPage() {
                   };
                 }}
               />
+              {surgePref.shown ? <SurgeLegend /> : null}
               <p className="fine-print">{api.demo ? "Simulated positions from demo data. " : ""}Drivers move every 5 seconds; data reloads every 10 seconds.</p>
             </section>
 
@@ -551,7 +571,7 @@ export function DashboardPage() {
 
           <div className="dash-grid-2">
             <AirportCard rows={airportQueues(country, live, Math.floor(now / 3_600_000))} />
-            <BoostCard rows={activeBoosts(bonuses.data ?? [], balance)} surgeLink={surgeLink} />
+            <BoostCard rows={activeBoosts(bonuses.data ?? [], balance, surge)} surgeLink={surgeLink} />
           </div>
         </>
       ) : null}

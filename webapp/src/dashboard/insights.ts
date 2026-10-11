@@ -79,15 +79,20 @@ export function ratings(totals: Totals, seedKey: string): RatingSummary {
   };
 }
 
-export type BoostZone = { zoneId: string; name: string; kind: "Boost" | "Surge suggested"; detail: string };
+export type BoostZone = { zoneId: string; name: string; kind: "Surge" | "Boost" | "Surge suggested"; detail: string };
 
-/** Driver boosts running now, plus zones short of drivers where a surge could help. */
-export function activeBoosts(bonuses: readonly { id: string; name: string; zoneId: string; status: string }[], balance: readonly ZoneBalance[]): BoostZone[] {
+/** Surges running now, driver boosts, and zones short of drivers where a surge could help. */
+export function activeBoosts(bonuses: readonly { id: string; name: string; zoneId: string; status: string }[], balance: readonly ZoneBalance[], surges: readonly { zoneId: string; name: string; multiplier: number; source: string }[] = []): BoostZone[] {
+  const surging = surges
+    .filter((surge) => surge.multiplier > 1)
+    .sort((a, b) => b.multiplier - a.multiplier)
+    .map((surge) => ({ zoneId: surge.zoneId, name: surge.name, kind: "Surge" as const, detail: `×${surge.multiplier.toFixed(1)} · ${surge.source}` }));
+  const hot = new Set(surging.map((item) => item.zoneId));
   const running = bonuses
     .filter((bonus) => bonus.status === "active" && zoneById(bonus.zoneId))
     .map((bonus) => ({ zoneId: bonus.zoneId, name: zoneById(bonus.zoneId)!.name, kind: "Boost" as const, detail: bonus.name }));
   const suggested = balance
-    .filter((zone) => zone.level === "short")
+    .filter((zone) => zone.level === "short" && !hot.has(zone.zoneId))
     .map((zone) => ({ zoneId: zone.zoneId, name: zone.name, kind: "Surge suggested" as const, detail: `${zone.waiting} waiting · ${zone.free} free` }));
-  return [...running, ...suggested];
+  return [...surging, ...running, ...suggested];
 }

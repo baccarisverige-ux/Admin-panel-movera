@@ -10,6 +10,9 @@ import { LIVE_STATES, type LiveDriver, type LiveState } from "./live";
 import type { LiveTrip } from "./liveTrip";
 import type { RideRequest } from "./riders";
 import type { ZoneBalance } from "./insights";
+import type { ZoneSurge } from "../pricing/surge";
+import type { SurgeStyle } from "../pricing/surgeGeo";
+import { installSurgeLayers, updateSurgeLayers } from "../pricing/surgeLayers";
 import { along, type LatLng } from "./route";
 import { WaybillDialog } from "./TripCard";
 
@@ -53,6 +56,11 @@ type Props = {
   /** Supply vs demand per zone, drawn as coloured circles when shown. */
   balance?: ZoneBalance[];
   showBalance?: boolean;
+  /** Surge per zone, drawn in the style the admin picked when the surge layer is on. */
+  surge?: ZoneSurge[];
+  surgeShown?: boolean;
+  surgeStyle?: SurgeStyle;
+  onSurgeZone?: (zoneId: string) => void;
 };
 
 const LEVEL_COLOR = { ok: "#0ca30c", tight: "#eda100", short: "#d03b3b" };
@@ -127,7 +135,7 @@ function geo(drivers: LiveDriver[], hidden: Set<LiveState>) {
 }
 
 /** Live drivers on a MapLibre map, coloured by state; click a driver for details. */
-export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null, tripFor, infoFor, requests = [], showRequests = true, focusRequest = null, renderAssign, balance = [], showBalance = false }: Props) {
+export function DriversMap({ drivers, market, zones, hidden, withScope, focusId = null, tripFor, infoFor, requests = [], showRequests = true, focusRequest = null, renderAssign, balance = [], showBalance = false, surge = [], surgeShown = false, surgeStyle = "zones", onSurgeZone }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const latest = useRef({ drivers, hidden, requests, showRequests, balance, showBalance });
@@ -138,6 +146,8 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
   const [routeShown, setRouteShown] = useState(true);
   const [following, setFollowing] = useState(false);
   const [waybillOpen, setWaybillOpen] = useState(false);
+  const surgeClick = useRef(onSurgeZone);
+  surgeClick.current = onSurgeZone;
   const pins = useRef<maplibregl.Marker[]>([]);
   latest.current = { drivers, hidden, requests, showRequests, balance, showBalance };
 
@@ -162,6 +172,7 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.on("load", () => {
+      installSurgeLayers(map, (zoneId) => surgeClick.current?.(zoneId));
       map.addSource("balance", { type: "geojson", data: balanceGeo(latest.current.balance, latest.current.showBalance) });
       map.addLayer({
         id: "balance",
@@ -257,6 +268,12 @@ export function DriversMap({ drivers, market, zones, hidden, withScope, focusId 
     const source = mapRef.current?.getSource("balance") as GeoJSONSource | undefined;
     if (ready && source) source.setData(balanceGeo(balance, showBalance));
   }, [balance, showBalance, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    updateSurgeLayers(map, surge, surgeStyle, surgeShown, null, (zoneId) => surgeClick.current?.(zoneId));
+  }, [surge, surgeStyle, surgeShown, ready]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource("requests") as GeoJSONSource | undefined;

@@ -101,9 +101,9 @@ export function BoostCard({ rows, surgeLink }: { rows: BoostZone[]; surgeLink: (
             return (
               <li key={`${row.kind}-${row.zoneId}-${row.detail}`}>
                 <strong>{row.name}</strong>
-                <span className={row.kind === "Boost" ? "boost-chip" : "boost-chip warn"}>{row.kind}</span>
+                <span className={row.kind === "Boost" ? "boost-chip" : row.kind === "Surge" ? "boost-chip surge" : "boost-chip warn"}>{row.kind}</span>
                 <span>{row.detail}</span>
-                {row.kind !== "Boost" && link ? <Link className="link-action" to={link}>Start surge</Link> : null}
+                {row.kind !== "Boost" && link ? <Link className="link-action" to={link}>{row.kind === "Surge" ? "Open" : "Start surge"}</Link> : null}
               </li>
             );
           })}
