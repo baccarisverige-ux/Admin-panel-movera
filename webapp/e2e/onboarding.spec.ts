@@ -28,7 +28,7 @@ test("onboarding approves documents and activates a driver", async ({ page }) =>
   await expect(page.getByText("Driver is active. New offers can be sent.")).toBeVisible();
   await page.getByRole("link", { name: "Drivers", exact: true }).click();
   await page.getByRole("button", { name: "Pending", exact: true }).click();
-  await page.getByRole("cell", { name: "D0001" }).click();
+  await page.getByRole("cell", { name: "MV-SE-0001" }).click();
   await expect(page).toHaveURL(/\/drivers\/D0001$/);
   await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
   await page.getByRole("tab", { name: "Documents" }).click();

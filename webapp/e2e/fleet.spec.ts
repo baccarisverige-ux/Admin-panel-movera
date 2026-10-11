@@ -17,13 +17,13 @@ test("the menu groups fleet owners with drivers", async ({ page }) => {
   await expect(page.getByText("Fleet & Drivers", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Fleet owners", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Fleet owners" })).toBeVisible();
-  await page.getByRole("cell", { name: "O1" }).click();
+  await page.getByRole("cell", { name: "FO-SE-01" }).click();
   await expect(page).toHaveURL(/\/fleets\/O1/);
   await expect(page.getByRole("heading", { level: 2, name: "Johan Ekström" })).toBeVisible();
   await page.getByRole("tab", { name: "Fleets" }).click();
   const north = page.getByRole("list", { name: "Drivers in North fleet" });
   await expect(north).toContainText("Erik Söder");
-  await north.getByRole("link", { name: /Erik Söder/ }).click();
+  await north.locator(".fd-crew-name", { hasText: "Erik Söder" }).click();
   await expect(page).toHaveURL(/\/drivers\/D0001/);
   await expect(page.getByText("North fleet").first()).toBeVisible();
 });
@@ -81,4 +81,27 @@ test("a fleet owner's documents are separate from a driver's", async ({ page }) 
   await expect(docs).toContainText("Fleet insurance");
   await expect(docs).not.toContainText("Driving licence");
   await expect(page.getByTestId("doc-fleet_insurance")).toHaveClass(/doc-invalid/);
+});
+
+test("drivers show their code and online state, and open on the dashboard map", async ({ page }) => {
+  await signInAs(page);
+  await page.goto("/drivers");
+  await page.getByRole("button", { name: "Online now", exact: true }).click();
+  const row = page.locator("tbody tr").first();
+  await expect(row).toContainText(/MV-SE-\d{4}/);
+  await expect(row).toContainText("Online");
+  await expect(row.getByRole("button", { name: /^Call / })).toBeVisible();
+  const map = row.getByRole("link", { name: /on the map$/ });
+  await map.click();
+  await expect(page).toHaveURL(/focus=D\d{4}/);
+  await expect(page.getByRole("dialog", { name: /^Driver / })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: /^Driver / })).toContainText(/MV-SE-\d{4}/);
+});
+
+test("the message shortcut opens the driver's conversation", async ({ page }) => {
+  await signInAs(page);
+  await page.goto("/drivers");
+  await page.locator("tbody tr").first().getByRole("link", { name: /^Message / }).click();
+  await expect(page).toHaveURL(/\/drivers\/D\d{4}\?tab=messages/);
+  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
 });

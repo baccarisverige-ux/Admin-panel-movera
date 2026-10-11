@@ -8,13 +8,16 @@ import { DRIVER_DOCUMENTS } from "../drivers/gate";
 import { driverOps, emptyDriverOpsBook, type DriverOpsBook } from "../drivers/ops";
 import { countHealth } from "../fleet/documents";
 import { driverPerformance } from "../fleet/performance";
-import { DocSummary } from "../fleet/ui";
-import { formatMoney, zoneById } from "../markets/markets";
+import { liveDrivers } from "../dashboard/live";
+import { driverCode } from "../fleet/codes";
+import { ContactActions, DocSummary, OnlinePill, type Presence } from "../fleet/ui";
+import { formatMoney, marketOfZone, zoneById } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
 import { DataTable } from "../ui/DataTable";
 
 const VIEWS = [
   { id: "all", label: "All" },
+  { id: "online", label: "Online now" },
   { id: "active", label: "Active" },
   { id: "on_hold", label: "On hold" },
   { id: "pending", label: "Pending" },
@@ -33,11 +36,15 @@ export function DriversPage() {
   const drivers = useRecords("drivers", null);
   const vehicles = useRecords("vehicles", null);
   const fleets = useRecords("fleets", null);
+  const trips = useRecords("trips", null);
+  const incidents = useRecords("incidents", null);
   const store = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
   const [view, setView] = useState<View>("all");
   const [type, setType] = useState("all");
   const [now] = useState(() => Date.now());
   const month = useMemo(() => periodWindow({ kind: "month" }, now, scope.market.timeZone, scope.market.locale), [now, scope.market]);
+
+  const presence = useMemo(() => new Map(liveDrivers(drivers.data ?? [], vehicles.data ?? [], trips.data ?? [], incidents.data ?? [], 0).map((row) => [row.id, row.state as Presence])), [drivers.data, vehicles.data, trips.data, incidents.data]);
 
   const enriched = useMemo(() => (drivers.data ?? [])
     .filter((driver) => !agent?.scope.fleetPartnerId || driver.fleetId === agent.scope.fleetPartnerId)
@@ -48,11 +55,12 @@ export function DriversPage() {
       const perf = driverPerformance({ id: driver.id, zoneId: driver.zoneId, status: driver.status, stars: ops.ratings.stars, acceptancePct: ops.ratings.acceptancePct, cancellationPct: ops.ratings.cancellationPct }, month, false).current;
       const car = (vehicles.data ?? []).find((row) => row.driverId === driver.id);
       const fleet = (fleets.data ?? []).find((row) => row.id === driver.fleetId);
-      return { driver, counts, total: docs.length, perf, car, fleet };
-    }), [drivers.data, vehicles.data, fleets.data, store.value, agent, now, month]);
+      return { driver, counts, total: docs.length, perf, car, fleet, code: driverCode(driver), online: presence.get(driver.id) ?? ("offline" as Presence) };
+    }), [drivers.data, vehicles.data, fleets.data, store.value, agent, now, month, presence]);
 
   const counts = {
     all: enriched.length,
+    online: enriched.filter((row) => row.online !== "offline").length,
     active: enriched.filter((row) => row.driver.status === "active").length,
     on_hold: enriched.filter((row) => row.driver.status === "on_hold").length,
     pending: enriched.filter((row) => row.driver.status === "pending").length,
@@ -66,6 +74,7 @@ export function DriversPage() {
     if (type === "independent" && row.driver.fleetId) return false;
     if (type === "fleet" && !row.driver.fleetId) return false;
     if (type.startsWith("F") && row.driver.fleetId !== type) return false;
+    if (view === "online") return row.online !== "offline";
     if (view === "expiring") return row.counts.expiring > 0;
     if (view === "invalid") return row.counts.invalid > 0;
     return view === "all" || row.driver.status === view;
@@ -84,7 +93,7 @@ export function DriversPage() {
 
       <section className="fd-cards" aria-label="Driver summary">
         <SummaryCard icon={<Users size={18} />} tone="blue" label="All drivers" value={counts.all} />
-        <SummaryCard icon={<UserCheck size={18} />} tone="green" label="Active" value={counts.active} />
+        <SummaryCard icon={<UserCheck size={18} />} tone="green" label="Active" value={counts.active} hint={`${counts.online} online now`} />
         <SummaryCard icon={<PauseCircle size={18} />} tone="amber" label="On hold" value={counts.on_hold} />
         <SummaryCard icon={<CalendarClock size={18} />} tone="violet" label="Pending approval" value={counts.pending} />
         <SummaryCard icon={<AlertTriangle size={18} />} tone="orange" label="Documents expiring" value={counts.expiring} />
@@ -112,11 +121,12 @@ export function DriversPage() {
 
       <DataTable
         className="fd-table"
-        head={["Driver", "Name", "Type", "Status", "Zone", "Vehicle", "Documents", "Rating", "Trips", "Cancel %", "Earnings"]}
+        head={["Code", "Name", "Online", "Type", "Status", "Zone", "Vehicle", "Documents", "Rating", "Trips", "Cancel %", "Earnings", "Contact"]}
         rowIds={rows.map((row) => row.driver.id)}
-        rows={rows.map(({ driver, counts: docCounts, total, perf, car, fleet }) => [
-          driver.id,
+        rows={rows.map(({ driver, counts: docCounts, total, perf, car, fleet, code, online }) => [
+          code,
           driver.name,
+          <OnlinePill key={`${driver.id}-online`} presence={online} />,
           fleet ? fleet.name : "Independent",
           driver.status,
           zoneById(driver.zoneId)?.name ?? driver.zoneId,
@@ -126,6 +136,17 @@ export function DriversPage() {
           String(perf.trips),
           perf.trips ? `${perf.cancellationPct}%` : "—",
           perf.netMinor ? money(perf.netMinor) : "—",
+          <ContactActions
+            key={`${driver.id}-contact`}
+            kind="driver"
+            compact
+            id={driver.id}
+            name={driver.name}
+            phone={driver.phone}
+            zoneId={driver.zoneId}
+            messageTo={`/drivers/${driver.id}?tab=messages`}
+            mapTo={online === "offline" ? null : `/?country=${marketOfZone(driver.zoneId)?.id ?? "SE"}&focus=${driver.id}`}
+          />,
         ])}
         state={drivers.isLoading ? "loading" : drivers.isError ? "error" : "ready"}
         onRetry={() => void drivers.refetch()}
@@ -138,12 +159,13 @@ export function DriversPage() {
   );
 }
 
-function SummaryCard({ icon, tone, label, value }: { icon: ReactNode; tone: string; label: string; value: number }) {
+function SummaryCard({ icon, tone, label, value, hint }: { icon: ReactNode; tone: string; label: string; value: number; hint?: string }) {
   return (
     <article className={`fd-card tone-${tone}`}>
       <span className="fd-card-icon" aria-hidden="true">{icon}</span>
       <span className="fd-card-label">{label}</span>
       <strong>{value}</strong>
+      {hint ? <small className="fd-card-hint">{hint}</small> : null}
     </article>
   );
 }

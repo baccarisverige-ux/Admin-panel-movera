@@ -4,7 +4,8 @@ import { Building2, CalendarClock, Car, PauseCircle, UserCheck, Users } from "lu
 import { useRecords, useSlice } from "../api/hooks";
 import { countHealth } from "../fleet/documents";
 import { emptyOwnerOpsBook, OWNER_DOCUMENTS, ownerOps, type OwnerOpsBook } from "../fleet/ownerOps";
-import { DocSummary } from "../fleet/ui";
+import { ownerCode } from "../fleet/codes";
+import { ContactActions, DocSummary } from "../fleet/ui";
 import { marketOfZone } from "../markets/markets";
 import { DataTable } from "../ui/DataTable";
 
@@ -78,10 +79,10 @@ export function FleetOwnersPage() {
 
       <DataTable
         className="fd-table"
-        head={["Owner", "Name", "Company", "Country", "Fleets", "Drivers", "Active drivers", "On hold", "Vehicles", "Documents", "Status"]}
+        head={["Code", "Name", "Company", "Country", "Fleets", "Drivers", "Active drivers", "On hold", "Vehicles", "Documents", "Status", "Contact"]}
         rowIds={shown.map((row) => row.owner.id)}
         rows={shown.map(({ owner, fleets: own, crew, cars, counts, total }) => [
-          owner.id,
+          ownerCode(owner),
           owner.name,
           owner.company ?? "",
           marketOfZone(owner.zoneId)?.name ?? "",
@@ -92,6 +93,7 @@ export function FleetOwnersPage() {
           String(cars),
           <DocSummary key={`${owner.id}-docs`} counts={counts} total={total} />,
           owner.status,
+          <ContactActions key={`${owner.id}-contact`} kind="owner" compact id={owner.id} name={owner.name} phone={owner.phone} zoneId={owner.zoneId} messageTo={`/fleets/${owner.id}?tab=messages`} />,
         ])}
         state={owners.isLoading ? "loading" : owners.isError ? "error" : "ready"}
         onRetry={() => void owners.refetch()}

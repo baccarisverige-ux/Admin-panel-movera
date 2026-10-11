@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { AlertTriangle, ArrowLeft, Building2, Car, CheckCircle2, Mail, MessageSquare, Phone, Star, StickyNote } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Building2, Car, CheckCircle2, Hash, Mail, MapPin, MessageSquare, Phone, Star, StickyNote } from "lucide-react";
 import { useAudit, useRecords, useSlice } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
@@ -28,7 +28,9 @@ import {
 import { statusLabel } from "../domain/labels";
 import { countHealth, docHealth } from "../fleet/documents";
 import { driverPerformance, performanceWarning } from "../fleet/performance";
-import { AccountChip, Avatar, DocSummary, DocumentsTable, Field, HealthPill, MessagesPanel, Stat, type DocRow } from "../fleet/ui";
+import { liveDrivers } from "../dashboard/live";
+import { driverCode } from "../fleet/codes";
+import { AccountChip, Avatar, DocSummary, DocumentsTable, Field, HealthPill, MessagesPanel, OnlinePill, Stat, type DocRow, type Presence } from "../fleet/ui";
 import { formatMoney, market as marketById, marketOfZone, zoneById } from "../markets/markets";
 import { CommandButton } from "../ui/CommandButton";
 import { SensitiveValue } from "../ui/SensitiveValue";
@@ -128,7 +130,11 @@ export function DriverDetailPage() {
   const email = `${driver.name.toLowerCase().normalize("NFD").replace(/[^a-z\s]/g, "").trim().replace(/\s+/g, ".")}@${country === "SE" ? "mail.se" : country === "FR" ? "mail.fr" : "mail.tn"}`;
   const seed = Number(driver.id.replace(/\D/g, "")) || 1;
   const joined = driver.joinedAt ?? new Date(Date.parse("2026-10-05T00:00:00Z") - (60 + (seed * 37) % 800) * 86_400_000).toISOString();
-  const lastOnline = driver.status === "active" ? (seed % 3 === 0 ? "Online now" : `${5 + (seed % 50)} min ago`) : driver.status === "pending" ? "Never" : `${7 + (seed % 9)} days ago`;
+  const live = liveDrivers(drivers.data ?? [], vehicles.data ?? [], trips.data ?? [], incidents.data ?? [], 0).find((row) => row.id === driver.id);
+  const presence: Presence = live?.state ?? "offline";
+  const code = driverCode(driver);
+  const mapTo = live ? `/?country=${country}&focus=${driver.id}` : null;
+  const lastOnline = live ? "Online now" : driver.status === "active" ? (seed % 3 === 0 ? "Online now" : `${5 + (seed % 50)} min ago`) : driver.status === "pending" ? "Never" : `${7 + (seed % 9)} days ago`;
 
   function selectTab(id: string) {
     setTab(id);
@@ -204,6 +210,8 @@ export function DriverDetailPage() {
             <h2>{driver.name}</h2>
             <div className="fd-chips">
               <AccountChip status={driver.status} />
+              <OnlinePill presence={presence} />
+              <span className="fd-chip code"><Hash size={13} aria-hidden="true" />{code}</span>
               {fleet ? (
                 <Link className="fd-chip fleet" to={`/fleets/${fleet.ownerId ?? ""}`}><Building2 size={13} aria-hidden="true" />{fleet.name}</Link>
               ) : <span className="fd-chip">Independent driver</span>}
@@ -222,12 +230,29 @@ export function DriverDetailPage() {
               {accountAction("admin.driver.onHold", "on_hold", "Put on hold", driver.status === "on_hold" || driver.status === "suspended")}
               {accountAction("admin.driver.suspend", "suspended", "Suspend", driver.status !== "active" && driver.status !== "on_hold")}
               {accountAction("admin.driver.reactivate", "active", "Reactivate", Boolean(activationIssue) || (driver.status !== "suspended" && driver.status !== "on_hold"))}
+            </div>
+            <div className="fd-action-row">
+              <CommandButton
+                command="admin.driver.call"
+                className="dash-btn ghost"
+                type="button"
+                targetId={driver.id}
+                confirmTarget={false}
+                scope={driver.zoneId}
+                before="idle"
+                after="call started"
+                onDone={() => { window.location.href = `tel:${driver.phone.replace(/[^+\d]/g, "")}`; }}
+              >
+                <Phone size={15} aria-hidden="true" />Call
+              </CommandButton>
               <button type="button" data-command="admin.ui.dashboardTab" className="dash-btn ghost" onClick={() => selectTab("messages")}><MessageSquare size={15} aria-hidden="true" />Message</button>
+              {mapTo ? <Link className="dash-btn ghost" to={mapTo}><MapPin size={15} aria-hidden="true" />See on map</Link> : <span className="dash-btn ghost off" title="The driver is offline"><MapPin size={15} aria-hidden="true" />Offline</span>}
               <button type="button" data-command="admin.ui.dashboardTab" className="dash-btn ghost" onClick={() => selectTab("notes")}><StickyNote size={15} aria-hidden="true" />Note</button>
             </div>
           </div>
         </div>
         <dl className="fd-facts">
+          <Field label="Driver code"><Hash size={13} aria-hidden="true" /> {code}</Field>
           <Field label="Phone"><Phone size={13} aria-hidden="true" /> <SensitiveValue value={driver.phone} permission="drivers.viewSensitive" command="admin.driver.revealSensitive" targetId={driver.id} label="Phone" /></Field>
           <Field label="Email"><Mail size={13} aria-hidden="true" /> {email}</Field>
           <Field label="Zone">{zoneById(driver.zoneId)?.name ?? driver.zoneId}</Field>
@@ -235,7 +260,7 @@ export function DriverDetailPage() {
           <Field label="Payouts go to">{fleet ? `${fleet.name} (fleet)` : `The driver · bank •••• ${ops.bank.last4}`}</Field>
           <Field label="Joined">{dateFormat.format(Date.parse(joined))}</Field>
           <Field label="Last online">{lastOnline}</Field>
-          <Field label="This month">{sinceMonth.trips} trips · {compact(sinceMonth.netMinor)}</Field>
+
         </dl>
       </section>
 

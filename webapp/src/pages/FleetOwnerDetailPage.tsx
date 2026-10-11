@@ -25,7 +25,9 @@ import {
   type OwnerOpsBook,
 } from "../fleet/ownerOps";
 import { combine, driverPerformance, performanceWarning } from "../fleet/performance";
-import { AccountChip, Avatar, DocSummary, DocumentsTable, Field, MessagesPanel, Stat, type DocRow } from "../fleet/ui";
+import { liveDrivers } from "../dashboard/live";
+import { driverCode, ownerCode } from "../fleet/codes";
+import { AccountChip, Avatar, ContactActions, DocSummary, DocumentsTable, Field, MessagesPanel, OnlinePill, Stat, type DocRow, type Presence } from "../fleet/ui";
 import { formatMoney, market as marketById, marketOfZone, zoneById } from "../markets/markets";
 import { CommandButton } from "../ui/CommandButton";
 import { TabPanel, Tabs } from "../ui/Tabs";
@@ -45,6 +47,8 @@ export function FleetOwnerDetailPage() {
   const fleets = useRecords("fleets", null);
   const drivers = useRecords("drivers", null);
   const vehicles = useRecords("vehicles", null);
+  const trips = useRecords("trips", null);
+  const incidents = useRecords("incidents", null);
   const audit = useAudit();
   const store = useSlice<OwnerOpsBook>("fleetOwnerOps", emptyOwnerOpsBook());
   const driverStore = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
@@ -70,6 +74,7 @@ export function FleetOwnerDetailPage() {
     const ids = new Set(ownFleets.map((fleet) => fleet.id));
     return (drivers.data ?? []).filter((driver) => driver.fleetId && ids.has(driver.fleetId));
   }, [drivers.data, ownFleets]);
+  const presence = useMemo(() => new Map(liveDrivers(drivers.data ?? [], vehicles.data ?? [], trips.data ?? [], incidents.data ?? [], 0).map((row) => [row.id, row.state as Presence])), [drivers.data, vehicles.data, trips.data, incidents.data]);
   const crewStats = useMemo(() => crew.map((driver) => {
     const ops = driverOps(driverStore.value, { id: driver.id, name: driver.name, fleetId: driver.fleetId, status: driver.status, kind: driver.kind });
     const docs = DRIVER_DOCUMENTS.filter((id) => id !== "company_registration").map((id) => ops.documents[id]);
@@ -163,6 +168,7 @@ export function FleetOwnerDetailPage() {
             <h2>{owner.name}</h2>
             <div className="fd-chips">
               <AccountChip status={owner.status} />
+              <span className="fd-chip code"><Hash size={13} aria-hidden="true" />{ownerCode(owner)}</span>
               <span className="fd-chip fleet"><Building2 size={13} aria-hidden="true" />{owner.company}</span>
               <span className="fd-chip"><Users size={13} aria-hidden="true" />{crew.length} drivers</span>
               <DocSummary counts={health} total={docRows.length} />
@@ -177,6 +183,19 @@ export function FleetOwnerDetailPage() {
             <div className="fd-action-row">
               {accountAction("admin.fleetOwner.activate", "active", "Activate", owner.status === "active" || health.invalid > 0, health.invalid === 0 && owner.status !== "active" ? "" : "ghost")}
               {accountAction("admin.fleetOwner.onHold", "on_hold", "Put on hold", owner.status === "on_hold")}
+              <CommandButton
+                command="admin.fleetOwner.call"
+                className="dash-btn ghost"
+                type="button"
+                targetId={owner.id}
+                confirmTarget={false}
+                scope={owner.zoneId}
+                before="idle"
+                after="call started"
+                onDone={() => { window.location.href = `tel:${owner.phone.replace(/[^+\d]/g, "")}`; }}
+              >
+                <Phone size={15} aria-hidden="true" />Call
+              </CommandButton>
               <button type="button" data-command="admin.ui.dashboardTab" className="dash-btn ghost" onClick={() => selectTab("messages")}><MessageSquare size={15} aria-hidden="true" />Message</button>
               <button type="button" data-command="admin.ui.dashboardTab" className="dash-btn ghost" onClick={() => selectTab("notes")}><StickyNote size={15} aria-hidden="true" />Note</button>
             </div>
@@ -229,16 +248,17 @@ export function FleetOwnerDetailPage() {
                   </div>
                 </div>
                 <ul className="fd-crew" aria-label={`Drivers in ${fleet.name}`}>
-                  <li className="fd-crew-head" aria-hidden="true"><span>Driver</span><span>Status</span><span>Documents</span><span>Rating</span><span>Trips</span><span>Cancel %</span><span>Earnings</span></li>
+                  <li className="fd-crew-head" aria-hidden="true"><span>Driver</span><span>Account</span><span>Online</span><span>Documents</span><span>Rating</span><span>Trips</span><span>Earnings</span><span>Contact</span></li>
                   {members.length === 0 ? <li className="state-line">No drivers in this fleet yet.</li> : members.map(({ driver, counts, total: docTotal, perf }) => (
                     <li key={driver.id}>
-                      <Link to={`/drivers/${driver.id}`} className="fd-crew-name"><Avatar name={driver.name} size={30} /><span><strong>{driver.name}</strong><small>{driver.id}</small></span></Link>
+                      <Link to={`/drivers/${driver.id}`} className="fd-crew-name"><Avatar name={driver.name} size={30} /><span><strong>{driver.name}</strong><small>{driverCode(driver)}</small></span></Link>
                       <span><AccountChip status={driver.status} /></span>
+                      <span><OnlinePill presence={presence.get(driver.id) ?? "offline"} /></span>
                       <span><DocSummary counts={counts} total={docTotal} /></span>
                       <span>{perf.rating ? perf.rating.toFixed(2) : "—"}</span>
                       <span>{perf.trips}</span>
-                      <span>{perf.trips ? `${perf.cancellationPct}%` : "—"}</span>
                       <span className="num">{perf.netMinor ? compact(perf.netMinor) : "—"}</span>
+                      <ContactActions kind="driver" compact id={driver.id} name={driver.name} phone={driver.phone} zoneId={driver.zoneId} messageTo={`/drivers/${driver.id}?tab=messages`} mapTo={presence.has(driver.id) ? `/?country=${country}&focus=${driver.id}` : null} />
                     </li>
                   ))}
                 </ul>

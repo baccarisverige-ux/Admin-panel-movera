@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, FileText, Send } from "lucide-react";
+import { useState, type MouseEvent, type ReactNode } from "react";
+import { Link } from "react-router";
+import { ArrowDownRight, ArrowUpRight, FileText, MapPin, MessageSquare, Phone, Send } from "lucide-react";
 import type { DocStatus } from "../drivers/gate";
 import type { ThreadMessage } from "../drivers/ops";
 import { CommandButton } from "../ui/CommandButton";
@@ -227,5 +228,73 @@ export function Field({ label, children }: { label: string; children: ReactNode 
       <dt>{label}</dt>
       <dd>{children}</dd>
     </div>
+  );
+}
+
+export type Presence = "free" | "pickup" | "trip" | "stale" | "sos" | "offline";
+
+const PRESENCE_LABEL: Record<Presence, string> = {
+  free: "Online · free",
+  pickup: "Online · to pickup",
+  trip: "Online · on trip",
+  stale: "Online · no GPS",
+  sos: "SOS",
+  offline: "Offline",
+};
+
+/** Whether the driver has the app open, and what they are doing. */
+export function OnlinePill({ presence }: { presence: Presence }) {
+  return <span className={`fd-online p-${presence}`}><i aria-hidden="true" />{PRESENCE_LABEL[presence]}</span>;
+}
+
+type ContactProps = {
+  kind: "driver" | "owner";
+  id: string;
+  name: string;
+  phone: string;
+  zoneId: string;
+  messageTo: string;
+  mapTo?: string | null;
+  compact?: boolean;
+};
+
+/** Call, message and (for online drivers) show on the map. Clicks never open the row behind. */
+export function ContactActions({ kind, id, name, phone, zoneId, messageTo, mapTo, compact = false }: ContactProps) {
+  const stop = (event: MouseEvent) => event.stopPropagation();
+  const size = compact ? 15 : 16;
+  return (
+    <span className={compact ? "fd-contact compact" : "fd-contact"} onClick={stop}>
+      <CommandButton
+        command={kind === "driver" ? "admin.driver.call" : "admin.fleetOwner.call"}
+        className={compact ? "fd-icon-btn" : "dash-btn ghost"}
+        type="button"
+        targetId={id}
+        confirmTarget={false}
+        scope={zoneId}
+        before="idle"
+        after="call started"
+        aria-label={`Call ${name}`}
+        title={`Call ${name}`}
+        onDone={() => {
+          window.location.href = `tel:${phone.replace(/[^+\d]/g, "")}`;
+        }}
+      >
+        <Phone size={size} aria-hidden="true" />{compact ? null : "Call"}
+      </CommandButton>
+      <Link className={compact ? "fd-icon-btn" : "dash-btn ghost"} to={messageTo} aria-label={`Message ${name}`} title={`Message ${name}`}>
+        <MessageSquare size={size} aria-hidden="true" />{compact ? null : "Message"}
+      </Link>
+      {mapTo !== undefined ? (
+        mapTo ? (
+          <Link className={compact ? "fd-icon-btn" : "dash-btn ghost"} to={mapTo} aria-label={`See ${name} on the map`} title="See on the map">
+            <MapPin size={size} aria-hidden="true" />{compact ? null : "See on map"}
+          </Link>
+        ) : (
+          <span className={compact ? "fd-icon-btn off" : "dash-btn ghost off"} title="Offline: not on the map" aria-label={`${name} is offline`}>
+            <MapPin size={size} aria-hidden="true" />{compact ? null : "Offline"}
+          </span>
+        )
+      ) : null}
+    </span>
   );
 }
