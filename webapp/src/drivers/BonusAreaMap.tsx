@@ -182,6 +182,7 @@ export function BonusAreaMap({ country, areas, onChange }: { country: MarketId; 
             setTool("render");
           }}
           onEdited={() => undefined}
+          onCancel={() => pickTool("render")}
         />
         <p className="zn-map-notice" role="status" aria-live="polite">{notice}</p>
       </div>

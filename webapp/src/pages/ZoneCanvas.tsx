@@ -42,6 +42,8 @@ type DrawProps = {
   fitIds?: string[];
   viewKey?: string;
   onPick?: (zoneId: string) => void;
+  /** Leave the drawing tool (the Cancel button on the map). */
+  onCancel?: () => void;
 };
 
 const INNER_IDS = ["op-bromma", "op-kungsholmen", "op-sodermalm", "op-norrmalm", "op-vasastan", "op-ostermalm"];
@@ -180,6 +182,59 @@ function terraMode(mode: DrawMode): string {
   return mode;
 }
 
+/** Tools drawn by our own tap-and-click handler, so they work the same with a finger and a mouse. */
+const TAP_TOOLS = new Set<DrawMode>(["polygon", "hole", "rectangle", "circle", "freehand", "line", "point"]);
+
+const TAP_HINT: Partial<Record<DrawMode, (count: number) => string>> = {
+  polygon: (count) => (count < 3 ? `Tap the map to add points (${count} so far). At least 3.` : "Tap the first point or press Finish."),
+  hole: (count) => (count < 3 ? `Tap inside the zone to add points (${count} so far).` : "Tap the first point or press Finish."),
+  line: (count) => (count < 2 ? "Tap along the street." : "Keep tapping, then press Finish."),
+  rectangle: (count) => (count ? "Now tap the opposite corner." : "Tap one corner."),
+  circle: (count) => (count ? "Now tap where the edge should be." : "Tap the centre."),
+  freehand: () => "Press and draw with your finger or mouse. Let go to finish.",
+  point: () => "Tap where riders get picked up.",
+};
+
+function kmBetween(a: [number, number], b: [number, number]): number {
+  const x = (b[1] - a[1]) * Math.cos((((a[0] + b[0]) / 2) * Math.PI) / 180);
+  return Math.hypot(x, b[0] - a[0]) * 111.32;
+}
+
+function circlePoints(center: [number, number], km: number): Ring {
+  const dLat = km / 111.32;
+  const dLng = km / (111.32 * Math.cos((center[0] * Math.PI) / 180));
+  return Array.from({ length: 48 }, (_, index) => {
+    const angle = (2 * Math.PI * index) / 48;
+    return [Number((center[0] + Math.sin(angle) * dLat).toFixed(6)), Number((center[1] + Math.cos(angle) * dLng).toFixed(6))] as [number, number];
+  });
+}
+
+function rectPoints(a: [number, number], b: [number, number]): Ring {
+  const south = Math.min(a[0], b[0]);
+  const north = Math.max(a[0], b[0]);
+  const west = Math.min(a[1], b[1]);
+  const east = Math.max(a[1], b[1]);
+  return [[south, west], [south, east], [north, east], [north, west]];
+}
+
+/** The shape being drawn, with a live preview to where the mouse is. */
+function draftGeo(mode: DrawMode, points: Ring, hover: [number, number] | null): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = points.map((item, index) => ({ type: "Feature", properties: { first: index === 0 ? 1 : 0 }, geometry: { type: "Point", coordinates: [item[1], item[0]] } }));
+  let shape: Ring;
+  if ((mode === "circle" || mode === "rectangle") && points[0] && hover) shape = mode === "circle" ? circlePoints(points[0], kmBetween(points[0], hover)) : rectPoints(points[0], hover);
+  else shape = hover && mode !== "freehand" ? [...points, hover] : points;
+  if (shape.length >= 2) {
+    const closed = mode !== "line" && shape.length >= 3;
+    const coords = shape.map(([lat, lng]) => [lng, lat]);
+    if (closed) {
+      features.push({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [[...coords, coords[0]!]] } });
+    } else {
+      features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
+    }
+  }
+  return { type: "FeatureCollection", features };
+}
+
 function createDraw(adapter: ConstructorParameters<typeof TerraDraw>[0]["adapter"]): TerraDraw {
   return new TerraDraw({ adapter, modes: zoneDrawModes() });
 }
@@ -220,7 +275,13 @@ function boundsFor(zones: ZoneShape[], ids?: string[]): maplibregl.LngLatBounds 
   return count > 0 ? bounds : null;
 }
 
-function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce, onDrawn, onEdited, overlays, fitIds, viewKey, onPick }: DrawProps) {
+function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce, onDrawn, onEdited, overlays, fitIds, viewKey, onPick, onCancel }: DrawProps) {
+  const [draft, setDraft] = useState<Ring>([]);
+  const draftRef = useRef<Ring>([]);
+  const hoverRef = useRef<[number, number] | null>(null);
+  const drawingFree = useRef(false);
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
   const host = useRef<HTMLDivElement>(null);
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const zonesRef = useRef(zones);
@@ -395,9 +456,66 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
       map.on("idle", publish);
       if (inner) map.fitBounds(inner, { padding: 36, animate: false, maxZoom: 13 });
       else publish();
+      map.addSource("draft", { type: "geojson", data: draftGeo(modeRef.current, [], null) });
+      map.addLayer({ id: "draft-fill", type: "fill", source: "draft", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": "#6250d6", "fill-opacity": 0.22 } });
+      map.addLayer({ id: "draft-line", type: "line", source: "draft", filter: ["!=", ["geometry-type"], "Point"], paint: { "line-color": "#6250d6", "line-width": 3, "line-dasharray": [2, 1.2] } });
+      map.addLayer({ id: "draft-dot", type: "circle", source: "draft", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": ["case", ["==", ["get", "first"], 1], 9, 6], "circle-color": ["case", ["==", ["get", "first"], 1], "#ffffff", "#6250d6"], "circle-stroke-color": "#6250d6", "circle-stroke-width": 3 } });
+      const at = (event: { lngLat: { lat: number; lng: number } }): [number, number] => [Number(event.lngLat.lat.toFixed(6)), Number(event.lngLat.lng.toFixed(6))];
+      map.on("click", (event) => {
+        const current = modeRef.current;
+        if (!TAP_TOOLS.has(current) || current === "freehand") return;
+        const point = at(event);
+        const points = draftRef.current;
+        if (current === "point") return finishDraft([point]);
+        if (current === "rectangle" || current === "circle") {
+          if (!points[0]) return updateDraft([point]);
+          return finishDraft(current === "circle" ? circlePoints(points[0], Math.max(kmBetween(points[0], point), 0.05)) : rectPoints(points[0], point));
+        }
+        const first = points[0];
+        if ((current === "polygon" || current === "hole") && first && points.length >= 3) {
+          const a = map.project([first[1], first[0]]);
+          if (Math.hypot(a.x - event.point.x, a.y - event.point.y) < 16) return finishDraft(points);
+        }
+        updateDraft([...points, point]);
+      });
+      map.on("mousemove", (event) => {
+        const current = modeRef.current;
+        if (current === "freehand" && drawingFree.current) {
+          const last = draftRef.current[draftRef.current.length - 1];
+          const point = at(event);
+          if (!last || kmBetween(last, point) > 0.01) updateDraft([...draftRef.current, point]);
+          return;
+        }
+        if (!TAP_TOOLS.has(current) || !draftRef.current.length) return;
+        hoverRef.current = at(event);
+        paintDraft();
+      });
+      const startFree = (event: { lngLat: { lat: number; lng: number } }) => {
+        if (modeRef.current !== "freehand") return;
+        drawingFree.current = true;
+        updateDraft([at(event)]);
+      };
+      const moveFree = (event: { lngLat: { lat: number; lng: number }; originalEvent?: Event }) => {
+        if (modeRef.current !== "freehand" || !drawingFree.current) return;
+        event.originalEvent?.preventDefault();
+        const last = draftRef.current[draftRef.current.length - 1];
+        const point = at(event);
+        if (!last || kmBetween(last, point) > 0.01) updateDraft([...draftRef.current, point]);
+      };
+      const endFree = () => {
+        if (modeRef.current !== "freehand" || !drawingFree.current) return;
+        drawingFree.current = false;
+        if (draftRef.current.length >= 3) finishDraft(draftRef.current);
+        else updateDraft([]);
+      };
+      map.on("mousedown", startFree);
+      map.on("touchstart", startFree);
+      map.on("touchmove", moveFree);
+      map.on("mouseup", endFree);
+      map.on("touchend", endFree);
       const draw = createDraw(new TerraDrawMapLibreGLAdapter({ map }));
       draw.start();
-      draw.setMode(terraMode(modeRef.current));
+      draw.setMode(modeRef.current === "select" ? "select" : "render");
       draw.on("finish", (id) => {
         const points = drawnPoints(draw.getSnapshotFeature(id));
         const intent = modeRef.current === "hole" ? "hole" : modeRef.current === "point" ? "point" : modeRef.current === "line" ? "line" : "outer";
@@ -425,6 +543,41 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
       mapRef.current = null;
       delete window.__moveraMap;
     };
+  }, []);
+
+  function paintDraft() {
+    const source = mapRef.current?.getSource("draft");
+    if (source && "setData" in source) (source as GeoJSONSource).setData(draftGeo(modeRef.current, draftRef.current, modeRef.current === "freehand" ? null : hoverRef.current));
+  }
+
+  function updateDraft(points: Ring) {
+    draftRef.current = points;
+    if (!points.length) hoverRef.current = null;
+    setDraft(points);
+    paintDraft();
+  }
+
+  function finishDraft(points: Ring) {
+    const current = modeRef.current;
+    const intent = current === "hole" ? "hole" : current === "point" ? "point" : current === "line" ? "line" : "outer";
+    updateDraft([]);
+    drawnRef.current(points, intent);
+  }
+
+  function canFinish(): boolean {
+    const current = modeRef.current;
+    if (current === "line") return draftRef.current.length >= 2;
+    if (current === "polygon" || current === "hole") return draftRef.current.length >= 3;
+    return false;
+  }
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || !TAP_TOOLS.has(modeRef.current)) return;
+      if (canFinish()) finishDraft(draftRef.current);
+    };
+    window.addEventListener("keyup", onKey);
+    return () => window.removeEventListener("keyup", onKey);
   }, []);
 
   function paintLabels(map: maplibregl.Map) {
@@ -510,8 +663,23 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
       }
       editIdRef.current = null;
     }
+    updateDraft([]);
+    const map = mapRef.current;
+    if (map) {
+      if (mode === "freehand") {
+        map.dragPan.disable();
+        map.touchZoomRotate.disable();
+      } else {
+        map.dragPan.enable();
+        map.touchZoomRotate.enable();
+      }
+      // Quick taps add points; they must not zoom the map.
+      if (TAP_TOOLS.has(mode)) map.doubleClickZoom.disable();
+      else map.doubleClickZoom.enable();
+      map.getCanvas().style.cursor = TAP_TOOLS.has(mode) ? "crosshair" : "";
+    }
     try {
-      draw.setMode(terraMode(mode));
+      draw.setMode(mode === "select" ? "select" : "render");
       if (mode === "select") {
         const zone = zonesRef.current.find((item) => item.id === selectedRef.current);
         const feature = zone ? polygonFeature(zone) : null;
@@ -558,8 +726,18 @@ function MapLibreCanvas({ zones, selectedId, mode, layers, focus, selectionNonce
     map.jumpTo({ center: [focus.lng, focus.lat], zoom: 13 });
   }, [focus]);
 
+  const tapping = TAP_TOOLS.has(mode);
+  const multi = mode === "polygon" || mode === "hole" || mode === "line";
   return <>
     <div ref={host} className="live-map" hidden={mapUnavailable} />
+    {tapping && !mapUnavailable ? (
+      <div className="zc-drawbar" role="group" aria-label="Drawing">
+        <span className="zc-draw-hint">{TAP_HINT[mode]?.(draft.length)}</span>
+        {multi ? <button data-command="admin.zone.undo" type="button" className="zc-draw-btn" disabled={!draft.length} onClick={() => updateDraft(draft.slice(0, -1))}>Undo point</button> : null}
+        {multi ? <button data-command="admin.zone.save" type="button" className="zc-draw-btn finish" disabled={!canFinish()} onClick={() => finishDraft(draftRef.current)}>Finish</button> : null}
+        <button data-command="admin.zone.cancel" type="button" className="zc-draw-btn" onClick={() => { updateDraft([]); cancelRef.current?.(); }}>Cancel</button>
+      </div>
+    ) : null}
     {mapUnavailable ? <p role="status">Map unavailable. WebGL graphics could not initialize. The lists and settings remain available.</p> : null}
   </>;
 }

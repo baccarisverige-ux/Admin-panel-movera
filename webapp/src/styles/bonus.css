@@ -165,7 +165,7 @@
   .db-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .db-rule { grid-template-columns: auto 30px minmax(0, 1fr); }
   .db-rule .num-field { grid-column: 1 / -1; }
-  .db-map-wrap .live-map { height: 380px; }
+  .db-map-wrap .live-map { height: 480px; }
   .db-day { width: 42px; }
 }
 .db-state.done { background: #e6f6e6; color: #075f07; }

@@ -333,3 +333,19 @@
 .zd-fields input[type="color"] { width: 100%; height: 38px; padding: 3px; border-radius: 10px; border: 1px solid #dfe3e5; background: #fff; cursor: pointer; }
 .zd-tabs { flex-wrap: wrap; width: 100%; }
 @media (max-width: 760px) { .zd-tabs { flex-wrap: nowrap; } }
+
+/* Drawing bar: works the same with a finger and a mouse */
+.zc-drawbar { position: absolute; z-index: 4; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; width: max-content; max-width: calc(100% - 24px); padding: 6px 6px 6px 14px; border-radius: 16px; background: rgba(17, 22, 20, .92); color: #fff; box-shadow: 0 10px 26px rgba(0, 0, 0, .3); }
+.zc-draw-hint { font-size: 12px; font-weight: 600; line-height: 1.3; }
+.zc-draw-btn { flex: none; height: 36px; padding: 0 12px; border-radius: 11px; border: 1px solid rgba(255, 255, 255, .25); background: transparent; color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.zc-draw-btn:disabled { opacity: .4; cursor: not-allowed; }
+.zc-draw-btn.finish { background: linear-gradient(135deg, #2a78d6, #6250d6); border-color: transparent; }
+.zc-drawbar ~ .zn-map-notice { display: none; }
+@media (max-width: 760px) {
+  .zc-drawbar { bottom: 8px; flex-wrap: wrap; justify-content: flex-end; padding: 8px; }
+  .zc-draw-hint { flex: 1 1 100%; padding: 0 4px; }
+  .zc-draw-btn { height: 40px; padding: 0 14px; }
+  .zn-toolbar { top: 8px; bottom: auto; }
+  .zn-map-corner { top: 66px; right: 8px; }
+  .zn-map-wrap .live-map { height: 520px; }
+}
