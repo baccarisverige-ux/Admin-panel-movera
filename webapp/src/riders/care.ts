@@ -67,16 +67,20 @@ export const SEND_CHANNELS: { id: SendChannel; label: string; hint: string }[] =
   { id: "email", label: "Email", hint: "To the rider's email" },
 ];
 export type PromoSend = { id: string; channels: SendChannel[]; riders: number; emails: number; subject: string; message: string; by: string; at: string };
-export type AutoAudience = "all" | "new" | "inactive" | "top" | "loyal";
+export type AutoAudience = "all" | "new" | "inactive" | "top" | "loyal" | "random" | "picked";
 export const AUTO_AUDIENCES: { id: AutoAudience; label: string }[] = [
   { id: "all", label: "All riders" },
   { id: "new", label: "New riders" },
   { id: "inactive", label: "Inactive riders" },
   { id: "top", label: "Top riders" },
   { id: "loyal", label: "Loyal riders" },
+  { id: "random", label: "Random riders" },
+  { id: "picked", label: "Riders I pick" },
 ];
 /** from / to are days (2026-10-01). Empty means no start or no end. */
-type AutoBase = { on: boolean; percent: number; maxPerRide: number; rides: number; audience: AutoAudience; categories: string[]; from: string; to: string };
+type AutoBase = { on: boolean; percent: number; maxPerRide: number; rides: number; audience: AutoAudience; categories: string[]; from: string; to: string;
+  /** For "random" and "picked": the riders who can get it. count is how many random riders. */
+  riderIds: string[]; count: number };
 export type AutoPromos = {
   firstRide: AutoBase;
   birthday: AutoBase;
@@ -120,9 +124,9 @@ export function emptyRiderCare(): RiderCare {
       { id: "P-SEED-2", code: "THANKYOU20", title: "Thank you for riding", kind: "percent", value: 20, rides: 10, maxPerRide: 40, minFare: 80, validFrom: "2026-09-15T00:00:00.000Z", validTo: "2026-11-30T23:00:00.000Z", country: "SE", zones: [], categories: ["economy", "comfort"], budget: 30000, riderIds: ["R0010", "R0020", "R0030", "R0040", "R0050", "R0060", "R0070", "R0080"], group: "Top riders", createdBy: "lena", createdAt: "2026-09-15T08:00:00.000Z", status: "active", image: "comfort" },
     ],
     autoPromos: {
-      firstRide: { on: true, percent: 50, maxPerRide: 100, rides: 1, audience: "new", categories: [], from: "", to: "" },
-      birthday: { on: false, percent: 20, maxPerRide: 60, rides: 1, audience: "all", categories: [], from: "", to: "" },
-      winBack: { on: true, percent: 25, afterDays: 30, maxPerRide: 60, rides: 3, audience: "inactive", categories: [], from: "", to: "" },
+      firstRide: { on: true, percent: 50, maxPerRide: 100, rides: 1, audience: "new", categories: [], from: "", to: "", riderIds: [], count: 20 },
+      birthday: { on: false, percent: 20, maxPerRide: 60, rides: 1, audience: "all", categories: [], from: "", to: "", riderIds: [], count: 20 },
+      winBack: { on: true, percent: 25, afterDays: 30, maxPerRide: 60, rides: 3, audience: "inactive", categories: [], from: "", to: "", riderIds: [], count: 20 },
     },
     bans: { phones: [], cards: [] },
     lostFound: {},
@@ -349,7 +353,10 @@ export function editPromotion(care: RiderCare, id: string, edit: PromoEdit, by: 
 }
 
 export function setAutoPromos(care: RiderCare, auto: AutoPromos): { care: RiderCare; error?: string } {
-  for (const item of Object.values(auto)) if (item.from && item.to && item.to < item.from) return { care, error: "The end day must be after the start day." };
+  for (const item of Object.values(auto)) {
+    if (item.from && item.to && item.to < item.from) return { care, error: "The end day must be after the start day." };
+    if ((item.audience === "random" || item.audience === "picked") && item.on && !item.riderIds.length) return { care, error: item.audience === "random" ? "Pick the random riders." : "Pick at least one rider." };
+  }
   return { care: bump(care, { autoPromos: auto }) };
 }
 

@@ -81,12 +81,19 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
   };
   const error = validatePromo(draft);
   const created = agentId ? createPromotion(care, draft, agentId, Date.now()) : { care, error: "Sign in again." };
-  const shown = useMemo(() => rows.filter((row) => !query.trim() || `${row.rider.name} ${row.profile.code}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 80), [rows, query]);
+  // Riders chosen by a group, random or newest go to the top; ticking by hand does not move rows.
+  const [pinned, setPinned] = useState<Set<string>>(() => new Set(preselected));
+  const shown = useMemo(() => rows
+    .filter((row) => !query.trim() || `${row.rider.name} ${row.profile.code}`.toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => Number(pinned.has(b.rider.id)) - Number(pinned.has(a.rider.id)))
+    .slice(0, 80), [rows, query, pinned]);
   const toggle = <T,>(list: T[], item: T) => (list.includes(item) ? list.filter((value) => value !== item) : [...list, item]);
 
   function pickMany(next: Mode, many: number, round: number) {
     if (next !== "random" && next !== "newest") return;
-    setPicked(new Set(pickAudience(rows, next, many, round).map((row) => row.rider.id)));
+    const ids = new Set(pickAudience(rows, next, many, round).map((row) => row.rider.id));
+    setPicked(ids);
+    setPinned(ids);
     setGroup(next === "random" ? `${many} random riders` : `${many} newest riders`);
   }
 
@@ -96,7 +103,9 @@ export function PromoBuilder({ country, care, agentId, canEdit, rows, preselecte
   }
 
   function quickPick(id: SegmentId, label: string) {
-    setPicked(new Set(rows.filter((row) => row.segments.has(id) && !row.segments.has("blocked")).map((row) => row.rider.id)));
+    const ids = new Set(rows.filter((row) => row.segments.has(id) && !row.segments.has("blocked")).map((row) => row.rider.id));
+    setPicked(ids);
+    setPinned(ids);
     setGroup(label);
   }
 

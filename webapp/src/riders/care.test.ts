@@ -137,4 +137,7 @@ assert(!setPopup(sent.care, codeTicket.id, false).promotions.find((item) => item
 const auto = emptyRiderCare().autoPromos;
 assert(autoState({ ...auto.birthday, on: true }, NOW) === "running" && autoState({ ...auto.firstRide, from: "2026-11-01" }, NOW) === "waiting" && autoState({ ...auto.firstRide, to: "2026-10-01" }, NOW) === "ended" && autoState(auto.birthday, NOW) === "off", "automatic promotions follow their days");
 assert(setAutoPromos(emptyRiderCare(), { ...auto, birthday: { ...auto.birthday, from: "2026-12-01", to: "2026-11-01" } }).error, "end day after start day");
+assert(setAutoPromos(emptyRiderCare(), { ...auto, winBack: { ...auto.winBack, audience: "picked", riderIds: [] } }).error === "Pick at least one rider.", "riders I pick needs riders");
+assert(!setAutoPromos(emptyRiderCare(), { ...auto, winBack: { ...auto.winBack, audience: "random", count: 2, riderIds: ["R0001", "R0002"] } }).error, "random riders saved");
+assert(normalizeCare({ autoPromos: { birthday: { on: true } } }).autoPromos.birthday.riderIds.length === 0, "older saved automatic promotions get an empty rider list");
 console.log("rider care ok");
