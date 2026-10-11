@@ -15,6 +15,8 @@ import { DesignPage } from "./pages/DesignPage";
 import { DriverDetailPage } from "./pages/DriverDetailPage";
 import { DriversPage } from "./pages/DriversPage";
 import { FleetPage } from "./pages/FleetPage";
+import { FleetOwnerDetailPage } from "./pages/FleetOwnerDetailPage";
+import { FleetOwnersPage } from "./pages/FleetOwnersPage";
 import { GatesPage } from "./pages/GatesPage";
 import { GrowthPage } from "./pages/GrowthPage";
 import { HandoverPage } from "./pages/HandoverPage";
@@ -66,6 +68,7 @@ function Screen({ id }: { id: string }) {
   if (id === "gates") return <GatesPage />;
   if (id === "design") return <DesignPage />;
   if (id === "vehicles") return <FleetPage />;
+  if (id === "fleets") return <FleetOwnersPage />;
   if (id === "support") return <SupportPage />;
   if (id === "chat") return <ChatPage />;
   if (id === "incidents") return <SafetyPage />;
@@ -147,6 +150,8 @@ function Authed() {
         <Route path="onboarding" element={<Screen id="onboarding" />} />
         <Route path="riders" element={<Screen id="riders" />} />
         <Route path="riders/:riderId" element={<RiderDetailPage />} />
+        <Route path="fleets" element={<Screen id="fleets" />} />
+        <Route path="fleets/:ownerId" element={<FleetOwnerDetailPage />} />
         <Route path="vehicles" element={<Screen id="vehicles" />} />
         <Route path="vehicles/:id" element={<VehicleDetailPage />} />
         <Route path="payments" element={<Screen id="payments" />} />

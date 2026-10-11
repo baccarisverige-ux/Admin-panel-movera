@@ -28,6 +28,37 @@ const PEOPLE: Record<Exclude<MarketId, "SE">, People> = {
   },
 };
 
+/** Fleets per country: id, name, owner id. */
+const FLEETS: Record<Exclude<MarketId, "SE">, [string, string, string][]> = {
+  FR: [["F4", "Paris Premium Cars", "O3"], ["F5", "Seine Mobility", "O4"]],
+  TN: [["F6", "Carthage Transport", "O5"], ["F7", "Lac VTC", "O5"]],
+};
+
+/** Fleet owners in every country. Sweden's own fleets F1–F3 point at O1 and O2. */
+function fleetOwners(now: string): Built[] {
+  const nowMs = Date.parse(now);
+  const rows: [string, string, string, string, string, string, string, string][] = [
+    ["O1", "Johan Ekström", "Ekström Taxi AB", "559012-3456", "+46 70 555 12 34", "johan@ekstromtaxi.se", "Z007", "active"],
+    ["O2", "Sofia Lindqvist", "Söder Transport AB", "559077-8812", "+46 73 220 45 10", "sofia@sodertransport.se", "Z002", "active"],
+    ["O3", "Antoine Girard", "Paris Premium Cars SAS", "852 314 907", "+33 6 41 22 87 15", "antoine@parispremium.fr", "FR-OCE", "active"],
+    ["O4", "Claire Fontaine", "Seine Mobility SARL", "901 552 438", "+33 6 72 18 40 93", "claire@seinemobility.fr", "FR-BE", "on_hold"],
+    ["O5", "Mehdi Ben Salah", "Carthage Transport SARL", "1784521/K", "+216 98 412 336", "mehdi@carthage-transport.tn", "TN-LAC", "active"],
+    ["O6", "Leila Haddad", "Haddad Cars SUARL", "1823007/P", "+216 22 905 117", "leila@haddadcars.tn", "TN-AR", "pending"],
+  ];
+  return rows.map(([id, name, company, orgNumber, phone, email, zoneId, status], index) => ({
+    id,
+    name,
+    company,
+    orgNumber,
+    phone,
+    email,
+    zoneId,
+    status,
+    kind: DOC_STATES[(index + 1) % DOC_STATES.length],
+    joinedAt: new Date(nowMs - (200 + index * 97) * 86_400_000).toISOString(),
+  }));
+}
+
 const DRIVER_STATUSES = ["active", "active", "pending", "active", "on_hold", "active", "suspended"] as const;
 const DOC_STATES = ["approved", "in_review", "approved", "needed", "expiring", "approved"] as const;
 const CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet"] as const;
@@ -57,6 +88,7 @@ type Built = Pick<DemoRecord, "id"> & DemoRecord;
 
 export type MarketRows = {
   drivers: Built[];
+  fleets: Built[];
   riders: Built[];
   vehicles: Built[];
   trips: Built[];
@@ -83,7 +115,16 @@ function countryRows(id: Exclude<MarketId, "SE">, offset: number, now: string, s
     zoneId: zoneAt(index),
     status: DRIVER_STATUSES[index % DRIVER_STATUSES.length],
     kind: DOC_STATES[index % DOC_STATES.length],
-    fleetId: null,
+    fleetId: index % 4 === 1 ? FLEETS[id][(index >> 2) % 2][0] : null,
+    joinedAt: new Date(nowMs - (40 + (mix(index) % 900)) * 86_400_000).toISOString(),
+  }));
+  const fleets = FLEETS[id].map(([fleetId, name, ownerId], index) => ({
+    id: fleetId,
+    name,
+    phone: "",
+    zoneId: operating[index],
+    status: "active",
+    ownerId,
   }));
   const vehicles = drivers.map((driver, index) => {
     const category = CATEGORIES[index % CATEGORIES.length];
@@ -96,7 +137,7 @@ function countryRows(id: Exclude<MarketId, "SE">, offset: number, now: string, s
       status: index % 9 === 4 ? "ineligible" : "eligible",
       plate: id === "FR" ? `${String.fromCharCode(65 + (index % 26))}${String.fromCharCode(66 + (index % 24))}-${pad(100 + index, 3)}-MV` : `${pad(180 + (index % 60), 3)} TU ${pad(1000 + index * 37, 4)}`,
       driverId: driver.id,
-      fleetId: null,
+      fleetId: driver.fleetId,
       year: 2018 + (index % 7),
       seats: category === "xl" ? 6 : 4,
       fuel: category === "electric" ? ("electric" as const) : index % 3 === 0 ? ("hybrid" as const) : ("petrol" as const),
@@ -174,7 +215,7 @@ function countryRows(id: Exclude<MarketId, "SE">, offset: number, now: string, s
     driverId: drivers[index].id,
     fareOre: fareBase * 60,
   }));
-  return { drivers, riders, vehicles, trips, reservations, tickets, incidents, payments, payouts };
+  return { drivers, fleets, riders, vehicles, trips, reservations, tickets, incidents, payments, payouts };
 }
 
 /** Thirty completed or cancelled Stockholm scheduled rides in the week before `now`. */
@@ -199,10 +240,10 @@ function swedishPastReservations(now: string, riders: readonly DemoRecord[], dri
   });
 }
 
-export function marketRows(now: string, se: { riders: readonly DemoRecord[]; drivers: readonly DemoRecord[]; zones: readonly string[] }): MarketRows & { sePastReservations: Built[] } {
+export function marketRows(now: string, se: { riders: readonly DemoRecord[]; drivers: readonly DemoRecord[]; zones: readonly string[] }): MarketRows & { fleetOwners: Built[]; sePastReservations: Built[] } {
   const fr = countryRows("FR", 1000, now, { drivers: 40, riders: 120, trips: 300, reservations: 30 });
   const tn = countryRows("TN", 2000, now, { drivers: 35, riders: 100, trips: 250, reservations: 28 });
-  const keys = ["drivers", "riders", "vehicles", "trips", "reservations", "tickets", "incidents", "payments", "payouts"] as const;
+  const keys = ["drivers", "fleets", "riders", "vehicles", "trips", "reservations", "tickets", "incidents", "payments", "payouts"] as const;
   const merged = Object.fromEntries(keys.map((key) => [key, [...fr[key], ...tn[key]]])) as MarketRows;
-  return { ...merged, sePastReservations: swedishPastReservations(now, se.riders, se.drivers, se.zones) };
+  return { ...merged, fleetOwners: fleetOwners(now), sePastReservations: swedishPastReservations(now, se.riders, se.drivers, se.zones) };
 }

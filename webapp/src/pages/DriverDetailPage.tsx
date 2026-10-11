@@ -1,29 +1,47 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
+import { AlertTriangle, ArrowLeft, Building2, Car, CheckCircle2, Mail, MessageSquare, Phone, Star, StickyNote } from "lucide-react";
 import { useAudit, useRecords, useSlice } from "../api/hooks";
+import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
-import { DRIVER_DOCUMENTS, type DocStatus, type Vehicle } from "../drivers/gate";
+import { EarningsChart } from "../dashboard/EarningsChart";
+import { change } from "../dashboard/earnings";
+import { PeriodPicker } from "../dashboard/PeriodPicker";
+import { parsePeriodOr, periodParams, periodWindow } from "../dashboard/period";
+import { localDay } from "../dashboard/time";
+import { DRIVER_DOCUMENTS, type DocId, type Vehicle } from "../drivers/gate";
 import {
+  approveRequiredDocuments,
   driverActivationIssue,
   driverOps,
   emptyDriverOpsBook,
-  requestDriverInfo,
   reviewDriverDocument,
+  sendDriverMessage,
   setAccountReason,
   setBankReview,
+  setDocumentExpiry,
   setDriverCategory,
   setDriverNote,
   vehicleOps,
   type DriverOpsBook,
 } from "../drivers/ops";
-import { formatOre } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
+import { countHealth, docHealth } from "../fleet/documents";
+import { driverPerformance, performanceWarning } from "../fleet/performance";
+import { AccountChip, Avatar, DocSummary, DocumentsTable, Field, HealthPill, MessagesPanel, Stat, type DocRow } from "../fleet/ui";
+import { formatMoney, market as marketById, marketOfZone, zoneById } from "../markets/markets";
 import { CommandButton } from "../ui/CommandButton";
 import { SensitiveValue } from "../ui/SensitiveValue";
 import { TabPanel, Tabs } from "../ui/Tabs";
 
-const TABS = ["Overview", "Documents", "Vehicles", "Categories", "Trips", "Earnings", "Bank", "Bonuses", "Driving log", "Ratings", "Support", "Safety", "Notes", "Activity"];
+const TABS = ["Overview", "Documents", "Performance", "Earnings", "Trips", "Vehicles", "Messages", "Notes", "Activity"];
 const CATEGORIES: Vehicle["category"][] = ["economy", "comfort", "premium", "priority", "xl", "electric", "pet"];
+const TEMPLATES = [
+  "Your vehicle insurance expires soon. Please upload the new one.",
+  "Please upload your document again, the photo is not readable.",
+  "Your account is active again. Welcome back!",
+];
+const REVIEW_TEXT = ["Very friendly and on time.", "Clean car, smooth ride.", "Took a longer route than needed.", "Great music and conversation.", "Helped with my luggage, thank you!", "Arrived a bit late but drove safely."];
 
 export function DriverDetailPage() {
   const { driverId = "" } = useParams();
@@ -33,7 +51,7 @@ export function DriverDetailPage() {
   const vehicles = useRecords("vehicles", null);
   const trips = useRecords("trips", null);
   const payouts = useRecords("payouts", null);
-  const bonuses = useRecords("bonuses", null);
+  const fleets = useRecords("fleets", null);
   const tickets = useRecords("tickets", null);
   const incidents = useRecords("incidents", null);
   const audit = useAudit();
@@ -44,14 +62,17 @@ export function DriverDetailPage() {
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);
-  const [reviewNote, setReviewNote] = useState("");
+  const [accountNote, setAccountNote] = useState("");
   const [privateNote, setPrivateNote] = useState("");
   const [notice, setNotice] = useState("");
+  const [now] = useState(() => Date.now());
+  const period = parsePeriodOr(params, { kind: "month" });
 
   const driver = drivers.data?.find((item) => item.id === driverId);
-  const cars = (vehicles.data ?? []).filter((item) => item.driverId === driverId);
-  const jobs = (trips.data ?? []).filter((item) => item.driverId === driverId);
-  const pay = (payouts.data ?? []).filter((item) => item.driverId === driverId);
+  const country = driver ? marketOfZone(driver.zoneId)?.id ?? "SE" : "SE";
+  const market = marketById(country);
+  const periodSearch = params.toString();
+  const span = useMemo(() => periodWindow(parsePeriodOr(new URLSearchParams(periodSearch), { kind: "month" }), now, market.timeZone, market.locale), [periodSearch, now, market]);
 
   if (drivers.isLoading || vehicles.isLoading || store.loading) return <p className="state-line">Loading driver.</p>;
   if (!driver) {
@@ -77,24 +98,55 @@ export function DriverDetailPage() {
     );
   }
 
-  const driverSeed = { id: driver.id, name: driver.name, fleetId: driver.fleetId };
+  const role = agent?.role ?? "viewer";
+  const driverSeed = { id: driver.id, name: driver.name, fleetId: driver.fleetId, status: driver.status, kind: driver.kind };
   const ops = driverOps(store.value, driverSeed);
+  const cars = (vehicles.data ?? []).filter((item) => item.driverId === driverId);
   const carRecord = cars[0] ?? null;
   const car = carRecord ? vehicleOps(store.value, carRecord) : null;
+  const fleet = (fleets.data ?? []).find((item) => item.id === driver.fleetId);
+  const jobs = (trips.data ?? []).filter((item) => item.driverId === driverId);
+  const pay = (payouts.data ?? []).filter((item) => item.driverId === driverId);
   const activationIssue = driverActivationIssue(store.value, driverSeed, car);
-  const relatedTickets = (tickets.data ?? []).filter((item) => item.name === driver.name);
-  const relatedIncidents = (incidents.data ?? []).filter((item) => item.name === driver.name);
   const driverAudits = (audit.data ?? []).filter((item) => item.targetId === driver.id).slice(0, 20);
+  const money = (minor: number) => formatMoney(minor, country);
+  const compact = (minor: number) => formatMoney(minor, country, { compact: true });
+  const dateFormat = new Intl.DateTimeFormat(market.locale, { dateStyle: "medium", timeZone: market.timeZone });
+
+  const docIds = DRIVER_DOCUMENTS as readonly DocId[];
+  const docRows: DocRow[] = docIds.map((id) => ({ ...ops.documents[id], exempt: Boolean(driver.fleetId && id === "company_registration") }));
+  const required = docRows.filter((row) => !row.exempt);
+  const health = countHealth(required, now);
+  const allGreen = health.invalid === 0 && health.review === 0;
+  const canReview = can(role, "documents.approve");
+
+  const profile = { id: driver.id, zoneId: driver.zoneId, status: driver.status, stars: ops.ratings.stars, acceptancePct: ops.ratings.acceptancePct, cancellationPct: ops.ratings.cancellationPct };
+  const report = driverPerformance(profile, span);
+  const perf = report.current;
+  const prev = report.previous;
+  const sinceMonth = driverPerformance(profile, periodWindow({ kind: "month" }, now, market.timeZone, market.locale), false).current;
+  const email = `${driver.name.toLowerCase().normalize("NFD").replace(/[^a-z\s]/g, "").trim().replace(/\s+/g, ".")}@${country === "SE" ? "mail.se" : country === "FR" ? "mail.fr" : "mail.tn"}`;
+  const seed = Number(driver.id.replace(/\D/g, "")) || 1;
+  const joined = driver.joinedAt ?? new Date(Date.parse("2026-10-05T00:00:00Z") - (60 + (seed * 37) % 800) * 86_400_000).toISOString();
+  const lastOnline = driver.status === "active" ? (seed % 3 === 0 ? "Online now" : `${5 + (seed % 50)} min ago`) : driver.status === "pending" ? "Never" : `${7 + (seed % 9)} days ago`;
+
+  function selectTab(id: string) {
+    setTab(id);
+    const next = new URLSearchParams(params);
+    next.set("tab", id);
+    setParams(next);
+  }
 
   const accountAction = (
     command: "admin.driver.activate" | "admin.driver.onHold" | "admin.driver.suspend" | "admin.driver.reactivate",
     status: "active" | "on_hold" | "suspended",
     label: string,
     disabled = false,
+    tone = "ghost",
   ) => (
     <CommandButton
       command={command}
-      className={status === "active" ? "primary-btn" : "secondary-btn"}
+      className={`dash-btn ${tone}`}
       type="button"
       targetId={driver.id}
       entityState={driver.status}
@@ -105,147 +157,305 @@ export function DriverDetailPage() {
       patch={{ status }}
       expectedSliceRev={store.value.draftRev}
       sliceKey="driverOps"
-      value={setAccountReason(store.value, driverSeed, status, reviewNote || label, agent?.id ?? "")}
+      value={setAccountReason(store.value, driverSeed, status, accountNote || label, agent?.id ?? "")}
       disabled={disabled}
       title={disabled && status === "active" ? activationIssue ?? undefined : undefined}
       onDone={() => {
-        setNotice(`Driver account is now ${status}.`);
-        setReviewNote("");
+        setNotice(`Driver account is now ${statusLabel(status).toLowerCase()}.`);
+        setAccountNote("");
       }}
     >
       {label}
     </CommandButton>
   );
 
+  const buildDoc = (row: DocRow, draft: { status: DocRow["status"]; expiresAt: string; note: string }) => {
+    const id = row.id as DocId;
+    let value = store.value;
+    const reviewed = draft.status !== row.status || draft.note.trim() !== row.note;
+    if (reviewed) value = reviewDriverDocument(value, driverSeed, id, draft.status, agent?.id ?? "", draft.note);
+    if (draft.expiresAt !== row.expiresAt) value = setDocumentExpiry(value, driverSeed, id, draft.expiresAt, agent?.id ?? "");
+    return {
+      command: reviewed ? "admin.driver.review" : "admin.driver.docExpiry",
+      before: `${row.status} ${row.expiresAt || "no date"}`,
+      after: `${draft.status} ${draft.expiresAt || "no date"}`,
+      value,
+      needsReason: reviewed,
+    };
+  };
+
+  const reviews = (perf.trips ? jobs : []).slice(0, 5).map((trip, index) => ({
+    id: trip.id,
+    rider: trip.name,
+    stars: Math.max(3, Math.min(5, Math.round(ops.ratings.stars + ((seed + index) % 3 === 0 ? -1 : 0.2)))),
+    text: REVIEW_TEXT[(seed + index) % REVIEW_TEXT.length],
+  }));
+  const statement = [["Item", "Amount"], ["Gross fares", money(perf.grossMinor)], ["Movera commission", money(-perf.commissionMinor)], ["Tips", money(perf.tipsMinor)], ["Bonuses", money(perf.bonusMinor)], ["Adjustments", money(perf.adjustmentsMinor)], ["Net earnings", money(perf.netMinor)]]
+    .map((line) => line.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n");
+
   return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h2>{driver.name}</h2>
-          <p>
-            {driver.id} · {statusLabel(driver.status)} · <SensitiveValue value={driver.phone} permission="drivers.viewSensitive" command="admin.driver.revealSensitive" targetId={driver.id} label="Phone" /> · {driver.zoneId}
-            {driver.fleetId ? ` · Fleet ${driver.fleetId}` : " · Independent"}
-          </p>
-        </div>
-        <Link to="/drivers">Back to drivers</Link>
-      </div>
+    <div className="fd-page fd-profile">
+      <Link className="fd-back" to={{ pathname: "/drivers", search: params.get("country") ? `?country=${params.get("country")}` : "" }}><ArrowLeft size={15} aria-hidden="true" /> Back to drivers</Link>
 
-      <p className="state-line">{notice} {store.message}</p>
-
-      <Tabs
-        tabs={TABS}
-        activeId={tab}
-        onChange={(id) => {
-          setTab(id);
-          const next = new URLSearchParams(params);
-          next.set("tab", id);
-          setParams(next);
-        }}
-      />
-      <article className="panel">
-        <TabPanel id="overview" activeId={tab}>
-          <p>
-            Account {statusLabel(driver.status)}. Bank {ops.bank.status}. Documents approved {
-              DRIVER_DOCUMENTS.filter((id) => ["approved", "expiring"].includes(ops.documents[id].status)).length
-            }/{DRIVER_DOCUMENTS.length}. Linked vehicles {cars.length}.
-          </p>
-          <p className="state-line">{activationIssue ? `Activation check: ${activationIssue}` : "Activation check passed."}</p>
-          <label>
-            Account action note
-            <input value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="Reason kept in driver activity" />
-          </label>
-          <div className="actions">
-            {accountAction("admin.driver.activate", "active", "Activate", Boolean(activationIssue) || driver.status === "active")}
-            {accountAction("admin.driver.onHold", "on_hold", "Put on hold", driver.status === "on_hold" || driver.status === "suspended")}
-            {accountAction("admin.driver.suspend", "suspended", "Suspend", driver.status !== "active" && driver.status !== "on_hold")}
-            {accountAction("admin.driver.reactivate", "active", "Reactivate", Boolean(activationIssue) || (driver.status !== "suspended" && driver.status !== "on_hold"))}
+      <section className="fd-hero" aria-label="Driver">
+        <div className="fd-hero-main">
+          <Avatar name={driver.name} size={76} />
+          <div className="fd-hero-title">
+            <h2>{driver.name}</h2>
+            <div className="fd-chips">
+              <AccountChip status={driver.status} />
+              {fleet ? (
+                <Link className="fd-chip fleet" to={`/fleets/${fleet.ownerId ?? ""}`}><Building2 size={13} aria-hidden="true" />{fleet.name}</Link>
+              ) : <span className="fd-chip">Independent driver</span>}
+              <span className="fd-chip"><Star size={13} aria-hidden="true" />{ops.ratings.stars.toFixed(2)}</span>
+              <DocSummary counts={health} total={required.length} />
+            </div>
+            <p className="fd-sub">{driver.id} · {statusLabel(driver.status)} · {zoneById(driver.zoneId)?.name ?? driver.zoneId}, {market.name}</p>
           </div>
-          {ops.accountReason ? <p className="state-line">Latest account reason: {ops.accountReason}</p> : null}
+          <div className="fd-hero-actions">
+            <label className="fd-reason">
+              <span>Reason shown to the driver</span>
+              <input value={accountNote} onChange={(event) => setAccountNote(event.target.value)} placeholder="For example: insurance expired" />
+            </label>
+            <div className="fd-action-row">
+              {accountAction("admin.driver.activate", "active", "Activate", Boolean(activationIssue) || driver.status === "active", allGreen && driver.status !== "active" ? "" : "ghost")}
+              {accountAction("admin.driver.onHold", "on_hold", "Put on hold", driver.status === "on_hold" || driver.status === "suspended")}
+              {accountAction("admin.driver.suspend", "suspended", "Suspend", driver.status !== "active" && driver.status !== "on_hold")}
+              {accountAction("admin.driver.reactivate", "active", "Reactivate", Boolean(activationIssue) || (driver.status !== "suspended" && driver.status !== "on_hold"))}
+              <button type="button" data-command="admin.ui.dashboardTab" className="dash-btn ghost" onClick={() => selectTab("messages")}><MessageSquare size={15} aria-hidden="true" />Message</button>
+              <button type="button" data-command="admin.ui.dashboardTab" className="dash-btn ghost" onClick={() => selectTab("notes")}><StickyNote size={15} aria-hidden="true" />Note</button>
+            </div>
+          </div>
+        </div>
+        <dl className="fd-facts">
+          <Field label="Phone"><Phone size={13} aria-hidden="true" /> <SensitiveValue value={driver.phone} permission="drivers.viewSensitive" command="admin.driver.revealSensitive" targetId={driver.id} label="Phone" /></Field>
+          <Field label="Email"><Mail size={13} aria-hidden="true" /> {email}</Field>
+          <Field label="Zone">{zoneById(driver.zoneId)?.name ?? driver.zoneId}</Field>
+          <Field label="Vehicle"><Car size={13} aria-hidden="true" /> {carRecord ? `${carRecord.make ?? ""} ${carRecord.model ?? ""} · ${carRecord.plate ?? carRecord.id}` : "No vehicle linked"}</Field>
+          <Field label="Payouts go to">{fleet ? `${fleet.name} (fleet)` : `The driver · bank •••• ${ops.bank.last4}`}</Field>
+          <Field label="Joined">{dateFormat.format(Date.parse(joined))}</Field>
+          <Field label="Last online">{lastOnline}</Field>
+          <Field label="This month">{sinceMonth.trips} trips · {compact(sinceMonth.netMinor)}</Field>
+        </dl>
+      </section>
+
+      {notice || store.message ? <p className="fd-notice" role="status">{notice} {store.message}</p> : null}
+      {driver.status === "active" && health.invalid ? (
+        <p className="fd-banner red"><AlertTriangle size={16} aria-hidden="true" /> {health.invalid} document{health.invalid > 1 ? "s are" : " is"} missing, wrong or expired. Consider putting the account on hold.</p>
+      ) : driver.status !== "active" && allGreen && !activationIssue ? (
+        <p className="fd-banner green"><CheckCircle2 size={16} aria-hidden="true" /> All documents are valid. The account can be activated.</p>
+      ) : activationIssue && driver.status !== "active" ? (
+        <p className="fd-banner amber"><AlertTriangle size={16} aria-hidden="true" /> Activation check: {activationIssue}</p>
+      ) : null}
+      {ops.accountReason ? <p className="fd-sub">Latest account reason: {ops.accountReason}</p> : null}
+
+      <Tabs tabs={TABS} activeId={tab} onChange={selectTab} />
+      <div className="fd-panel">
+        <TabPanel id="overview" activeId={tab}>
+          <div className="fd-grid-2">
+            <section className="fd-box">
+              <h3>Documents</h3>
+              <div className="fd-health-big">
+                <span className="h-valid"><strong>{health.valid}</strong>Valid</span>
+                <span className="h-expiring"><strong>{health.expiring}</strong>Expiring</span>
+                <span className="h-invalid"><strong>{health.invalid}</strong>Missing or wrong</span>
+                <span className="h-review"><strong>{health.review}</strong>Waiting review</span>
+              </div>
+              <ul className="fd-mini-docs">
+                {required.filter((row) => docHealth(row, now).health !== "valid").map((row) => {
+                  const state = docHealth(row, now);
+                  return <li key={row.id} className={`h-${state.health}`}><i aria-hidden="true" />{row.id.replaceAll("_", " ")} · {state.label}</li>;
+                })}
+              </ul>
+              <button type="button" data-command="admin.ui.dashboardTab" className="link-action" onClick={() => selectTab("documents")}>Open documents →</button>
+            </section>
+            <section className="fd-box">
+              <h3>This month</h3>
+              <div className="fd-stats compact">
+                <Stat label="Rating" value={sinceMonth.rating ? sinceMonth.rating.toFixed(2) : "—"} warn={performanceWarning("rating", sinceMonth.rating)} />
+                <Stat label="Trips" value={String(sinceMonth.trips)} />
+                <Stat label="Acceptance" value={`${ops.ratings.acceptancePct}%`} warn={performanceWarning("acceptancePct", ops.ratings.acceptancePct)} />
+                <Stat label="Cancel rate" value={`${ops.ratings.cancellationPct}%`} warn={performanceWarning("cancellationPct", ops.ratings.cancellationPct)} />
+                <Stat label="Online" value={`${sinceMonth.onlineHours} h`} />
+                <Stat label="Net earnings" value={compact(sinceMonth.netMinor)} />
+              </div>
+              <button type="button" data-command="admin.ui.dashboardTab" className="link-action" onClick={() => selectTab("performance")}>Open performance →</button>
+            </section>
+          </div>
         </TabPanel>
 
         <TabPanel id="documents" activeId={tab}>
-          <label>
-            Review note
-            <input value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="Rejection or request-information note" />
-          </label>
-          <ul className="version-list" aria-label="Driver documents">
-            {DRIVER_DOCUMENTS.map((id) => {
-              const doc = ops.documents[id];
-              const exempt = Boolean(driver.fleetId && id === "company_registration");
-              return (
-                <li key={id}>
-                  <span>{id} · latest review {doc.status}</span> · <strong>{id.replaceAll("_", " ")}</strong> · {exempt ? "fleet exempt" : doc.status} · {doc.fileType} {doc.fileName}
-                  {doc.expiresAt ? ` · expires ${doc.expiresAt}` : ""}
-                  {doc.reviewerId ? ` · reviewed by ${doc.reviewerId}` : ""}
-                  {doc.note ? ` · ${doc.note}` : ""}
-                  {!exempt ? (
-                    <span>
-                      {(["approved", "rejected", "in_review"] as DocStatus[]).map((status) => (
-                        <CommandButton
-                          command="admin.driver.review"
-                          key={status}
-                          className="link-action"
-                          type="button"
-                          targetId={driver.id}
-                          confirmTarget={false}
-                          scope={driver.zoneId}
-                          before={doc.status}
-                          after={status}
-                          expectedSliceRev={store.value.draftRev}
-                          sliceKey="driverOps"
-                          value={reviewDriverDocument(store.value, driverSeed, id, status, agent?.id ?? "", reviewNote)}
-                          onDone={() => setNotice(`${id} marked ${status}.`)}
-                        >
-                          {status}
-                        </CommandButton>
-                      ))}
-                      <CommandButton
-                        command="admin.driver.requestInfo"
-                        className="link-action"
-                        type="button"
-                        targetId={driver.id}
-                        confirmTarget={false}
-                        scope={driver.zoneId}
-                        before={doc.status}
-                        after="needed"
-                        expectedSliceRev={store.value.draftRev}
-                        sliceKey="driverOps"
-                        value={requestDriverInfo(store.value, driverSeed, id, agent?.id ?? "", reviewNote)}
-                        onDone={() => setNotice(`Requested more information for ${id}.`)}
-                      >
-                        request info
-                      </CommandButton>
-                    </span>
-                  ) : null}
-                </li>
-              );
-            })}
+          <div className="fd-section-head">
+            <div>
+              <h3>Documents</h3>
+              <p>Set each document on its own and write its expiry date. Documents expiring within 30 days turn orange automatically.</p>
+              <div className="fd-legend"><HealthPill health="valid">Valid</HealthPill><HealthPill health="expiring">Expires soon</HealthPill><HealthPill health="invalid">Missing, wrong or expired</HealthPill><HealthPill health="review">Waiting review</HealthPill></div>
+            </div>
+            <CommandButton
+              command="admin.driver.approveAll"
+              className="dash-btn ghost"
+              type="button"
+              targetId={driver.id}
+              confirmTarget={false}
+              scope={driver.zoneId}
+              before="documents"
+              after="approved"
+              expectedSliceRev={store.value.draftRev}
+              sliceKey="driverOps"
+              value={approveRequiredDocuments(store.value, driverSeed, agent?.id ?? "")}
+              disabled={allGreen || !canReview}
+              onDone={() => setNotice("All remaining documents approved.")}
+            >
+              Approve all remaining
+            </CommandButton>
+          </div>
+          <DocumentsTable
+            label="Driver documents"
+            rows={docRows}
+            nowMs={now}
+            canEdit={canReview}
+            targetId={driver.id}
+            scope={driver.zoneId}
+            sliceKey="driverOps"
+            expectedSliceRev={store.value.draftRev}
+            build={buildDoc}
+            onSaved={setNotice}
+          />
+        </TabPanel>
+
+        <TabPanel id="performance" activeId={tab}>
+          <div className="fd-section-head">
+            <div><h3>Performance</h3><p>{span.label} · {span.compareLabel}</p></div>
+            <PeriodPicker key={`${period.kind}${period.on ?? ""}${period.from ?? ""}`} period={period} today={localDay(now, market.timeZone)} onChange={(next) => setParams(periodParams(next, params))} />
+          </div>
+          <div className="fd-stats">
+            <Stat label="Rating" value={perf.rating ? perf.rating.toFixed(2) : "—"} delta={change(perf.rating, prev.rating)} warn={performanceWarning("rating", perf.rating)} hint={`${perf.ratings} ratings`} />
+            <Stat label="Completed trips" value={String(perf.trips)} delta={change(perf.trips, prev.trips)} />
+            <Stat label="Acceptance rate" value={`${perf.acceptancePct}%`} warn={performanceWarning("acceptancePct", perf.acceptancePct)} />
+            <Stat label="Cancellation rate" value={`${perf.cancellationPct}%`} inverse warn={performanceWarning("cancellationPct", perf.cancellationPct)} />
+            <Stat label="Rider no-shows" value={String(perf.noShows)} delta={change(perf.noShows, prev.noShows)} inverse />
+            <Stat label="Online hours" value={`${perf.onlineHours} h`} delta={change(perf.onlineHours, prev.onlineHours)} />
+            <Stat label="Time on trips" value={`${perf.utilisationPct}%`} />
+            <Stat label="Average pickup" value={`${perf.avgPickupMin} min`} delta={change(perf.avgPickupMin, prev.avgPickupMin)} inverse />
+            <Stat label="Distance" value={`${new Intl.NumberFormat(market.locale).format(perf.distanceKm)} km`} delta={change(perf.distanceKm, prev.distanceKm)} />
+            <Stat label="Complaints" value={String(perf.complaints)} delta={change(perf.complaints, prev.complaints)} inverse />
+          </div>
+          <section className="fd-box">
+            <h3>Latest reviews</h3>
+            {reviews.length === 0 ? <p className="state-line">No reviews yet.</p> : (
+              <ul className="fd-reviews">
+                {reviews.map((review) => (
+                  <li key={review.id}>
+                    <span className="fd-stars" role="img" aria-label={`${review.stars} stars`}>{[1, 2, 3, 4, 5].map((index) => <Star key={index} size={14} aria-hidden="true" className={index <= review.stars ? "on" : undefined} />)}</span>
+                    <p>{review.text}</p>
+                    <small>{review.rider} · <Link to={`/trips/${review.id}`}>{review.id}</Link></small>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </TabPanel>
+
+        <TabPanel id="earnings" activeId={tab}>
+          <div className="fd-section-head">
+            <div><h3>Earnings</h3><p>{span.label} · {fleet ? `paid to ${fleet.name}` : "paid to the driver"}</p></div>
+            <div className="fd-head-tools">
+              <PeriodPicker key={`e${period.kind}${period.on ?? ""}${period.from ?? ""}`} period={period} today={localDay(now, market.timeZone)} onChange={(next) => setParams(periodParams(next, params))} />
+              <a className="dash-btn ghost" download={`movera-${driver.id}-statement.csv`} href={`data:text/csv;charset=utf-8,${encodeURIComponent(statement)}`}>Download statement</a>
+            </div>
+          </div>
+          <div className="fd-earn">
+            <dl className="fd-ledger">
+              <div><dt>Gross fares</dt><dd>{money(perf.grossMinor)}</dd></div>
+              <div><dt>Movera commission <small>20% placeholder</small></dt><dd>−{money(perf.commissionMinor)}</dd></div>
+              <div><dt>Tips</dt><dd>+{money(perf.tipsMinor)}</dd></div>
+              <div><dt>Bonuses</dt><dd>+{money(perf.bonusMinor)}</dd></div>
+              <div><dt>Adjustments and refunds</dt><dd>{money(perf.adjustmentsMinor)}</dd></div>
+              <div className="total"><dt>Net earnings</dt><dd>{money(perf.netMinor)}</dd></div>
+              <div><dt>Per trip · per online hour</dt><dd>{perf.trips ? money(perf.netMinor / perf.trips) : "—"} · {perf.onlineHours ? money(perf.netMinor / perf.onlineHours) : "—"}</dd></div>
+            </dl>
+            <div className="fd-box">
+              <h3>Net earnings</h3>
+              <EarningsChart points={report.series} format={money} formatAxis={compact} compareLabel={span.compareLabel} />
+            </div>
+          </div>
+          <div className="fd-grid-2">
+            <section className="fd-box">
+              <h3>Payouts</h3>
+              {pay.length === 0 ? <p className="state-line">{fleet ? `Payouts are made to ${fleet.name}.` : "No payout yet."}</p> : (
+                <ul className="fd-list">{pay.map((item) => <li key={item.id}><Link to={`/payouts/${item.id}`}>{item.name}</Link><span>{money(item.fareOre ?? 0)}</span><span className={`fd-chip s-${item.status}`}>{statusLabel(item.status)}</span></li>)}</ul>
+              )}
+            </section>
+            <section className="fd-box">
+              <h3>Bank account</h3>
+              <p>{ops.bank.holder} · •••• {ops.bank.last4} · <strong>{statusLabel(ops.bank.status)}</strong></p>
+              {ops.bank.note ? <p className="state-line">Review note: {ops.bank.note}</p> : null}
+              <div className="fd-action-row">
+                {(["approved", "rejected", "in_review"] as const).map((status) => (
+                  <CommandButton
+                    command="admin.driver.bankReview"
+                    key={status}
+                    className="dash-btn small ghost"
+                    type="button"
+                    targetId={driver.id}
+                    confirmTarget={false}
+                    scope={driver.zoneId}
+                    before={ops.bank.status}
+                    after={status}
+                    expectedSliceRev={store.value.draftRev}
+                    sliceKey="driverOps"
+                    value={setBankReview(store.value, driverSeed, status, agent?.id ?? "", accountNote)}
+                    disabled={ops.bank.status === status}
+                    onDone={() => setNotice(`Bank details marked ${statusLabel(status).toLowerCase()}.`)}
+                  >
+                    {statusLabel(status)}
+                  </CommandButton>
+                ))}
+              </div>
+            </section>
+          </div>
+        </TabPanel>
+
+        <TabPanel id="trips" activeId={tab}>
+          <h3>Trips</h3>
+          <p className="fd-sub">{jobs.length} trips in the demo records.</p>
+          <ul className="fd-list">
+            {jobs.slice(0, 20).map((trip) => (
+              <li key={trip.id}>
+                <Link to={`/trips/${trip.id}`}>{trip.id}</Link>
+                <span>{trip.name}</span>
+                <span>{zoneById(trip.zoneId)?.name ?? trip.zoneId}</span>
+                <span className={`fd-chip s-${trip.status}`}>{statusLabel(trip.status)}</span>
+                <span className="num">{money(trip.fareOre ?? 0)}</span>
+              </li>
+            ))}
           </ul>
         </TabPanel>
 
         <TabPanel id="vehicles" activeId={tab}>
-          {cars.length === 0 ? (
-            <p>No vehicle linked. Activation remains blocked.</p>
-          ) : cars.map((record) => {
-            const profile = vehicleOps(store.value, record);
+          <h3>Vehicles</h3>
+          {cars.length === 0 ? <p>No vehicle linked. Activation remains blocked.</p> : cars.map((record) => {
+            const vehicle = vehicleOps(store.value, record);
             return (
-              <p key={record.id}>
-                <Link to={`/vehicles/${record.id}`}>{record.plate ?? record.id}</Link> · {record.make ?? "Vehicle"} {record.model ?? ""} · {profile.year} · {profile.category} · {profile.fuel} · {record.status}
-              </p>
+              <div key={record.id} className="fd-vehicle">
+                <Car size={22} aria-hidden="true" />
+                <div>
+                  <Link to={`/vehicles/${record.id}`}><strong>{record.plate ?? record.id}</strong></Link>
+                  <p>{record.make ?? "Vehicle"} {record.model ?? ""} · {vehicle.year} · {vehicle.seats} seats · {vehicle.fuel} · {vehicle.category}</p>
+                  <small>Inspection until {vehicle.inspectionExpiresAt} · insurance until {vehicle.insuranceExpiresAt} · {statusLabel(record.status)}</small>
+                </div>
+              </div>
             );
           })}
-        </TabPanel>
-
-        <TabPanel id="categories" activeId={tab}>
-          <p>Category eligibility can be enabled or disabled independently from the linked vehicle rule checks.</p>
-          <div className="actions">
+          <h3>Ride categories</h3>
+          <div className="fd-action-row">
             {CATEGORIES.map((category) => {
               const enabled = ops.categories[category];
               return (
                 <CommandButton
                   command="admin.driver.category"
                   key={category}
-                  className={enabled ? "primary-btn" : "secondary-btn"}
+                  className={enabled ? "dash-btn small" : "dash-btn small ghost"}
                   type="button"
                   targetId={driver.id}
                   confirmTarget={false}
@@ -255,95 +465,42 @@ export function DriverDetailPage() {
                   expectedSliceRev={store.value.draftRev}
                   sliceKey="driverOps"
                   value={setDriverCategory(store.value, driverSeed, category, !enabled, agent?.id ?? "")}
-                  onDone={() => setNotice(`${category} eligibility ${enabled ? "disabled" : "enabled"}.`)}
+                  onDone={() => setNotice(`${category} ${enabled ? "turned off" : "turned on"}.`)}
                 >
-                  {category}: {enabled ? "eligible" : "off"}
+                  {category}: {enabled ? "on" : "off"}
                 </CommandButton>
               );
             })}
           </div>
         </TabPanel>
 
-        <TabPanel id="trips" activeId={tab}>
-          <p>{jobs.length} trips on this driver.</p>
-          <ul>
-            {jobs.slice(0, 12).map((trip) => <li key={trip.id}><Link to={`/trips/${trip.id}`}>{trip.id}</Link> · {statusLabel(trip.status)} · {formatOre(trip.fareOre ?? 0)}</li>)}
-          </ul>
-        </TabPanel>
-
-        <TabPanel id="earnings" activeId={tab}>
-          <p>{pay.length === 0 ? "No payout stored for this driver." : pay.map((item) => `${item.name} ${formatOre(item.fareOre ?? 0)} ${item.status}`).join(". ")}</p>
-        </TabPanel>
-
-        <TabPanel id="bank" activeId={tab}>
-          <p>Account holder {ops.bank.holder}. Account •••• {ops.bank.last4}. State {ops.bank.status}. Full account numbers are not exposed.</p>
-          {ops.bank.note ? <p className="state-line">Review note: {ops.bank.note}</p> : null}
-          <label>
-            Bank review note
-            <input value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} />
-          </label>
-          <div className="actions">
-            {(["approved", "rejected", "in_review"] as const).map((status) => (
-              <CommandButton
-                command="admin.driver.bankReview"
-                key={status}
-                className="secondary-btn"
-                type="button"
-                targetId={driver.id}
-                confirmTarget={false}
-                scope={driver.zoneId}
-                before={ops.bank.status}
-                after={status}
-                expectedSliceRev={store.value.draftRev}
-                sliceKey="driverOps"
-                value={setBankReview(store.value, driverSeed, status, agent?.id ?? "", reviewNote)}
-                onDone={() => setNotice(`Bank details marked ${status}.`)}
-              >
-                {status}
-              </CommandButton>
-            ))}
-          </div>
-        </TabPanel>
-
-        <TabPanel id="bonuses" activeId={tab}>
-          {(bonuses.data ?? []).length === 0 ? <p>No active bonus definitions.</p> : (
-            <ul>{(bonuses.data ?? []).map((bonus) => <li key={bonus.id}>{bonus.id} · {bonus.name} · {bonus.status}</li>)}</ul>
-          )}
-        </TabPanel>
-
-        <TabPanel id="driving-log" activeId={tab}>
-          <p>Today {ops.driving.todayMinutes} min. This week {ops.driving.weekMinutes} min. Last recorded break {ops.driving.lastBreakAt}.</p>
-          <p className="state-line">These are simulation values for the frontend workflow; enforcement remains a backend/app responsibility.</p>
-        </TabPanel>
-
-        <TabPanel id="ratings" activeId={tab}>
-          <p>{ops.ratings.stars.toFixed(2)} stars. Acceptance {ops.ratings.acceptancePct}%. Cancellation {ops.ratings.cancellationPct}% over {ops.ratings.requests} requests.</p>
-        </TabPanel>
-
-        <TabPanel id="support" activeId={tab}>
-          {relatedTickets.length === 0 ? <p>No support ticket linked by this demo identity.</p> : (
-            <ul>{relatedTickets.map((ticket) => <li key={ticket.id}><Link to={`/tickets/${ticket.id}`}>{ticket.id}</Link> · {ticket.status}</li>)}</ul>
-          )}
-          <Link to="/support">Open support queue</Link>
-        </TabPanel>
-
-        <TabPanel id="safety" activeId={tab}>
-          <p>PIN and secret safety data are never displayed here.</p>
-          {relatedIncidents.length === 0 ? <p>No incident linked by this demo identity.</p> : (
-            <ul>{relatedIncidents.map((incident) => <li key={incident.id}><Link to={`/incidents/${incident.id}`}>{incident.id}</Link> · {incident.status}</li>)}</ul>
-          )}
-          <Link to="/incidents">Open incident center</Link>
+        <TabPanel id="messages" activeId={tab}>
+          <MessagesPanel
+            messages={ops.messages ?? []}
+            contactName={driver.name}
+            command="admin.driver.message"
+            targetId={driver.id}
+            scope={driver.zoneId}
+            sliceKey="driverOps"
+            expectedSliceRev={store.value.draftRev}
+            build={(text) => sendDriverMessage(store.value, driverSeed, text, agent?.id ?? "", new Date().toISOString())}
+            templates={TEMPLATES}
+            onSent={() => setNotice(`Message sent to ${driver.name}.`)}
+            locale={market.locale}
+            timeZone={market.timeZone}
+          />
         </TabPanel>
 
         <TabPanel id="notes" activeId={tab}>
-          <p>{ops.note || "No private note stored yet."}</p>
-          <label>
+          <h3>Private notes</h3>
+          <p className="fd-note">{ops.note || "No private note stored yet."}</p>
+          <label className="fd-textarea">
             Private internal note
             <textarea value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} />
           </label>
           <CommandButton
             command="admin.driver.note"
-            className="primary-btn"
+            className="dash-btn"
             type="button"
             targetId={driver.id}
             confirmTarget={false}
@@ -364,14 +521,26 @@ export function DriverDetailPage() {
         </TabPanel>
 
         <TabPanel id="activity" activeId={tab}>
-          <h4>Driver operations activity</h4>
-          <ul>{ops.activity.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>
-          <h4>Command audit</h4>
-          {driverAudits.length === 0 ? <p>No audited command on this driver yet.</p> : (
-            <ul>{driverAudits.map((item) => <li key={item.id}>{item.at} · {item.action} · {item.result} · {item.actorId}</li>)}</ul>
-          )}
+          <div className="fd-grid-2">
+            <section className="fd-box">
+              <h3>History</h3>
+              <ul className="fd-timeline">{ops.activity.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>
+            </section>
+            <section className="fd-box">
+              <h3>Audited actions</h3>
+              {driverAudits.length === 0 ? <p className="state-line">No audited action on this driver yet.</p> : (
+                <ul className="fd-timeline">{driverAudits.map((item) => <li key={item.id}>{item.at.slice(0, 16).replace("T", " ")} · {item.action} · {item.result} · {item.actorId}</li>)}</ul>
+              )}
+              <h3>Support and safety</h3>
+              <ul className="fd-timeline">
+                {(tickets.data ?? []).filter((item) => item.name === driver.name).map((ticket) => <li key={ticket.id}><Link to={`/tickets/${ticket.id}`}>{ticket.id}</Link> · {statusLabel(ticket.status)}</li>)}
+                {(incidents.data ?? []).filter((item) => item.name === driver.name).map((incident) => <li key={incident.id}><Link to={`/incidents/${incident.id}`}>{incident.id}</Link> · {statusLabel(incident.status)}</li>)}
+                <li><Link to="/support">Open support queue</Link> · <Link to="/incidents">Open incident center</Link></li>
+              </ul>
+            </section>
+          </div>
         </TabPanel>
-      </article>
-    </>
+      </div>
+    </div>
   );
 }

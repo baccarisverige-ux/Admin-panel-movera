@@ -36,7 +36,7 @@ test("onboarding approves documents and activates a driver", async ({ page }) =>
   const documents = page.locator('#tabpanel-documents');
   await expect(documents).toHaveClass(/active/);
   await expect(documents).not.toHaveAttribute('hidden', '');
-  await expect(page.getByText("driver_license · latest review needed", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("doc-driver_license")).toContainText("Missing");
   await page.getByRole("tab", { name: "Vehicles" }).click();
-  await expect(page.getByText(/No vehicle linked|ABC 123|MVR/)).toBeVisible();
+  await expect(page.locator("#tabpanel-vehicles").getByText(/No vehicle linked|ABC 123|MVR/).first()).toBeVisible();
 });

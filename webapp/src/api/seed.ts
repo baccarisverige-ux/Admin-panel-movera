@@ -36,6 +36,11 @@ export type DemoRecord = {
   createdAt?: string;
   returnAt?: string | null;
   policyVersion?: string;
+  email?: string;
+  company?: string;
+  orgNumber?: string;
+  ownerId?: string;
+  joinedAt?: string;
 };
 
 export type AuditRow = {
@@ -87,6 +92,7 @@ export type DemoDb = {
   riders: DemoRecord[];
   vehicles: DemoRecord[];
   fleets: DemoRecord[];
+  fleetOwners: DemoRecord[];
   trips: DemoRecord[];
   reservations: DemoRecord[];
   tickets: DemoRecord[];
@@ -294,6 +300,7 @@ export function createSeed(now = SEED_NOW): DemoDb {
     phone: "",
     zoneId: zones[index].id,
     status: "active",
+    ownerId: index === 1 ? "O2" : "O1",
   }));
   const abroad = marketRows(now, { riders, drivers, zones: zones.slice(0, 9).map((zone) => zone.id) });
   return {
@@ -303,7 +310,8 @@ export function createSeed(now = SEED_NOW): DemoDb {
     drivers: [...drivers, ...abroad.drivers],
     riders: [...riders, ...abroad.riders],
     vehicles: [...vehicles, ...abroad.vehicles],
-    fleets,
+    fleets: [...fleets, ...abroad.fleets],
+    fleetOwners: abroad.fleetOwners,
     trips: [...trips, ...abroad.trips],
     reservations: [...reservations, ...abroad.sePastReservations, ...abroad.reservations],
     tickets: [...tickets, ...abroad.tickets],

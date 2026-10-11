@@ -3,7 +3,7 @@ import { createSeed, inScope, searchDb, type DemoDb, type DemoRecord, type ZoneS
 
 export type Fault = "none" | "401" | "403" | "409" | "422" | "429" | "503" | "offline" | "slow" | "empty";
 
-const DB_KEY = "movera-demo-v4";
+const DB_KEY = "movera-demo-v5";
 const FAULT_KEY = "movera-demo-fault";
 
 type StorageLike = { getItem: (key: string) => string | null; setItem: (key: string, value: string) => void; removeItem: (key: string) => void };

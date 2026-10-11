@@ -32,10 +32,15 @@ export function parsePeriod(params: URLSearchParams): Period {
   return { kind: "today" };
 }
 
+/** Same as parsePeriod, but a page can choose what an empty URL means. */
+export function parsePeriodOr(params: URLSearchParams, fallback: Period): Period {
+  return params.get("period") ? parsePeriod(params) : fallback;
+}
+
 export function periodParams(period: Period, params: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(params);
   for (const key of ["period", "on", "from", "to"]) next.delete(key);
-  if (period.kind !== "today") next.set("period", period.kind);
+  next.set("period", period.kind);
   if (period.kind === "date" && period.on) next.set("on", period.on);
   if (period.kind === "range" && period.from && period.to) {
     next.set("from", period.from);
