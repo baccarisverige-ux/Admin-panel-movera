@@ -9,20 +9,119 @@ async function signIn(page: Page) {
   await expect(page.getByRole("link", { name: "Riders", exact: true })).toBeVisible();
 }
 
-test("a rider is found by id and the tabs are filled", async ({ page }) => {
+async function session(page: Page, agentId = "nora") {
+  await page.addInitScript((id) => {
+    localStorage.setItem("movera-admin-session", id);
+    localStorage.setItem("movera-admin-activity", String(Date.now()));
+  }, agentId);
+}
+
+async function confirm(page: Page, target?: string) {
+  const modal = page.locator(".modal.open").last();
+  if (target) await modal.getByLabel(`Type ${target} to confirm`).fill(target);
+  await modal.getByRole("button", { name: "Confirm" }).click();
+}
+
+test("a rider is found by code and the booking history shows every outcome", async ({ page }) => {
   test.setTimeout(60_000);
   await signIn(page);
   await page.getByRole("link", { name: "Riders", exact: true }).click();
-  await page.getByLabel("Find rider").fill("R0001");
-  await page.getByRole("cell", { name: "R0001", exact: true }).click();
-  await expect(page).toHaveURL(/\/riders\/R0001$/);
-  await page.getByRole("tab", { name: "Trips" }).click();
-  await expect(page.locator("[data-tab-panel='trips']")).toContainText("T0001");
-  await page.getByRole("tab", { name: "Saved places" }).click();
-  await expect(page.locator("[data-tab-panel='saved-places']")).toContainText("None are stored for this rider.");
-  await page.getByRole("button", { name: "Block" }).click();
-  await page.getByLabel("Type R0001 to confirm").fill("R0001");
-  await page.locator(".modal.open").getByRole("button", { name: "Confirm" }).click();
-  await expect(page.getByRole("button", { name: "Unblock" })).toBeVisible();
-  await expect(page.getByText("R0001 · blocked")).toBeVisible();
+  await expect(page.getByRole("button", { name: /New riders/ })).toBeVisible();
+  await page.getByLabel("Find rider").fill("RD-SE-0001");
+  const list = page.getByRole("list", { name: "Riders" });
+  await expect(list.getByRole("listitem")).toHaveCount(1);
+  await list.getByRole("link").first().click();
+  await expect(page).toHaveURL(/\/riders\/R0001/);
+  await expect(page.getByText("RD-SE-0001")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Bookings" }).click();
+  const outcomes = page.getByRole("group", { name: "Booking outcome" });
+  for (const label of ["Completed", "Cancelled by rider", "Cancelled by driver", "No-show", "Interrupted", "In progress", "Scheduled"]) await expect(outcomes.getByRole("button", { name: new RegExp(`^${label}`) })).toBeVisible();
+  await outcomes.getByRole("button", { name: /^Completed/ }).click();
+  const history = page.getByRole("list", { name: "Booking history" });
+  await expect(history.getByText("Cancelled by rider")).toHaveCount(0);
+  await history.getByRole("button").first().click();
+  await expect(page.locator(".rd-booking-more").first()).toContainText("Outcome");
+
+  await page.getByRole("button", { name: "Unblock" }).click();
+  await confirm(page, "R0001");
+  await expect(page.getByRole("button", { name: "Block", exact: true })).toBeVisible();
+});
+
+test("categories, top bookers and a group promotion with a ticket", async ({ page }) => {
+  test.setTimeout(60_000);
+  await session(page);
+  await page.goto("/riders");
+  await page.getByRole("button", { name: /New riders/ }).click();
+  await expect(page).toHaveURL(/seg=new/);
+  await expect(page.getByRole("list", { name: "Riders" }).getByText("New").first()).toBeVisible();
+
+  await page.getByRole("button", { name: /Top riders/ }).click();
+  await expect(page.getByText(/Top bookers/)).toBeVisible();
+  await page.getByRole("button", { name: "Select top 10" }).click();
+  const bulk = page.getByRole("region", { name: "Selected riders" });
+  await expect(bulk).toContainText("10 selected");
+  await bulk.getByRole("button", { name: "Add promotion" }).click();
+
+  await expect(page).toHaveURL(/view=promotions/);
+  await expect(page.getByText("Who gets it · 10 selected")).toBeVisible();
+  await page.getByLabel("Promotion code").fill("TOPWEEK30");
+  await page.getByLabel("Promotion title").fill("Thanks for riding with us");
+  await page.getByLabel("Promotion rides").fill("10");
+  await page.getByLabel("Promotion max per ride").fill("50");
+  await expect(page.getByLabel("Promotion TOPWEEK30").first()).toContainText("30% off your next 10 rides · max 50 kr per ride");
+  await expect(page.locator(".rd-cost")).toContainText("5 000,00 kr");
+  await page.getByRole("button", { name: "Give promotion" }).click();
+  await confirm(page);
+  await expect(page.getByText("Promotion TOPWEEK30 given to 10 riders.")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Promotions" })).toContainText("TOPWEEK30");
+  await page.reload();
+  await expect(page.getByRole("list", { name: "Promotions" })).toContainText("TOPWEEK30");
+});
+
+test("a group message, CSV export and insights", async ({ page }) => {
+  await session(page);
+  await page.goto("/riders");
+  const rows = page.getByRole("list", { name: "Riders" }).getByRole("listitem");
+  await rows.nth(0).getByRole("checkbox").check();
+  await rows.nth(1).getByRole("checkbox").check();
+  await page.getByRole("region", { name: "Selected riders" }).getByRole("button", { name: "Message" }).click();
+  await page.getByLabel("Group message").fill("Winter tyres are on all Movera cars from today.");
+  await page.getByRole("button", { name: "Send to 2" }).click();
+  await confirm(page);
+  await expect(page.getByText("Message sent to 2 riders.")).toBeVisible();
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export" }).first().click();
+  expect((await download).suggestedFilename()).toMatch(/^movera-riders-SE-/);
+
+  await page.getByRole("tab", { name: "Insights" }).click();
+  await expect(page.getByRole("heading", { name: "New riders per day" })).toBeVisible();
+  await expect(page.getByText("Came back for a 2nd ride")).toBeVisible();
+});
+
+test("a rider waiting for a reply gets an answer and the badge clears", async ({ page }) => {
+  await session(page);
+  await page.goto("/riders?seg=reply");
+  await page.getByRole("list", { name: "Riders" }).getByRole("link").first().click();
+  await expect(page.getByText(/Waiting for a reply for/)).toBeVisible();
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(page).toHaveURL(/tab=messages/);
+  await page.getByRole("button", { name: "Assign to me" }).click();
+  await expect(page.getByText("Assigned to nora")).toBeVisible();
+  await page.getByRole("button", { name: /We found your item/ }).click();
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("All answered")).toBeVisible();
+  await expect(page.getByText(/Waiting for a reply for/)).toHaveCount(0);
+});
+
+test("riders page and rider page stay usable at 390px", async ({ page }) => {
+  await session(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ["/riders", "/riders?view=promotions", "/riders?view=insights", "/riders/R0002", "/riders/R0002?tab=bookings", "/riders/R0002?tab=wallet"]) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, path).toBeLessThanOrEqual(2);
+  }
 });
