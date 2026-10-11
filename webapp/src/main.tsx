@@ -6,6 +6,7 @@ import "./styles/tokens.css";
 import "./styles/dashboard.css";
 import "./styles/fleet.css";
 import "./styles/pricing.css";
+import "./styles/riders.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -248,7 +248,7 @@ export function OnlinePill({ presence }: { presence: Presence }) {
 }
 
 type ContactProps = {
-  kind: "driver" | "owner";
+  kind: "driver" | "owner" | "rider";
   id: string;
   name: string;
   phone: string;
@@ -265,7 +265,7 @@ export function ContactActions({ kind, id, name, phone, zoneId, messageTo, mapTo
   return (
     <span className={compact ? "fd-contact compact" : "fd-contact"} onClick={stop}>
       <CommandButton
-        command={kind === "driver" ? "admin.driver.call" : "admin.fleetOwner.call"}
+        command={kind === "driver" ? "admin.driver.call" : kind === "rider" ? "admin.rider.call" : "admin.fleetOwner.call"}
         className={compact ? "fd-icon-btn" : "dash-btn ghost"}
         type="button"
         targetId={id}
