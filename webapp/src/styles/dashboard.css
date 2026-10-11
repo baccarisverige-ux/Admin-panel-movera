@@ -612,3 +612,120 @@
   .kpi-grid { grid-template-columns: 1fr; }
   .segmented button { padding: 7px 10px; }
 }
+
+/* Live driver panel, current trip, route pins and waybill */
+.drivers-map-canvas { height: 560px; }
+.driver-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: min(380px, calc(100% - 24px));
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(17, 22, 20, .25);
+  padding: 16px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  z-index: 3;
+}
+.driver-panel-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.driver-panel-head .map-popup-close { position: static; }
+.driver-panel-title { display: grid; gap: 2px; min-width: 0; }
+.driver-panel-title strong { font-size: 17px; }
+.driver-panel-sos { margin: 0; display: flex; gap: 6px; align-items: center; padding: 9px 12px; border-radius: 12px; background: #fdecec; color: #9b2020; font-size: 13px; font-weight: 600; }
+.driver-panel-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.driver-panel-actions .state-line { display: none; }
+.driver-panel-facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.driver-panel-facts div { background: #f6f7f8; border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.driver-panel-facts dt { font-size: 11px; color: var(--muted); font-weight: 600; }
+.driver-panel-facts dd { margin: 2px 0 0; font-size: 13px; font-weight: 600; display: flex; gap: 4px; align-items: center; overflow-wrap: anywhere; }
+.driver-panel-facts dd svg { color: #eda100; fill: #eda100; }
+
+.trip-card { border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: grid; gap: 10px; background: linear-gradient(180deg, #f7fafe, #fff 60%); }
+.trip-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.trip-phase { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+.trip-phase.pickup { background: #fff1df; color: #a35409; }
+.trip-phase.onboard { background: #e8f1fc; color: #1c5cab; }
+.trip-eta { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; font-weight: 700; }
+.trip-progress { height: 6px; border-radius: 999px; background: #e9ecee; overflow: hidden; }
+.trip-progress i { display: block; height: 100%; background: var(--viz-series-1); border-radius: 999px; transition: width .6s ease; }
+.trip-stops { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; position: relative; }
+.trip-stops li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; }
+.trip-stops li > span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 800; }
+.trip-stops .stop-a > span { background: #0ca30c; }
+.trip-stops .stop-b > span { background: #d03b3b; }
+.trip-stops small { display: block; font-size: 11px; color: var(--muted); }
+.trip-stops strong { font-size: 13px; }
+.trip-facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.trip-facts dt { display: flex; gap: 4px; align-items: center; font-size: 11px; color: var(--muted); font-weight: 600; }
+.trip-facts dd { margin: 2px 0 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.trip-next { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: #eeecfb; color: #3d2fa3; }
+.trip-next div { display: grid; gap: 1px; }
+.trip-next small { font-size: 11px; font-weight: 700; }
+.trip-next strong { font-size: 13px; color: var(--text); }
+.trip-next span { font-size: 12px; color: var(--dash-ink-2); }
+.trip-none { margin: 0; font-size: 13px; color: var(--muted); }
+.trip-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.route-pin { width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 12px; box-shadow: 0 4px 10px rgba(0, 0, 0, .25); border: 2px solid #fff; }
+.route-pin.pin-a { background: #0ca30c; }
+.route-pin.pin-b { background: #d03b3b; }
+.route-pin.pin-next { background: #6250d6; }
+
+.waybill-modal { position: fixed; inset: 0; background: rgba(17, 22, 20, .45); display: grid; place-items: center; z-index: 80; padding: 16px; }
+.waybill-card { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: #fff; border-radius: 18px; padding: 20px; box-shadow: 0 30px 80px rgba(0, 0, 0, .3); outline: none; }
+.waybill-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; border-bottom: 2px solid var(--text); padding-bottom: 10px; }
+.waybill-head small { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.waybill-head h3 { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; }
+.waybill-head .map-popup-close { position: static; }
+.waybill-rows { margin: 12px 0; display: grid; }
+.waybill-rows div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.waybill-rows dt { color: var(--muted); font-weight: 600; }
+.waybill-rows dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.waybill-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.waybill-foot small { color: var(--muted); font-size: 11px; }
+
+@media print {
+  body * { visibility: hidden; }
+  .waybill-card, .waybill-card * { visibility: visible; }
+  .waybill-card { position: absolute; inset: 0 auto auto 0; width: 100%; max-height: none; box-shadow: none; }
+  .waybill-head .map-popup-close, .waybill-foot button { display: none; }
+}
+
+@media (max-width: 760px) {
+  .drivers-map-canvas { height: 380px; }
+  .driver-panel { position: static; width: 100%; margin-top: 10px; box-shadow: none; border: 1px solid var(--line); }
+  .waybill-rows div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+
+/* Live riders */
+.live-riders .card-head h3 { display: inline-flex; gap: 8px; align-items: center; }
+.rider-counters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.rider-counters span { padding: 8px 12px; border-radius: 12px; background: #f5f7f7; font-size: 12px; color: var(--dash-ink-2); }
+.rider-counters strong { color: var(--text); font-size: 15px; margin-right: 4px; }
+.rider-counters .warn { background: #fdf0f6; color: #9b2f5a; }
+.rider-counters .warn strong { color: #9b2f5a; }
+.rider-counters .danger { background: #fdecec; color: #9b2020; }
+.rider-counters .danger strong { color: #9b2020; }
+.request-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.request-list li { display: grid; grid-template-columns: minmax(170px, 1.4fr) auto auto minmax(150px, 1fr) auto minmax(320px, auto); gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.request-list li.long { background: linear-gradient(90deg, #fdf3f3, transparent 50%); }
+.request-who { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.request-who svg { color: #d55181; flex: none; }
+.request-who div { display: grid; }
+.request-who small { color: var(--muted); font-size: 11px; }
+.request-wait { display: inline-flex; gap: 4px; align-items: center; font-weight: 700; }
+.request-wait.long { color: #b42727; }
+.request-status { color: var(--dash-ink-2); font-size: 12px; }
+.assign { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.assign select { height: 32px; border-radius: 9px; max-width: 220px; font-size: 12px; }
+.assign .state-line { display: none; }
+.request-avatar { width: 48px; height: 48px; border-radius: 50%; background: #fdecf3; color: #d55181; display: grid; place-items: center; }
+@media (max-width: 1100px) {
+  .request-list li { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .request-status { grid-column: 1 / -1; }
+  .request-list .assign { grid-column: 1 / -1; }
+}

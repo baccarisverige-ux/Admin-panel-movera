@@ -11,6 +11,7 @@ import { driverPerformance } from "../fleet/performance";
 import { liveDrivers } from "../dashboard/live";
 import { driverCode } from "../fleet/codes";
 import { ContactActions, DocSummary, OnlinePill, type Presence } from "../fleet/ui";
+import { CATEGORIES } from "../domain/contract";
 import { formatMoney, marketOfZone, zoneById } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
 import { DataTable } from "../ui/DataTable";
@@ -55,7 +56,8 @@ export function DriversPage() {
       const perf = driverPerformance({ id: driver.id, zoneId: driver.zoneId, status: driver.status, stars: ops.ratings.stars, acceptancePct: ops.ratings.acceptancePct, cancellationPct: ops.ratings.cancellationPct }, month, false).current;
       const car = (vehicles.data ?? []).find((row) => row.driverId === driver.id);
       const fleet = (fleets.data ?? []).find((row) => row.id === driver.fleetId);
-      return { driver, counts, total: docs.length, perf, car, fleet, code: driverCode(driver), online: presence.get(driver.id) ?? ("offline" as Presence) };
+      const cats = CATEGORIES.filter((category) => ops.categories[category.id]).map((category) => category.label);
+      return { driver, counts, total: docs.length, perf, car, fleet, cats, code: driverCode(driver), online: presence.get(driver.id) ?? ("offline" as Presence) };
     }), [drivers.data, vehicles.data, fleets.data, store.value, agent, now, month, presence]);
 
   const counts = {
@@ -121,9 +123,9 @@ export function DriversPage() {
 
       <DataTable
         className="fd-table"
-        head={["Code", "Name", "Online", "Type", "Status", "Zone", "Vehicle", "Documents", "Rating", "Trips", "Cancel %", "Earnings", "Contact"]}
+        head={["Code", "Name", "Online", "Type", "Status", "Zone", "Vehicle", "Categories", "Documents", "Rating", "Trips", "Cancel %", "Earnings", "Contact"]}
         rowIds={rows.map((row) => row.driver.id)}
-        rows={rows.map(({ driver, counts: docCounts, total, perf, car, fleet, code, online }) => [
+        rows={rows.map(({ driver, counts: docCounts, total, perf, car, fleet, cats, code, online }) => [
           code,
           driver.name,
           <OnlinePill key={`${driver.id}-online`} presence={online} />,
@@ -131,6 +133,7 @@ export function DriversPage() {
           driver.status,
           zoneById(driver.zoneId)?.name ?? driver.zoneId,
           car ? `${car.make ?? ""} ${car.model ?? ""} · ${car.plate ?? car.id}`.trim() : "No vehicle",
+          cats.join(", ") || "None",
           <DocSummary key={`${driver.id}-docs`} counts={docCounts} total={total} />,
           perf.rating ? perf.rating.toFixed(2) : "—",
           String(perf.trips),

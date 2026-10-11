@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { AlertTriangle, ArrowLeft, Building2, Car, CheckCircle2, Hash, Mail, MapPin, MessageSquare, Phone, Star, StickyNote } from "lucide-react";
+import { useAdminApi } from "../api/AdminApiContext";
 import { useAudit, useRecords, useSlice } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
@@ -25,10 +26,14 @@ import {
   vehicleOps,
   type DriverOpsBook,
 } from "../drivers/ops";
+import { CATEGORIES as CATEGORY_INFO } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
 import { countHealth, docHealth } from "../fleet/documents";
 import { driverPerformance, performanceWarning } from "../fleet/performance";
 import { liveDrivers } from "../dashboard/live";
+import { liveTrip } from "../dashboard/liveTrip";
+import { demoShift } from "../dashboard/scheduled";
+import { TripCard, WaybillDialog } from "../dashboard/TripCard";
 import { driverCode } from "../fleet/codes";
 import { AccountChip, Avatar, DocSummary, DocumentsTable, Field, HealthPill, MessagesPanel, OnlinePill, Stat, type DocRow, type Presence } from "../fleet/ui";
 import { formatMoney, market as marketById, marketOfZone, zoneById } from "../markets/markets";
@@ -56,6 +61,10 @@ export function DriverDetailPage() {
   const fleets = useRecords("fleets", null);
   const tickets = useRecords("tickets", null);
   const incidents = useRecords("incidents", null);
+  const reservations = useRecords("reservations", null);
+  const riders = useRecords("riders", null);
+  const api = useAdminApi();
+  const [waybillOpen, setWaybillOpen] = useState(false);
   const audit = useAudit();
   const store = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
   const [tab, setTab] = useState(() => params.get("tab") ?? "overview");
@@ -134,6 +143,7 @@ export function DriverDetailPage() {
   const presence: Presence = live?.state ?? "offline";
   const code = driverCode(driver);
   const mapTo = live ? `/?country=${country}&focus=${driver.id}` : null;
+  const current = live ? liveTrip(live, { trips: trips.data ?? [], reservations: reservations.data ?? [], vehicles: vehicles.data ?? [], fleets: fleets.data ?? [], riders: riders.data ?? [] }, now, demoShift(now, api.demo)) : null;
   const lastOnline = live ? "Online now" : driver.status === "active" ? (seed % 3 === 0 ? "Online now" : `${5 + (seed % 50)} min ago`) : driver.status === "pending" ? "Never" : `${7 + (seed % 9)} days ago`;
 
   function selectTab(id: string) {
@@ -277,6 +287,57 @@ export function DriverDetailPage() {
       <Tabs tabs={TABS} activeId={tab} onChange={selectTab} />
       <div className="fd-panel">
         <TabPanel id="overview" activeId={tab}>
+          <section className="fd-box fd-cats" aria-labelledby="cats-title">
+            <div className="fd-section-head">
+              <div>
+                <h3 id="cats-title">Categories this driver can drive</h3>
+                <p>Switch each category on or off. Ride offers only come in for categories that are on{car ? "" : ", and a vehicle must be linked"}.</p>
+              </div>
+            </div>
+            <div className="cat-grid">
+              {CATEGORIES.map((category) => {
+                const enabled = ops.categories[category];
+                const info = CATEGORY_INFO.find((item) => item.id === category);
+                const fits = !car ? false : category === "xl" ? car.seats >= 6 : category === "electric" ? car.fuel === "electric" : category === "premium" ? car.year >= 2020 : true;
+                return (
+                  <CommandButton
+                    command="admin.driver.category"
+                    key={category}
+                    className={enabled ? "cat-toggle on" : "cat-toggle"}
+                    type="button"
+                    targetId={driver.id}
+                    confirmTarget={false}
+                    scope={driver.zoneId}
+                    before={enabled ? "enabled" : "disabled"}
+                    after={enabled ? "disabled" : "enabled"}
+                    expectedSliceRev={store.value.draftRev}
+                    sliceKey="driverOps"
+                    value={setDriverCategory(store.value, driverSeed, category, !enabled, agent?.id ?? "")}
+                    aria-label={`${info?.label ?? category}: ${enabled ? "on, turn off" : "off, turn on"}`}
+                    onDone={() => setNotice(`${info?.label ?? category} ${enabled ? "turned off" : "turned on"} for ${driver.name}.`)}
+                  >
+                    <span className="cat-name">{info?.label ?? category}</span>
+                    <span className="cat-switch" aria-hidden="true"><i /></span>
+                    <small>{info?.seats ?? 4} seats{fits ? "" : " · vehicle does not fit"}</small>
+                  </CommandButton>
+                );
+              })}
+            </div>
+          </section>
+          {current ? (
+            <div className="fd-current">
+              <h3>Current trip</h3>
+              <TripCard
+                trip={current}
+                locale={market.locale}
+                timeZone={market.timeZone}
+                routeLink={mapTo ?? undefined}
+                onWaybill={() => setWaybillOpen(true)}
+                tripLink={current.tripId.startsWith("T-") ? `/drivers/${driver.id}?tab=trips` : `/trips/${current.tripId}`}
+              />
+            </div>
+          ) : null}
+          {waybillOpen && current ? <WaybillDialog waybill={current.waybill} onClose={() => setWaybillOpen(false)} /> : null}
           <div className="fd-grid-2">
             <section className="fd-box">
               <h3>Documents</h3>
@@ -472,31 +533,7 @@ export function DriverDetailPage() {
               </div>
             );
           })}
-          <h3>Ride categories</h3>
-          <div className="fd-action-row">
-            {CATEGORIES.map((category) => {
-              const enabled = ops.categories[category];
-              return (
-                <CommandButton
-                  command="admin.driver.category"
-                  key={category}
-                  className={enabled ? "dash-btn small" : "dash-btn small ghost"}
-                  type="button"
-                  targetId={driver.id}
-                  confirmTarget={false}
-                  scope={driver.zoneId}
-                  before={enabled ? "enabled" : "disabled"}
-                  after={enabled ? "disabled" : "enabled"}
-                  expectedSliceRev={store.value.draftRev}
-                  sliceKey="driverOps"
-                  value={setDriverCategory(store.value, driverSeed, category, !enabled, agent?.id ?? "")}
-                  onDone={() => setNotice(`${category} ${enabled ? "turned off" : "turned on"}.`)}
-                >
-                  {category}: {enabled ? "on" : "off"}
-                </CommandButton>
-              );
-            })}
-          </div>
+          <p className="fd-sub">Which categories this driver may drive is set on the Overview tab.</p>
         </TabPanel>
 
         <TabPanel id="messages" activeId={tab}>
