@@ -250,6 +250,7 @@ export function ZoneMap({ country, wizard, onWizard }: { country: MarketId; wiza
             fitIds={fitIds}
             viewKey={country}
             onPick={(id) => { if (!wizard) zoneStore.select(id); }}
+            onCancel={() => zoneStore.cancelTool()}
             onDrawn={(points, intent) => {
               if (!agent) return;
               if (ui.target === "measure") {
