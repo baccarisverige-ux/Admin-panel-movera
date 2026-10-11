@@ -127,16 +127,16 @@ export function SurgePanel({ market, zoneId, zoneName, rows, alerts, book, live,
           <div className="surge-big" data-testid="surge-now">×{(current?.multiplier ?? 1).toFixed(1)}</div>
           <div className="surge-gauge" aria-hidden="true"><i style={{ width: `${Math.min(100, (((current?.multiplier ?? 1) - 1) / 5) * 100)}%`, background: LEVEL_COLOR[current?.level ?? "none"] }} /></div>
           <dl className="surge-facts">
-            <div><dt>Riders asking</dt><dd>{current?.requests ?? 0}</dd></div>
-            <div><dt>Free drivers</dt><dd>{current?.free ?? 0}</dd></div>
-            <div><dt>Riders ÷ drivers</dt><dd>{(current?.ratio ?? 0).toFixed(1)}</dd></div>
+            <div><dt>Ride requests</dt><dd>{current?.requests ?? 0}</dd></div>
+            <div><dt>Free online drivers</dt><dd>{current?.free ?? 0}</dd></div>
+            <div><dt>Requests per free driver</dt><dd>{(current?.ratio ?? 0).toFixed(1)}</dd></div>
             <div><dt>Time profile</dt><dd>{profileNow?.name ?? "—"}</dd></div>
           </dl>
           <p className="surge-note">
             {current?.source === "manual" && running ? `Manual surge until ${time.format(Date.parse(running.endsAt))}, started by ${running.by}. Smart surge is paused.`
               : current?.source === "scheduled" ? `Scheduled "${current.scheduledName}" until ${time.format(Date.parse(current.endsAt!))}.`
               : current?.smartNote ? `${current.smartNote}.`
-              : current?.source === "smart" ? `Smart surge follows demand and stops by itself when riders ÷ drivers stays under ${profileNow?.steps[0]?.ratio ?? 1.5} for ${book.smart.stopAfterMin} min.`
+              : current?.source === "smart" ? `Smart surge follows demand and stops by itself when requests per free online driver stay under ${profileNow?.steps[0]?.ratio ?? 1.5} for ${book.smart.stopAfterMin} min.`
               : "Enough drivers. Smart surge is watching."}
           </p>
         </section>
@@ -248,7 +248,7 @@ export function SurgePanel({ market, zoneId, zoneName, rows, alerts, book, live,
             {book.smart.enabled ? "On" : "Off"}
           </label>
         </div>
-        <p className="smart-explain">Every {book.smart.checkEveryMin} min smart surge compares <b>riders asking ÷ free drivers</b>. It starts only when a level holds for {book.smart.holdMin} min, goes down one step at a time, waits {book.smart.cooldownMin} min between changes, and stops by itself when the level stays low for {book.smart.stopAfterMin} min.</p>
+        <p className="smart-explain">Every {book.smart.checkEveryMin} min smart surge compares <b>ride requests</b> with <b>free online drivers</b> (online and not on a trip). Many drivers and few requests means no surge. It starts only when a level holds for {book.smart.holdMin} min, goes down one step at a time, waits {book.smart.cooldownMin} min between changes, and stops by itself when the level stays low for {book.smart.stopAfterMin} min.</p>
         <div className={bad.has("smart.active") || bad.has("smart.checkEveryMin") ? "timing-grid invalid" : "timing-grid"}>
           <label className="field">Active from<input type="time" aria-label="Smart surge active from" value={book.smart.activeFrom} disabled={!canEdit} onChange={(event) => onSmart({ activeFrom: event.target.value })} /></label>
           <label className="field">Active until<input type="time" aria-label="Smart surge active until" value={book.smart.activeTo} disabled={!canEdit} onChange={(event) => onSmart({ activeTo: event.target.value })} /></label>
@@ -303,7 +303,7 @@ export function SurgePanel({ market, zoneId, zoneName, rows, alerts, book, live,
                 <div className="step-list">
                   {profile.steps.map((step, stepIndex) => (
                     <div key={stepIndex} className="step-row">
-                      <span className="step-when">When riders ÷ drivers ≥</span>
+                      <span className="step-when">When requests per free driver reach</span>
                       <NumberField label={`${profile.name} step ${stepIndex + 1} level`} value={step.ratio} step={0.1} max={20} disabled={!canEdit} onChange={(value) => patchProfile(profile.id, { steps: profile.steps.map((item, i) => (i === stepIndex ? { ...item, ratio: value } : item)) })} />
                       <SurgeSlider compact label={`${profile.name} step ${stepIndex + 1} surge`} value={step.multiplier} disabled={!canEdit} onChange={(value) => patchProfile(profile.id, { steps: profile.steps.map((item, i) => (i === stepIndex ? { ...item, multiplier: value } : item)) })} />
                       {profile.steps.length > 1 ? <button data-command="admin.pricing.edit" type="button" className="icon-ghost" aria-label={`Remove ${profile.name} step ${stepIndex + 1}`} disabled={!canEdit} onClick={() => patchProfile(profile.id, { steps: profile.steps.filter((_, i) => i !== stepIndex) })}><Trash2 size={13} aria-hidden="true" /></button> : <span />}

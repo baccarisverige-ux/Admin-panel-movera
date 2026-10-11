@@ -3,7 +3,7 @@ import { localParts } from "../dashboard/time.ts";
 import { marketOfZone, zoneById } from "../markets/markets.ts";
 
 /**
- * Riders asking for a ride against free drivers, per zone, every 10 minutes.
+ * Ride requests against free online drivers (online and not on a trip), per zone, every 10 minutes.
  * Demo model on the same daily curve as the earnings, plus the riders and drivers live on the map.
  */
 

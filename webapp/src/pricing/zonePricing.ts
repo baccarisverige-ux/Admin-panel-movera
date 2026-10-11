@@ -360,7 +360,7 @@ export function validateZoneBook(book: ZoneBook, categories: readonly CategoryDe
     profile.steps.forEach((step, index) => {
       const before = profile.steps[index - 1];
       if (step.multiplier < SLIDER_MIN || step.multiplier > SLIDER_MAX) add(`smart.${profile.id}.steps`, `${profile.name}: surge must be between ×${SLIDER_MIN} and ×${SLIDER_MAX}.`);
-      if (!(step.ratio > 0)) add(`smart.${profile.id}.steps`, `${profile.name}: each step needs a riders ÷ drivers level above 0.`);
+      if (!(step.ratio > 0)) add(`smart.${profile.id}.steps`, `${profile.name}: each step needs a requests per driver level above 0.`);
       if (before && (step.ratio <= before.ratio || step.multiplier < before.multiplier)) add(`smart.${profile.id}.steps`, `${profile.name}: each step must have a higher level and at least the same surge as the one before.`);
       if (step.multiplier > profile.cap) add(`smart.${profile.id}.steps`, `${profile.name}: a step is above the cap ×${profile.cap}.`);
     });
