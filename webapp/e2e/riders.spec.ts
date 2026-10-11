@@ -255,3 +255,34 @@ test("automatic promotions have start and end days", async ({ page }) => {
   await page.getByRole("tab", { name: /Automatic/ }).click();
   await expect(page.getByLabel("Birthday ends")).toHaveValue("2099-12-31");
 });
+
+test("automatic promotions can go to random riders or riders I pick", async ({ page }) => {
+  await session(page);
+  await page.goto("/riders?view=promotions");
+  await page.getByRole("tab", { name: /Automatic/ }).click();
+  await page.getByLabel("Come back audience").selectOption("random");
+  await page.getByLabel("Come back how many riders").fill("8");
+  await expect(page.getByLabel("Come back riders")).toContainText("8 riders");
+
+  const birthday = page.locator(".rd-auto-card").filter({ hasText: "Birthday" });
+  await birthday.locator(".mini-switch b").click();
+  await page.getByLabel("Birthday audience").selectOption("picked");
+  await expect(page.getByRole("alert")).toHaveText("Pick at least one rider.");
+  await birthday.getByRole("button", { name: "Choose riders" }).click();
+  const picker = page.getByRole("dialog", { name: "Who gets Birthday" });
+  await picker.getByLabel("Find riders").fill("RD-SE-0003");
+  await picker.getByRole("checkbox").first().check();
+  await picker.getByLabel("Find riders").fill("RD-SE-0004");
+  await picker.getByRole("checkbox").first().check();
+  await picker.getByRole("button", { name: "Use 2 riders" }).click();
+  await expect(page.getByLabel("Birthday riders")).toContainText("2 riders");
+
+  await page.getByRole("button", { name: "Save automatic promotions" }).click();
+  await confirm(page);
+  await expect(page.getByText("Automatic promotions saved.")).toBeVisible();
+  await page.reload();
+  await page.getByRole("tab", { name: /Automatic/ }).click();
+  await expect(page.getByLabel("Birthday audience")).toHaveValue("picked");
+  await expect(page.getByLabel("Birthday riders")).toContainText("2 riders");
+  await expect(page.getByLabel("Come back riders")).toContainText("8 riders");
+});

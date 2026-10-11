@@ -5,6 +5,7 @@ import {
   BarChart3,
   Bookmark,
   Crown,
+  Dices,
   Download,
   Gift,
   Heart,
@@ -31,10 +32,11 @@ import { useMarketScope } from "../markets/useMarketScope";
 import { AUTO_AUDIENCES, CARE_KEY, REPLY_TEMPLATES, autoState, type AutoAudience, editPromotion, messageGroup, promoResults, promoUsed, saveFilter, setAutoPromos, setPromotionOn, stopPromotion, type AutoPromos, type PromoEdit, type RiderCare } from "../riders/care";
 import { PromoBuilder } from "../riders/PromoBuilder";
 import { PromoShare } from "../riders/PromoShare";
+import { RiderPicker } from "../riders/RiderPicker";
 import { RiderAppPreview } from "../riders/RiderAppPreview";
 import { useCategoryPrices } from "../riders/useCategoryPrices";
 import { categoryName } from "../riders/profile";
-import { PERIODS, SEGMENTS, SORTS, insights, matches, ridersCsv, segmentCounts, sortRows, type Period, type RiderRow, type SegmentId, type SortId } from "../riders/segments";
+import { PERIODS, SEGMENTS, SORTS, pickAudience, insights, matches, ridersCsv, segmentCounts, sortRows, type Period, type RiderRow, type SegmentId, type SortId } from "../riders/segments";
 import { LiveChip, PromoTicketCard, RiderBadges, Stars, money } from "../riders/ui";
 import { useRidersData } from "../riders/useRidersData";
 import { NumberField } from "../pricing/NumberField";
@@ -308,7 +310,7 @@ function PromotionsView({ care, rows, country, agentId, canEdit, builder, onBuil
         <button data-command="admin.ui.quickAction" type="button" role="tab" aria-selected={part === "list"} className={part === "list" ? "active" : undefined} onClick={() => setPart("list")}><Ticket size={14} aria-hidden="true" /> Promotions and codes <b className="rd-count">{tickets.length}</b></button>
         <button data-command="admin.ui.quickAction" type="button" role="tab" aria-selected={part === "auto"} className={part === "auto" ? "active" : undefined} onClick={() => { onBuilder(null); setPart("auto"); }}><Sparkles size={14} aria-hidden="true" /> Automatic <b className="rd-count">{Object.values(care.autoPromos).filter((item) => autoState(item, now) === "running").length} running</b></button>
       </div>
-      {part === "auto" ? <AutoPromosCard key={JSON.stringify(care.autoPromos)} care={care} country={country} canEdit={canEdit} onNotice={onNotice} now={now} /> : <>
+      {part === "auto" ? <AutoPromosCard key={JSON.stringify(care.autoPromos)} care={care} rows={rows} country={country} canEdit={canEdit} onNotice={onNotice} now={now} /> : <>
       {builder ? (
         <section className="dash-card">
           <PromoBuilder country={country} care={care} agentId={agentId} canEdit={canEdit} rows={rows} preselected={builder} onClose={() => onBuilder(null)} onCreated={(text, id) => { onBuilder(null); onNotice(text); if (id) setSharingId(id); }} />
@@ -401,10 +403,19 @@ const PROMO_CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "el
 
 const AUTO_STATE: Record<ReturnType<typeof autoState>, string> = { off: "Off", running: "Running now", waiting: "Starts later", ended: "Ended" };
 
-function AutoPromosCard({ care, country, canEdit, onNotice, now }: { care: RiderCare; country: "SE" | "FR" | "TN"; canEdit: boolean; onNotice: (text: string) => void; now: number }) {
+function AutoPromosCard({ care, rows, country, canEdit, onNotice, now }: { care: RiderCare; rows: RiderRow[]; country: "SE" | "FR" | "TN"; canEdit: boolean; onNotice: (text: string) => void; now: number }) {
   const [auto, setAuto] = useState<AutoPromos>(care.autoPromos);
   const [preview, setPreview] = useState<keyof AutoPromos | null>(null);
   const saved = setAutoPromos(care, auto);
+  const [choosing, setChoosing] = useState<keyof AutoPromos | null>(null);
+  const [seed, setSeed] = useState(1);
+  const names = useMemo(() => new Map(rows.map((row) => [row.rider.id, row.rider.name])), [rows]);
+  const randomIds = (count: number, round: number) => pickAudience(rows, "random", count, round).map((row) => row.rider.id);
+  function setAudience(key: keyof AutoPromos, audience: AutoAudience) {
+    const item = auto[key];
+    const riderIds = audience === "random" ? randomIds(item.count, seed) : audience === "picked" ? item.riderIds : [];
+    setAuto({ ...auto, [key]: { ...item, audience, riderIds } });
+  }
   const prices = useCategoryPrices(country);
   return (
         <section className="dash-card" aria-labelledby="auto-title">
@@ -430,11 +441,23 @@ function AutoPromosCard({ care, country, canEdit, onNotice, now }: { care: Rider
                   <label className="field">For how many rides<NumberField label={`${label} rides`} value={auto[key].rides} unit="rides" max={20} disabled={!canEdit} onChange={(value) => setAuto({ ...auto, [key]: { ...auto[key], rides: Math.max(1, Math.round(value)) } })} /></label>
                   {key === "winBack" ? <label className="field">After no ride for<NumberField label="Come back after days" value={auto.winBack.afterDays} unit="days" disabled={!canEdit} onChange={(value) => setAuto({ ...auto, winBack: { ...auto.winBack, afterDays: Math.round(value) } })} /></label> : null}
                   <label className="field">Who gets it
-                    <select aria-label={`${label} audience`} value={auto[key].audience} disabled={!canEdit} onChange={(event) => setAuto({ ...auto, [key]: { ...auto[key], audience: event.target.value as AutoAudience } })}>
+                    <select aria-label={`${label} audience`} value={auto[key].audience} disabled={!canEdit} onChange={(event) => setAudience(key, event.target.value as AutoAudience)}>
                       {AUTO_AUDIENCES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                     </select>
                   </label>
                 </div>
+                {auto[key].audience === "random" || auto[key].audience === "picked" ? (
+                  <div className="rd-mode-row rd-auto-who">
+                    {auto[key].audience === "random" ? (
+                      <>
+                        <label className="field">How many riders<NumberField label={`${label} how many riders`} value={auto[key].count} unit="riders" max={10000} disabled={!canEdit} onChange={(value) => { const count = Math.max(1, Math.round(value)); setAuto({ ...auto, [key]: { ...auto[key], count, riderIds: randomIds(count, seed) } }); }} /></label>
+                        <button data-command="admin.riders.select" type="button" className="dash-btn small ghost" disabled={!canEdit} onClick={() => { setSeed(seed + 1); setAuto({ ...auto, [key]: { ...auto[key], riderIds: randomIds(auto[key].count, seed + 1) } }); }}><Dices size={13} aria-hidden="true" /> Pick others</button>
+                      </>
+                    ) : null}
+                    <p className="rd-share-who" aria-label={`${label} riders`}><b>{auto[key].riderIds.length}</b> rider{auto[key].riderIds.length === 1 ? "" : "s"}{auto[key].riderIds.length ? `: ${auto[key].riderIds.slice(0, 3).map((id) => names.get(id) ?? id).join(", ")}${auto[key].riderIds.length > 3 ? ` and ${auto[key].riderIds.length - 3} more` : ""}` : ""}</p>
+                    <button data-command="admin.riders.select" type="button" className="dash-btn small" disabled={!canEdit} onClick={() => setChoosing(key)}>{auto[key].audience === "picked" ? "Choose riders" : "See or change riders"}</button>
+                  </div>
+                ) : null}
                 <fieldset className="rd-when">
                   <legend>When it runs <small>(empty = always)</small></legend>
                   <label className="field">Starts<input type="date" aria-label={`${label} starts`} value={auto[key].from} disabled={!canEdit} onChange={(event) => setAuto({ ...auto, [key]: { ...auto[key], from: event.target.value } })} /></label>
@@ -455,6 +478,9 @@ function AutoPromosCard({ care, country, canEdit, onNotice, now }: { care: Rider
               </div>
             ))}
           </div>
+          {choosing ? (
+            <RiderPicker rows={rows} picked={auto[choosing].riderIds} title={`Who gets ${{ firstRide: "First ride", birthday: "Birthday", winBack: "Come back" }[choosing]}`} onClose={() => setChoosing(null)} onSave={(ids) => { setAuto({ ...auto, [choosing]: { ...auto[choosing], riderIds: ids } }); setChoosing(null); }} />
+          ) : null}
           {saved.error ? <p className="rd-form-error" role="alert">{saved.error}</p> : null}
           <CommandButton command="admin.riders.autoPromo" className="dash-btn" targetId="auto-promotions" confirmTarget={false} scope="all" before={JSON.stringify(care.autoPromos)} after={JSON.stringify(auto)} expectedSliceRev={care.draftRev} sliceKey={CARE_KEY} value={saved.care} disabled={!canEdit || Boolean(saved.error) || JSON.stringify(auto) === JSON.stringify(care.autoPromos)} title={saved.error} onDone={() => onNotice("Automatic promotions saved.")}>
             Save automatic promotions
