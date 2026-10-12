@@ -14,7 +14,7 @@ async function confirm(page: Page) {
 test("R10 payment policy voucher and reconciliation persist", async ({ page }) => {
   test.setTimeout(90_000);
   await session(page);
-  await page.goto("/payments");
+  await page.goto("/payments?tab=tools");
 
   await expect(page.getByRole("heading", { level: 2, name: "Payments" })).toBeVisible();
   await page.getByLabel("cash method").uncheck();
@@ -112,7 +112,7 @@ test("R10 bank review rejects invalid bank details without a business write", as
 test("R10 finance workspaces remain usable at 390px", async ({ page }) => {
   await session(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/payments");
+  await page.goto("/payments?tab=tools");
   await expect(page.getByTestId("payment-policy")).toBeVisible();
   let overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(2);

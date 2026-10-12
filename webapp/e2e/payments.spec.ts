@@ -14,6 +14,7 @@ test("a timed-out double click still refunds once", async ({ page }) => {
   await signIn(page);
   await page.getByRole("link", { name: "Payments", exact: true }).click();
   await expect(page.getByTestId("payment-count")).toContainText("300 payments");
+  await page.getByRole("tab", { name: "Methods and tools" }).click();
   await expect(page.getByTestId("bank-check")).toContainText("SEB");
   await expect(page.getByTestId("bank-check")).toContainText("IBAN checks");
   await page.goto("/system");
