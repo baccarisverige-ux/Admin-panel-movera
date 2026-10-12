@@ -193,7 +193,7 @@ export type Facts = {
   now: number;
   day: string;
   zones: { id: string; name: string }[];
-  incidents: { id: string; zoneId: string; who: string; status: string; owner: string | null; takenAt: string | null; createdAt: string | null }[];
+  incidents: { id: string; zoneId: string; who: string; status: string; owner: string | null; takenAt: string | null; createdAt: string | null; late?: string | null }[];
   requests: { tripId: string; rider: string; zoneId: string; waitingMin: number; searching: boolean }[];
   freeByZone: Record<string, number>;
   dispatch: (zoneId: string) => { long_wait: { on: boolean; limit: number }; few_drivers: { on: boolean; limit: number }; no_driver: { on: boolean; limit: number } };
@@ -258,7 +258,7 @@ export function computeAlerts(facts: Facts, settings: AlertSettings, rules: read
     for (const row of facts.incidents.filter((item) => (item.status === "queued" || item.status === "taken") && inZones.has(item.zoneId))) {
       const minutes = row.takenAt ? Math.round((facts.now - Date.parse(row.takenAt)) / 60_000) : 0;
       const slow = row.status === "taken" && k("sos_slow").on && levelFor(minutes, k("sos_slow").limits, "up");
-      push({ id: `sos:${row.id}`, kind: "sos", level: k("sos").level, title: slow ? `SOS from ${row.who} not solved after ${minutes} min` : `SOS from ${row.who}`, detail: `${zoneName(row.zoneId)} · ${row.id}`, zoneId: row.zoneId, since: row.createdAt ? Date.parse(row.createdAt) : row.takenAt ? Date.parse(row.takenAt) - 2 * 60_000 : seeded(row.id, 8), incidentId: row.id });
+      push({ id: `sos:${row.id}`, kind: "sos", level: k("sos").level, title: slow ? `SOS from ${row.who} not solved after ${minutes} min` : row.late ? `SOS from ${row.who} ${row.late}` : `SOS from ${row.who}`, detail: `${zoneName(row.zoneId)} · ${row.id}`, zoneId: row.zoneId, since: row.createdAt ? Date.parse(row.createdAt) : row.takenAt ? Date.parse(row.takenAt) - 2 * 60_000 : seeded(row.id, 8), incidentId: row.id });
     }
   }
 
