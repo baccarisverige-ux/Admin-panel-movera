@@ -36,7 +36,8 @@ import {
 } from "lucide-react";
 import { can, canUseZone } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
-import { useInbox, useSearch } from "../api/hooks";
+import { useInbox, useSearch, useSlice } from "../api/hooks";
+import { PANEL_OPS_KEY, emptyPanelOps, normalizePanelOps, showInMenu, type PanelOps } from "../platform/panel";
 import { AlertsProvider, useAlertsData } from "../alerts/AlertsContext";
 import { AlertBell } from "../alerts/AlertBell";
 import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
@@ -105,7 +106,8 @@ function ShellInner({ page, children }: AppShellProps) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { agent, signOut } = useSession();
-  const visible = MENU.filter((item) => !agent || can(agent.role, item.permission));
+  const panel = normalizePanelOps(useSlice<PanelOps>(PANEL_OPS_KEY, emptyPanelOps(), { enabled: Boolean(agent) }).value);
+  const visible = MENU.filter((item) => (!agent || can(agent.role, item.permission)) && showInMenu(item.id, agent?.role, panel));
   const groups = MENU_GROUPS.filter((group) => visible.some((item) => item.group === group));
   const env = import.meta.env.VITE_DATA || "demo";
   const scope = params.get("scope") ?? "";

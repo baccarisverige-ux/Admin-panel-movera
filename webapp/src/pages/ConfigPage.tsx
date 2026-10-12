@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { ArrowLeft } from "lucide-react";
+import { CompareVersions, FindSetting, PanelSettings, SettingsElsewhere } from "../platform/SettingsParts";
 import { useSession } from "../auth/SessionContext";
 import {
   advanceConfigClock,
@@ -82,7 +84,7 @@ function sameBook(a: ConfigBook, b: ConfigBook): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export function ConfigPage() {
+function ConfigAll() {
   const { agent } = useSession();
   const store = useSlice<ConfigBook>("config", emptyConfig());
   const persisted = useMemo(() => normalizeConfig(store.value), [store.value]);
@@ -155,7 +157,7 @@ export function ConfigPage() {
   if (store.loading) return <p className="state-line">Loading configuration.</p>;
 
   return (
-    <>
+    <div className="pl-settings-all">
       <div className="page-heading">
         <div>
           <h2>Configuration</h2>
@@ -742,6 +744,49 @@ export function ConfigPage() {
           </CommandButton>
         </div>
       </article>
-    </>
+    </div>
+  );
+}
+
+type SettingsTab = "all" | "compare" | "elsewhere" | "panel";
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: "all", label: "All settings" },
+  { id: "compare", label: "Compare versions" },
+  { id: "elsewhere", label: "Settings in other sections" },
+  { id: "panel", label: "Admin panel" },
+];
+
+export function ConfigPage() {
+  const { agent } = useSession();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const tab = (SETTINGS_TABS.find((item) => item.id === params.get("tab"))?.id ?? "all") as SettingsTab;
+  const [notice, setNotice] = useState("");
+  const selectTab = (id: SettingsTab) => setParams(() => {
+    const next = new URLSearchParams(globalThis.location.search);
+    if (id === "all") next.delete("tab");
+    else next.set("tab", id);
+    return next;
+  }, { replace: true });
+  function jump(heading: string) {
+    const node = [...document.querySelectorAll<HTMLHeadingElement>(".pl-settings-all article.panel > h3")].find((item) => item.textContent === heading);
+    node?.parentElement?.scrollIntoView({ behavior: "smooth", block: "start" });
+    node?.parentElement?.classList.add("pl-flash");
+    setTimeout(() => node?.parentElement?.classList.remove("pl-flash"), 1600);
+  }
+  return (
+    <div className="dx-page pl-page">
+      <div className="pl-top">
+        <button data-command="admin.panel.view" type="button" className="dash-btn ghost dx-back" onClick={() => (globalThis.history.length > 1 ? navigate(-1) : navigate("/"))}><ArrowLeft size={16} aria-hidden="true" /> Back</button>
+        <div className="dash-tabs dx-views" role="tablist" aria-label="Settings sections">
+          {SETTINGS_TABS.map((item) => <button data-command="admin.panel.view" key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "active" : undefined} onClick={() => selectTab(item.id)}>{item.label}</button>)}
+        </div>
+      </div>
+      {notice ? <p role="status" className="pl-status">{notice}</p> : null}
+      {tab === "all" ? <><FindSetting onPick={jump} /><ConfigAll /></> : null}
+      {tab === "compare" ? <CompareVersions /> : null}
+      {tab === "elsewhere" ? <SettingsElsewhere /> : null}
+      {tab === "panel" ? <PanelSettings isSuper={agent?.role === "super"} onNotice={setNotice} /> : null}
+    </div>
   );
 }

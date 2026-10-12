@@ -1,3 +1,4 @@
+import { DevBanner } from "../platform/DevBanner";
 import { useState } from "react";
 import { ACTION_REASONS } from "../domain/labels";
 import { useSession } from "../auth/SessionContext";
@@ -15,6 +16,7 @@ export function DesignPage() {
 
   return (
     <>
+      <DevBanner />
       <div className="page-heading">
         <div>
           <h2>Design</h2>

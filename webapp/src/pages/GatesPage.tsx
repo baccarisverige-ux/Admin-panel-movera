@@ -1,3 +1,4 @@
+import { DevBanner } from "../platform/DevBanner";
 import { GateAAcceptance } from "../ui/GateAAcceptance";
 import { APPS } from "../gates/apps";
 import { frontendGateC, gateC } from "../gates/frontendC";
@@ -14,6 +15,7 @@ export function GatesPage() {
 
   return (
     <>
+      <DevBanner />
       <GateAAcceptance />
       <div className="page-heading">
         <div>

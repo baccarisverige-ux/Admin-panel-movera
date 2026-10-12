@@ -17,6 +17,7 @@ import "./styles/fleetops.css";
 import "./styles/finance.css";
 import "./styles/support.css";
 import "./styles/growth.css";
+import "./styles/platform.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
