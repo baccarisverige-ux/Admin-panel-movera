@@ -5,6 +5,8 @@ payments, driver app and rider app. Tick a box when it is done.
 
 To continue in a new chat, say: **"Read LATER_JOB.md in admin-panel-movera and do the next part."**
 
+Rule: whenever the owner says **"add to later job"**, Claude adds the item here as a checkbox, commits and pushes it.
+
 ---
 
 ## 1. Admin panel — new settings to add
