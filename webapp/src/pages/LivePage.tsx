@@ -54,6 +54,7 @@ export function LivePage() {
         onDrawn={() => undefined}
         onEdited={() => undefined}
       />
+      <p className="dx-note op-moved" role="note">The main dispatch rules are in Dispatch, per zone. <Link to="/dispatch">Open Dispatch</Link></p>
       <DispatchEditor />
     </>
   );
