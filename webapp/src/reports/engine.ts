@@ -228,7 +228,10 @@ export function linkFor(targetId: string, action: string): string | null {
   if (/^PO\d+/.test(targetId)) return `/payouts/${targetId}`;
   if (action.startsWith("admin.dispatch.")) return "/dispatch?view=history";
   if (action.startsWith("admin.alerts.")) return "/alerts?view=history";
-  if (action.startsWith("admin.safety.")) return "/incidents";
+  if (/^INC-/.test(targetId)) return `/incidents?case=${targetId}`;
+  if (action.startsWith("admin.safety.") || action.startsWith("admin.incident.")) return "/incidents";
+  if (action.startsWith("admin.risk.")) return "/risk";
+  if (action.startsWith("admin.shift.")) return "/handover?tab=past";
   if (action.startsWith("admin.zone.")) return "/zones";
   if (action.startsWith("admin.pricing.")) return "/pricing";
   return null;

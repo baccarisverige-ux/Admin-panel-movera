@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApprovals, useRecords, useSlice } from "../api/hooks";
 import { useAdminApi } from "../api/AdminApiContext";
 import { emptySafety, type SafetyBook } from "../safety/ops";
+import { INCIDENT_OPS_KEY, caseOf, emptyIncidentOps, lateText, normalizeIncidentOps, type IncidentOps } from "../safety/cases";
 import { useSession } from "../auth/SessionContext";
 import { can } from "../auth/permissions";
 import { liveDrivers } from "../dashboard/live";
@@ -40,6 +41,8 @@ export function useAlerts() {
   // Only read what the role may read: a refused read is retried and slows every save.
   const canSafety = Boolean(agent && can(agent.role, "incidents.read"));
   const safety = useSlice<SafetyBook>("safetyOps", emptySafety(), { enabled: canSafety });
+  const incidentSlice = useSlice<IncidentOps>(INCIDENT_OPS_KEY, emptyIncidentOps(), { enabled: canSafety });
+  const incidentOps = useMemo(() => normalizeIncidentOps(incidentSlice.value), [incidentSlice.value]);
   const dispatchSlice = useSlice<DispatchBook>(DISPATCH_KEY, emptyDispatchBook());
   const dispatchBook = useMemo(() => normalizeDispatchBook(dispatchSlice.value), [dispatchSlice.value]);
   const driverStore = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
@@ -80,7 +83,7 @@ export function useAlerts() {
       zones: zones.map((zone) => ({ id: zone.id, name: zone.name })),
       incidents: (incidents.data ?? []).map((row) => {
         const record = safety.value.incidents[row.id];
-        return { id: row.id, zoneId: row.zoneId, who: row.name, status: row.status, owner: record?.owner ?? null, takenAt: record?.events.find((event) => event.kind === "take")?.at ?? null, createdAt: row.createdAt ?? null };
+        return { id: row.id, zoneId: row.zoneId, who: row.name, status: row.status, owner: record?.owner ?? null, takenAt: record?.events.find((event) => event.kind === "take")?.at ?? null, createdAt: row.createdAt ?? null, late: lateText(caseOf(row, safety.value, incidentOps, now), incidentOps.settings, now) };
       }),
       requests: requests.map((request) => ({ tripId: request.tripId, rider: request.rider, zoneId: request.zoneId, waitingMin: request.waitingMin, searching: request.status === "searching" })),
       freeByZone,
@@ -128,7 +131,7 @@ export function useAlerts() {
       money,
     };
     // money depends only on the market, which is already a dependency.
-  }, [now, zones, drivers.data, vehicles.data, trips.data, incidents.data, reservations.data, payments.data, payouts.data, tickets.data, approvals.data, riders.rows, safety.value, dispatchBook, driverStore.value, market, api.demo]);
+  }, [now, zones, drivers.data, vehicles.data, trips.data, incidents.data, reservations.data, payments.data, payouts.data, tickets.data, approvals.data, riders.rows, safety.value, incidentOps, dispatchBook, driverStore.value, market, api.demo]);
 
   const all = useMemo(() => computeAlerts(facts, book.settings, book.rules.filter((rule) => rule.country === market.id)), [facts, book.settings, book.rules, market.id]);
   const sosOwner = (incidentId: string) => safety.value.incidents[incidentId]?.owner ?? null;
