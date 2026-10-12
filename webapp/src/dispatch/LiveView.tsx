@@ -23,6 +23,8 @@ type Props = {
   agentId: string;
   withScope: (path: string) => string;
   onNotice: (text: string) => void;
+  /** When set, shown instead of this tab's own alert list (the shared one from Alerts). */
+  sharedAlerts?: ReactNode;
 };
 
 type Alert = { id: string; zoneId: string; tone: "red" | "orange"; text: string; tripId?: string };
@@ -71,7 +73,7 @@ function RequestActions({ request, book, zones, groups, candidates, canControl, 
   );
 }
 
-export function LiveView({ book, market, zones, drivers, requests, candidatesOf, rulesOf, busyOf, hhmm, canControl, agentId, withScope, onNotice }: Props) {
+export function LiveView({ book, market, zones, drivers, requests, candidatesOf, rulesOf, busyOf, hhmm, canControl, agentId, withScope, onNotice, sharedAlerts }: Props) {
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const ids = new Set(zones.map((zone) => zone.id));
@@ -94,7 +96,7 @@ export function LiveView({ book, market, zones, drivers, requests, candidatesOf,
 
   return (
     <div className="dx-live">
-      <section className="dx-alerts" aria-label="Alerts">
+      {sharedAlerts ?? <section className="dx-alerts" aria-label="Alerts">
         <h3><Bell size={15} aria-hidden="true" /> Alerts <span className="dx-count">{alerts.length}</span></h3>
         {alerts.length === 0 ? <p className="dx-calm">No alerts right now. Limits are set per zone in Rules → Alerts.</p> : (
           <ul>
@@ -106,7 +108,7 @@ export function LiveView({ book, market, zones, drivers, requests, candidatesOf,
             ))}
           </ul>
         )}
-      </section>
+      </section>}
 
       <section aria-label="Zone control">
         <h3 className="dx-h3"><Radar size={15} aria-hidden="true" /> Zones right now</h3>

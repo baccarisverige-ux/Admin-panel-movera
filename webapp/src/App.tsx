@@ -12,6 +12,7 @@ import { ConfirmPage } from "./pages/ConfirmPage";
 import { ContentPage } from "./pages/ContentPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DispatchPage } from "./pages/DispatchPage";
+import { AlertsPage } from "./pages/AlertsPage";
 import { DesignPage } from "./pages/DesignPage";
 import { DriverDetailPage } from "./pages/DriverDetailPage";
 import { DriversPage } from "./pages/DriversPage";
@@ -78,6 +79,7 @@ function Screen({ id }: { id: string }) {
   if (id === "trips") return <TripsPage />;
   if (id === "live") return <LivePage />;
   if (id === "dispatch") return <DispatchPage />;
+  if (id === "alerts") return <AlertsPage />;
   if (id === "team") return <TeamPage />;
   if (id === "system") return <SystemPage />;
   return <ComingPage title={item.label} order="a later work order" />;
@@ -148,6 +150,7 @@ function Authed() {
         <Route path="reservations/:id" element={<ReservationDetailPage />} />
         <Route path="live" element={<Screen id="live" />} />
         <Route path="dispatch" element={<Screen id="dispatch" />} />
+        <Route path="alerts" element={<Screen id="alerts" />} />
         <Route path="drivers" element={<Screen id="drivers" />} />
         <Route path="drivers/:driverId" element={<DriverDetailPage />} />
         <Route path="onboarding" element={<Screen id="onboarding" />} />

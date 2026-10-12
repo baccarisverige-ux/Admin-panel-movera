@@ -10,6 +10,7 @@ import "./styles/zones.css";
 import "./styles/bonus.css";
 import "./styles/riders.css";
 import "./styles/dispatch.css";
+import "./styles/alerts.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

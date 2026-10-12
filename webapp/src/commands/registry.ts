@@ -297,6 +297,16 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.dispatch.send", label: "Send a waiting ride to drivers", reason: true, permission: "trips.intervene" },
   { id: "admin.dispatch.cancelCheck", label: "Change a cancel fee decision", reason: true, permission: "trips.intervene" },
   { id: "admin.dispatch.rulesFile", label: "Download the dispatch rules file", reason: false, permission: "trips.read" },
+  { id: "admin.alerts.view", label: "Alerts view", reason: false, permission: "overview.read" },
+  { id: "admin.alerts.take", label: "Take an alert", reason: false, permission: "overview.read" },
+  { id: "admin.alerts.done", label: "Mark an alert solved", reason: false, permission: "overview.read" },
+  { id: "admin.alerts.snooze", label: "Snooze an alert", reason: false, permission: "overview.read" },
+  { id: "admin.alerts.pass", label: "Pass an alert to another admin", reason: false, permission: "overview.read" },
+  { id: "admin.alerts.mute", label: "Mute a kind of alert", reason: true, permission: "overview.read" },
+  { id: "admin.alerts.settings", label: "Save alert settings", reason: true, permission: "alerts.manage" },
+  { id: "admin.alerts.rule", label: "Save an alert rule", reason: true, permission: "alerts.manage" },
+  { id: "admin.alerts.quiet", label: "Save my quiet hours", reason: false, permission: "overview.read" },
+  { id: "admin.alerts.export", label: "Export alert history", reason: false, permission: "overview.read" },
   { id: "admin.live.focus", label: "Focus live marker", reason: false, permission: "trips.read" },
   { id: "admin.ui.country", label: "Choose country", reason: false, permission: "overview.read" },
   { id: "admin.ui.zones", label: "Choose zones", reason: false, permission: "overview.read" },
@@ -344,6 +354,7 @@ const OWNER_BY_DOMAIN: Record<string, string> = {
   confirm: "Platform",
   dispatch: "Dispatch",
   live: "Dispatch",
+  alerts: "Operations",
 };
 
 const ALLOWED_STATES: Record<string, readonly string[]> = {

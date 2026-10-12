@@ -35,7 +35,7 @@ function tone(urgent: boolean) {
   }
 }
 
-export type Signal = { id: string; title: string; body: string; urgent: boolean };
+export type Signal = { id: string; title: string; body: string; urgent: boolean; sound?: boolean; notify?: boolean };
 
 export function useAlertSignals(signals: Signal[], ready: boolean) {
   const [muted, setMuted] = useState(readMuted);
@@ -55,9 +55,10 @@ export function useAlertSignals(signals: Signal[], ready: boolean) {
     if (!added.length) return;
     setFresh(added.map((signal) => signal.id));
     window.setTimeout(() => setFresh([]), 6000);
-    if (!muted) tone(added.some((signal) => signal.urgent));
+    const loud = added.filter((signal) => signal.sound !== false);
+    if (!muted && loud.length) tone(loud.some((signal) => signal.urgent));
     if (permission === "granted" && document.visibilityState !== "visible") {
-      for (const signal of added.slice(0, 3)) {
+      for (const signal of added.filter((signal) => signal.notify !== false).slice(0, 3)) {
         try {
           new Notification(signal.title, { body: signal.body, tag: signal.id });
         } catch {

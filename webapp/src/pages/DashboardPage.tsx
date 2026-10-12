@@ -31,6 +31,7 @@ import { useApprovals, useAudit, useRecords, useSlice } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { commandById } from "../commands/registry";
+import { useAlertsMaybe } from "../alerts/AlertsContext";
 import { DriversMap, STATE_COLOR } from "../dashboard/DriversMap";
 import { EarningsChart } from "../dashboard/EarningsChart";
 import { change, COMMISSION_PLACEHOLDER, earningsReport, type Share } from "../dashboard/earnings";
@@ -282,7 +283,14 @@ export function DashboardPage() {
     ...(can(role, "incidents.read") ? sos.map((row) => ({ id: `sos:${row.id}`, title: "New SOS", body: `${driverName(row.driverId) ?? row.name} needs help (${row.id})`, urgent: true })) : []),
     ...(can(role, "trips.read") ? longWaits.map((request) => ({ id: `wait:${request.tripId}`, title: "Rider waiting too long", body: `${request.rider} has waited ${request.waitingMin} min in ${request.zoneName}`, urgent: false })) : []),
   ];
-  const alertSignals = useAlertSignals(signals, !incidents.isLoading && !trips.isLoading);
+  // Alerts is the one source by default; the older counts and sound only run when switched back on there.
+  const shared = useAlertsMaybe();
+  const legacy = shared?.book.settings.legacy ?? { dashboardCounts: true, dashboardSound: true };
+  const alertSignals = useAlertSignals(legacy.dashboardSound ? signals : [], !incidents.isLoading && !trips.isLoading);
+  const sharedPills = shared ? (["critical", "important", "info"] as const).map((level) => {
+    const list = shared.active.filter((alert) => alert.level === level);
+    return { level, count: list.length, first: list[0]?.title ?? "", tone: level === "critical" ? "critical" : level === "important" ? "serious" : "warning" };
+  }).filter((pill) => pill.count > 0) : [];
 
   const alerts = [
     { id: "sos", tone: "critical", icon: <Siren size={16} aria-hidden="true" />, permission: "incidents.read", count: sos.length, text: sos.length === 1 ? `SOS from ${driverName(sos[0].driverId) ?? sos[0].name}` : "SOS alerts waiting for a responder", path: "/incidents" },
@@ -396,14 +404,25 @@ export function DashboardPage() {
         </div>
         <div className="dash-head-actions">
           <PeriodPicker key={periodKey} period={period} today={localDay(now, market.timeZone)} onChange={setPeriod} />
-          <SoundToggle muted={alertSignals.muted} onToggle={alertSignals.toggleMute} permission={alertSignals.permission} onAsk={() => void alertSignals.askPermission()} />
+          {legacy.dashboardSound ? <SoundToggle muted={alertSignals.muted} onToggle={alertSignals.toggleMute} permission={alertSignals.permission} onAsk={() => void alertSignals.askPermission()} /> : null}
           <button data-command="admin.ui.refresh" type="button" className="dash-btn ghost icon" aria-label="Refresh" onClick={() => { setRefreshedAt(Date.now()); void client.invalidateQueries(); }}><RefreshCw size={16} aria-hidden="true" /></button>
         </div>
       </div>
 
       {failed?.error ? <p role="alert" className="dash-error">{failed.error.message}</p> : null}
 
-      {alerts.length ? (
+      {!legacy.dashboardCounts && shared ? (
+        sharedPills.length ? (
+          <div className="alert-strip" role="region" aria-label="Urgent">
+            {sharedPills.map((pill) => (
+              <Link key={pill.level} to={withScope("/alerts")} className={`alert-pill ${pill.tone}`}>
+                <strong>{pill.count}</strong> {pill.level === "critical" ? "Critical" : pill.level === "important" ? "Important" : "Info"} · {pill.first}{pill.count > 1 ? ` and ${pill.count - 1} more` : ""}
+              </Link>
+            ))}
+            <Link to={withScope("/alerts")} className="alert-pill all">See all alerts</Link>
+          </div>
+        ) : null
+      ) : alerts.length ? (
         <div className="alert-strip" role="region" aria-label="Urgent">
           {alerts.map((alert) => (
             <Link key={alert.id} to={withScope(alert.path)} className={`alert-pill ${alert.tone}${alertSignals.fresh.some((id) => id.startsWith(alert.id === "wait" ? "wait:" : `${alert.id}:`)) ? " flash" : ""}`}>

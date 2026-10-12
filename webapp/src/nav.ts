@@ -41,6 +41,7 @@ export const NAV_ICONS = [
   "Shield",
   "Palette",
   "Radar",
+  "Bell",
 ] as const;
 
 export type NavIcon = (typeof NAV_ICONS)[number];
@@ -59,6 +60,7 @@ export const MENU: MenuItem[] = [
   { id: "dashboard", path: "/", label: "Dashboard", group: "Overview", permission: "overview.read", icon: "LayoutDashboard" },
   { id: "reports", path: "/reports", label: "Reports", group: "Overview", permission: "overview.read", icon: "BarChart3" },
   { id: "handover", path: "/handover", label: "Handover", group: "Overview", permission: "overview.read", icon: "ClipboardList" },
+  { id: "alerts", path: "/alerts", label: "Alerts", group: "Operations", permission: "overview.read", icon: "Bell" },
   { id: "trips", path: "/trips", label: "Trips", group: "Operations", permission: "trips.read", icon: "Route" },
   { id: "reservations", path: "/reservations", label: "Reservations", group: "Operations", permission: "trips.read", icon: "CalendarClock" },
   { id: "live", path: "/live", label: "Live map", group: "Operations", permission: "trips.read", icon: "Map" },
