@@ -9,6 +9,7 @@ import "./styles/pricing.css";
 import "./styles/zones.css";
 import "./styles/bonus.css";
 import "./styles/riders.css";
+import "./styles/dispatch.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

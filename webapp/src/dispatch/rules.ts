@@ -1,0 +1,876 @@
+import { market, MARKETS, zoneById, type MarketId, type MarketZone } from "../markets/markets.ts";
+
+/** Dispatch rules: how a ride request finds its driver. One set per zone, plus country rules, events and driver groups. */
+
+export const DISPATCH_KEY = "dispatchRules";
+
+export type OfferMode = "radar" | "exclusive";
+export type FactorId = "eta" | "rating" | "acceptance" | "cancel" | "idle" | "finishing" | "favourite";
+export type ExtraId = "child_seat" | "pet" | "wheelchair" | "luggage" | "long_trip";
+export type WaitKind = "raise_price" | "upgrade" | "alert_admin" | "keep_waiting" | "busy";
+export type AlertId = "long_wait" | "few_drivers" | "no_driver";
+export type TabId = "modes" | "best" | "waiting" | "rides" | "drivers" | "safety" | "alerts";
+
+export const TABS: { id: TabId; label: string }[] = [
+  { id: "modes", label: "Modes" },
+  { id: "best", label: "Best driver" },
+  { id: "waiting", label: "Rider waiting" },
+  { id: "rides", label: "Rides & stops" },
+  { id: "drivers", label: "Drivers" },
+  { id: "safety", label: "Safety" },
+  { id: "alerts", label: "Alerts" },
+];
+
+export const FACTORS: { id: FactorId; label: string; help: string }[] = [
+  { id: "eta", label: "Time to pickup", help: "Closer by driving time scores higher." },
+  { id: "rating", label: "Rating", help: "Higher driver rating scores higher." },
+  { id: "acceptance", label: "Acceptance rate", help: "Drivers who accept more often score higher." },
+  { id: "cancel", label: "Cancel rate", help: "Drivers who cancel less score higher." },
+  { id: "idle", label: "Waiting without a ride", help: "Drivers who waited longer score higher." },
+  { id: "finishing", label: "Finishing a ride nearby", help: "A driver ending a ride close to the pickup can take it next." },
+  { id: "favourite", label: "Rider's favourite", help: "The rider marked this driver as a favourite." },
+];
+
+export const EXTRAS: { id: ExtraId; label: string; badge: string }[] = [
+  { id: "child_seat", label: "Child seat", badge: "Child seat" },
+  { id: "pet", label: "Pet", badge: "Pet" },
+  { id: "wheelchair", label: "Wheelchair access", badge: "Wheelchair" },
+  { id: "luggage", label: "Extra luggage", badge: "Luggage" },
+  { id: "long_trip", label: "Long trip", badge: "Long trip" },
+];
+
+export const WAIT_KINDS: { id: WaitKind; label: string; help: string }[] = [
+  { id: "raise_price", label: "Suggest a higher price", help: "Opens the raise-price screen the rider app already has." },
+  { id: "upgrade", label: "Suggest an upgrade", help: "Offer Priority or Comfort while still searching." },
+  { id: "alert_admin", label: "Alert the admin", help: "The ride shows in Live with an alert, so an admin can pick a driver." },
+  { id: "keep_waiting", label: "Ask to keep waiting", help: "The rider can wait more minutes or stop." },
+  { id: "busy", label: "Busy, try later", help: "The search stops and the rider sees this message." },
+];
+
+export const ALERTS: { id: AlertId; label: string; unit: string; help: string }[] = [
+  { id: "long_wait", label: "A rider waits too long", unit: "min", help: "Alert when a rider has waited this many minutes." },
+  { id: "few_drivers", label: "Few free drivers", unit: "drivers", help: "Alert when free drivers in the zone drop to this number or less." },
+  { id: "no_driver", label: "Many requests without a driver", unit: "requests", help: "Alert when this many requests are waiting without a driver." },
+];
+
+export type WaitStep = { id: string; kind: WaitKind; on: boolean; afterMin: number; message: string; extraMin?: number };
+export type TimeRule = { id: string; on: boolean; from: string; to: string; mode: OfferMode };
+export type Factor = { id: FactorId; on: boolean; weight: number };
+
+export type ZoneDispatch = {
+  zoneId: string;
+  radar: { on: boolean; drivers: number; seconds: number; then: "widen" | "exclusive" | "widen_then_exclusive" };
+  exclusive: { on: boolean; seconds: number; drivers: number; then: "radar" | "widen" | "widen_then_radar" };
+  /** How many Radar offers a driver sees at once: full-screen radar, the small popup, and while driving a rider. */
+  radarApp: { fullOn: boolean; full: number; popupOn: boolean; popup: number; drivingOn: boolean; driving: number };
+  /** After this many offers in a row not accepted, the driver goes offline. */
+  autoOffline: { on: boolean; after: number };
+  reservation: { on: boolean; searchBeforeMin: number; assignEarly: boolean; assignHoursBefore: number; backup: boolean; toExclusive: boolean; exclusiveBeforeMin: number };
+  choose: { how: "auto" | "manual"; radarAbove: number; main: OfferMode; backup: OfferMode | "none"; times: TimeRule[] };
+  rulesFrom: "driver" | "pickup";
+  factors: Factor[];
+  radius: { steps: number[]; maxWaitMin: number };
+  batching: { on: boolean; seconds: number; fromRatio: number };
+  finishing: { radar: boolean; exclusive: boolean; withinMin: number; withinKm: number };
+  favourite: { on: boolean; maxKm: number; waitSec: number };
+  waiting: WaitStep[];
+  driverCancel: { on: boolean; commissionCutPct: number };
+  riderCancel: { on: boolean; freeMin: number; closerPct: number; fee: number; priority: boolean; priorityMin: number };
+  extras: { id: ExtraId; on: boolean; badge: boolean }[];
+  longTripKm: number;
+  stops: { on: boolean; max: number; freeWaitMin: number; perMin: number; perStop: number; changeDuring: boolean; driverCanRefuse: boolean };
+  airport: { on: boolean; order: "fifo" | "best"; maxQueueMin: number; queueAreas: { id: string; name: string; ring: [number, number][] }[] };
+  goingHome: { on: boolean; perDay: number; maxOffDeg: number };
+  fairness: { idleBoost: boolean; idlePoints: number; hourCap: boolean; hourRides: number; skipPause: boolean; skips: number; pauseMin: number };
+  decline: { on: boolean; countsAcceptance: boolean; pauseAfter: number; pauseMin: number; longTripFree: boolean; farPickupFree: boolean; farPickupKm: number };
+  safety: { minRating: boolean; ratingBelow: number; maxCancel: boolean; cancelAbove: number; doNotMatch: boolean; womenOnly: boolean };
+  alerts: { id: AlertId; on: boolean; limit: number; panel: boolean; email: boolean; sms: boolean }[];
+};
+
+export type CountryDispatch = { country: MarketId; rest: { on: boolean; workHours: number; restHours: number } };
+
+export type DispatchEvent = {
+  id: string;
+  country: MarketId;
+  name: string;
+  ring: [number, number][];
+  from: string;
+  until: string;
+  on: boolean;
+  mode: OfferMode;
+  radarDrivers: number;
+  pickupNote: string;
+  driverMessage: string;
+};
+
+export type DriverGroup = { id: string; country: MarketId; name: string; driverIds: string[] };
+export type Preset = { id: string; name: string; note: string; builtIn: boolean; values: Omit<ZoneDispatch, "zoneId"> };
+
+export type Control = { paused: boolean; mode: OfferMode | null; by: string; at: string };
+
+export type Approval = {
+  id: string;
+  kind: "publish" | "control";
+  zoneIds: string[];
+  lines: string[];
+  by: string;
+  at: string;
+  /** For publish: the zone rules to make live. For control: the live switch to apply. */
+  zones?: Record<string, ZoneDispatch>;
+  control?: { zoneId: string; value: Control };
+};
+
+export type Version = {
+  rev: number;
+  at: string;
+  actorId: string;
+  approvedBy?: string;
+  note: string;
+  zoneIds: string[];
+  lines: string[];
+  live: Record<string, ZoneDispatch>;
+  liveCountries: Record<string, CountryDispatch>;
+};
+
+export type CancelDecision = { fee: boolean; by: string; reason: string; at: string };
+export type LiveAction = { id: string; tripId: string; kind: "group" | "radar_group" | "cancel"; target: string; by: string; at: string };
+
+export type DispatchBook = {
+  draftRev: number;
+  draft: Record<string, ZoneDispatch>;
+  live: Record<string, ZoneDispatch>;
+  countries: Record<string, CountryDispatch>;
+  liveCountries: Record<string, CountryDispatch>;
+  events: DispatchEvent[];
+  groups: DriverGroup[];
+  presets: Preset[];
+  control: Record<string, Control>;
+  approvals: Approval[];
+  versions: Version[];
+  cancelChecks: Record<string, CancelDecision>;
+  liveActions: LiveAction[];
+};
+
+const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+function waitingDefault(): WaitStep[] {
+  return [
+    { id: "w1", kind: "raise_price", on: true, afterMin: 1, message: "Drivers are busy. Raise your price to be picked up faster." },
+    { id: "w2", kind: "upgrade", on: true, afterMin: 2, message: "A Priority or Comfort car can come sooner. Upgrade?" },
+    { id: "w3", kind: "alert_admin", on: true, afterMin: 3, message: "We are looking for a driver for you." },
+    { id: "w4", kind: "keep_waiting", on: true, afterMin: 5, message: "Still searching. Keep waiting?", extraMin: 3 },
+    { id: "w5", kind: "busy", on: true, afterMin: 8, message: "It is very busy right now. Please try again in a few minutes." },
+  ];
+}
+
+export function defaultZone(zone: Pick<MarketZone, "id" | "kind">): ZoneDispatch {
+  const airport = zone.kind === "airport";
+  return {
+    zoneId: zone.id,
+    radar: { on: true, drivers: airport ? 8 : 5, seconds: 15, then: "widen_then_exclusive" },
+    exclusive: { on: true, seconds: 15, drivers: 3, then: "widen_then_radar" },
+    radarApp: { fullOn: true, full: 8, popupOn: true, popup: 2, drivingOn: true, driving: 1 },
+    autoOffline: { on: true, after: 5 },
+    reservation: { on: true, searchBeforeMin: 30, assignEarly: true, assignHoursBefore: 12, backup: true, toExclusive: true, exclusiveBeforeMin: 20 },
+    choose: { how: "auto", radarAbove: 1.5, main: "exclusive", backup: "radar", times: [{ id: "t1", on: false, from: "22:00", to: "04:00", mode: "radar" }] },
+    rulesFrom: "driver",
+    factors: [
+      { id: "eta", on: true, weight: 40 },
+      { id: "rating", on: true, weight: 15 },
+      { id: "acceptance", on: true, weight: 15 },
+      { id: "cancel", on: true, weight: 10 },
+      { id: "idle", on: true, weight: 10 },
+      { id: "finishing", on: true, weight: 5 },
+      { id: "favourite", on: true, weight: 5 },
+    ],
+    radius: { steps: airport ? [3, 6, 10] : [3, 5, 8], maxWaitMin: 10 },
+    batching: { on: false, seconds: 3, fromRatio: 2 },
+    finishing: { radar: true, exclusive: true, withinMin: 3, withinKm: 1.5 },
+    favourite: { on: true, maxKm: 4, waitSec: 15 },
+    waiting: waitingDefault(),
+    driverCancel: { on: true, commissionCutPct: 5 },
+    riderCancel: { on: true, freeMin: 2, closerPct: 25, fee: 0, priority: true, priorityMin: 10 },
+    extras: EXTRAS.map((extra) => ({ id: extra.id, on: true, badge: true })),
+    longTripKm: 50,
+    stops: { on: true, max: 3, freeWaitMin: 3, perMin: 0, perStop: 0, changeDuring: true, driverCanRefuse: true },
+    airport: { on: airport, order: "fifo", maxQueueMin: 120, queueAreas: [] },
+    goingHome: { on: true, perDay: 2, maxOffDeg: 45 },
+    fairness: { idleBoost: true, idlePoints: 10, hourCap: false, hourRides: 4, skipPause: true, skips: 3, pauseMin: 5 },
+    decline: { on: true, countsAcceptance: true, pauseAfter: 3, pauseMin: 5, longTripFree: true, farPickupFree: true, farPickupKm: 5 },
+    safety: { minRating: true, ratingBelow: 4.3, maxCancel: true, cancelAbove: 20, doNotMatch: true, womenOnly: true },
+    alerts: [
+      { id: "long_wait", on: true, limit: 5, panel: true, email: false, sms: false },
+      { id: "few_drivers", on: true, limit: 2, panel: true, email: false, sms: false },
+      { id: "no_driver", on: true, limit: 5, panel: true, email: true, sms: false },
+    ],
+  };
+}
+
+/** Money defaults per country, in major units, for the fees the rider pays. */
+export function feeDefaults(country: MarketId): { fee: number; perMin: number; perStop: number } {
+  if (country === "FR") return { fee: 5, perMin: 0.5, perStop: 1 };
+  if (country === "TN") return { fee: 3, perMin: 0.3, perStop: 1 };
+  return { fee: 50, perMin: 5, perStop: 10 };
+}
+
+export function zoneDefault(zoneId: string): ZoneDispatch {
+  const zone = zoneById(zoneId);
+  const base = defaultZone({ id: zoneId, kind: zone?.kind ?? "operating" });
+  const country = MARKETS.find((item) => item.zones.some((entry) => entry.id === zoneId))?.id ?? "SE";
+  const money = feeDefaults(country);
+  return { ...base, riderCancel: { ...base.riderCancel, fee: money.fee }, stops: { ...base.stops, perMin: money.perMin, perStop: money.perStop } };
+}
+
+export function countryDefault(country: MarketId): CountryDispatch {
+  return { country, rest: { on: true, workHours: 12, restHours: 6 } };
+}
+
+function presetValues(change: (zone: ZoneDispatch) => void): Omit<ZoneDispatch, "zoneId"> {
+  const zone = defaultZone({ id: "preset", kind: "operating" });
+  change(zone);
+  const { zoneId: _drop, ...values } = zone;
+  void _drop;
+  return values;
+}
+
+export const BUILT_IN_PRESETS: Preset[] = [
+  { id: "busy", name: "Busy city", note: "Radar first, more drivers see each request, smart waiting on.", builtIn: true, values: presetValues((zone) => {
+    zone.choose = { ...zone.choose, how: "manual", main: "radar", backup: "exclusive" };
+    zone.radar = { ...zone.radar, drivers: 8, seconds: 12 };
+    zone.batching = { on: true, seconds: 3, fromRatio: 1.5 };
+  }) },
+  { id: "calm", name: "Calm suburb", note: "Exclusive first, wider search, longer time to accept.", builtIn: true, values: presetValues((zone) => {
+    zone.choose = { ...zone.choose, how: "manual", main: "exclusive", backup: "radar" };
+    zone.exclusive = { ...zone.exclusive, seconds: 20, drivers: 4 };
+    zone.radius = { steps: [4, 7, 12], maxWaitMin: 12 };
+  }) },
+  { id: "airport", name: "Airport", note: "Queue order (first in, first out), Radar as backup.", builtIn: true, values: presetValues((zone) => {
+    zone.airport = { on: true, order: "fifo", maxQueueMin: 120, queueAreas: [] };
+    zone.radar = { ...zone.radar, drivers: 10 };
+    zone.radius = { steps: [3, 6, 10], maxWaitMin: 10 };
+  }) },
+  { id: "night", name: "Night", note: "Radar with a wider area, safety checks stricter.", builtIn: true, values: presetValues((zone) => {
+    zone.choose = { ...zone.choose, how: "manual", main: "radar", backup: "exclusive" };
+    zone.radius = { steps: [4, 8, 12], maxWaitMin: 12 };
+    zone.safety = { ...zone.safety, ratingBelow: 4.5 };
+  }) },
+];
+
+export function emptyDispatchBook(): DispatchBook {
+  return { draftRev: 1, draft: {}, live: {}, countries: {}, liveCountries: {}, events: seedEvents(), groups: seedGroups(), presets: [], control: {}, approvals: [], versions: [], cancelChecks: {}, liveActions: [] };
+}
+
+function seedEvents(): DispatchEvent[] {
+  return [{
+    id: "EV-arena",
+    country: "SE",
+    name: "Concert at Friends Arena",
+    ring: [[59.3745, 17.9955], [59.3745, 18.0035], [59.3695, 18.0035], [59.3695, 17.9955]],
+    from: "2026-10-24T21:30",
+    until: "2026-10-24T23:59",
+    on: true,
+    mode: "radar",
+    radarDrivers: 12,
+    pickupNote: "Pickup at the north gate, lane P2.",
+    driverMessage: "Concert ends at 22:30. Wait at the north gate, lane P2.",
+  }];
+}
+
+function seedGroups(): DriverGroup[] {
+  return [
+    { id: "G-airport", country: "SE", name: "Airport drivers", driverIds: [] },
+    { id: "G-comfort", country: "SE", name: "Comfort drivers", driverIds: [] },
+  ];
+}
+
+export function normalizeDispatchBook(value: unknown): DispatchBook {
+  const base = emptyDispatchBook();
+  if (!value || typeof value !== "object") return base;
+  const raw = value as Partial<DispatchBook>;
+  return {
+    draftRev: typeof raw.draftRev === "number" && raw.draftRev > 0 ? raw.draftRev : 1,
+    draft: raw.draft && typeof raw.draft === "object" ? raw.draft : {},
+    live: raw.live && typeof raw.live === "object" ? raw.live : {},
+    countries: raw.countries ?? {},
+    liveCountries: raw.liveCountries ?? {},
+    events: Array.isArray(raw.events) ? raw.events : base.events,
+    groups: Array.isArray(raw.groups) ? raw.groups : base.groups,
+    presets: Array.isArray(raw.presets) ? raw.presets : [],
+    control: raw.control ?? {},
+    approvals: Array.isArray(raw.approvals) ? raw.approvals : [],
+    versions: Array.isArray(raw.versions) ? raw.versions : [],
+    cancelChecks: raw.cancelChecks ?? {},
+    liveActions: Array.isArray(raw.liveActions) ? raw.liveActions : [],
+  };
+}
+
+/** Fill anything missing (older saves, new settings) from the zone's defaults. */
+function complete(zoneId: string, stored: Partial<ZoneDispatch> | undefined): ZoneDispatch {
+  const base = zoneDefault(zoneId);
+  if (!stored) return base;
+  const merged = { ...base } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(stored)) {
+    const fallback = (base as Record<string, unknown>)[key];
+    merged[key] = value && typeof value === "object" && !Array.isArray(value) && fallback && typeof fallback === "object" && !Array.isArray(fallback) ? { ...fallback, ...value } : value;
+  }
+  return { ...(merged as ZoneDispatch), zoneId };
+}
+
+export function liveRules(book: DispatchBook, zoneId: string): ZoneDispatch {
+  return complete(zoneId, book.live[zoneId]);
+}
+
+export function draftRules(book: DispatchBook, zoneId: string): ZoneDispatch {
+  return complete(zoneId, book.draft[zoneId] ?? book.live[zoneId]);
+}
+
+export function liveCountry(book: DispatchBook, country: MarketId): CountryDispatch {
+  return { ...countryDefault(country), ...book.liveCountries[country] };
+}
+
+export function draftCountry(book: DispatchBook, country: MarketId): CountryDispatch {
+  return { ...countryDefault(country), ...(book.countries[country] ?? book.liveCountries[country]) };
+}
+
+/** Problems that stop a save. Empty means the rules are fine. */
+export function zoneIssues(zone: ZoneDispatch): string[] {
+  const issues: string[] = [];
+  if (!zone.radar.on && !zone.exclusive.on) issues.push("Switch on Radar or Exclusive, or both. A zone needs a way to offer rides.");
+  if (zone.radar.on && (zone.radar.drivers < 1 || zone.radar.drivers > 30)) issues.push("Radar: drivers who see a request must be 1 to 30.");
+  if (zone.radar.on && (zone.radar.seconds < 5 || zone.radar.seconds > 120)) issues.push("Radar: time on the radar must be 5 to 120 seconds.");
+  if (zone.exclusive.on && (zone.exclusive.seconds < 5 || zone.exclusive.seconds > 60)) issues.push("Exclusive: time to accept must be 5 to 60 seconds.");
+  if (zone.radar.on && zone.radarApp.fullOn && (zone.radarApp.full < 1 || zone.radarApp.full > 20)) issues.push("Radar in the driver app: full screen must show 1 to 20 offers.");
+  if (zone.radar.on && zone.radarApp.popupOn && (zone.radarApp.popup < 1 || zone.radarApp.popup > 5)) issues.push("Radar in the driver app: the popup must show 1 to 5 offers.");
+  if (zone.radar.on && zone.radarApp.drivingOn && (zone.radarApp.driving < 1 || zone.radarApp.driving > 5)) issues.push("Radar in the driver app: while driving must show 1 to 5 offers.");
+  if (zone.radar.on && !zone.radarApp.fullOn && !zone.radarApp.popupOn) issues.push("Radar in the driver app: switch on the full screen or the popup, or drivers cannot see Radar offers.");
+  if (zone.autoOffline.on && (zone.autoOffline.after < 2 || zone.autoOffline.after > 30)) issues.push("Go offline automatically: must be after 2 to 30 offers.");
+  if (zone.exclusive.on && (zone.exclusive.drivers < 1 || zone.exclusive.drivers > 10)) issues.push("Exclusive: drivers to try must be 1 to 10.");
+  if (zone.choose.how === "manual" && !zone[zone.choose.main].on) issues.push(`The main mode (${modeLabel(zone.choose.main)}) is off. Switch it on or pick the other mode.`);
+  if (zone.choose.how === "manual" && zone.choose.backup !== "none" && zone.choose.backup === zone.choose.main) issues.push("The backup mode must be different from the main mode.");
+  if (zone.choose.how === "auto" && (!zone.radar.on || !zone.exclusive.on)) issues.push("Automatic choice needs both Radar and Exclusive on. Switch both on or choose by hand.");
+  if (zone.choose.how === "auto" && (zone.choose.radarAbove <= 0 || zone.choose.radarAbove > 10)) issues.push("Automatic choice: the busy level must be above 0 and at most 10.");
+  for (const rule of zone.choose.times.filter((item) => item.on)) {
+    if (!/^\d\d:\d\d$/.test(rule.from) || !/^\d\d:\d\d$/.test(rule.to) || rule.from === rule.to) issues.push("Each time rule needs a start and an end time that differ.");
+    if (!zone[rule.mode].on) issues.push(`A time rule uses ${modeLabel(rule.mode)}, which is off.`);
+  }
+  const steps = zone.radius.steps;
+  if (!steps.length || steps.some((km) => km <= 0 || km > 50)) issues.push("Search distance steps must be above 0 and at most 50 km.");
+  if (steps.some((km, index) => index > 0 && km <= steps[index - 1])) issues.push("Each search distance step must be larger than the one before.");
+  if (zone.radius.maxWaitMin < 1 || zone.radius.maxWaitMin > 30) issues.push("Longest search must be 1 to 30 minutes.");
+  if (!zone.factors.some((item) => item.on && item.weight > 0)) issues.push("Best driver: switch on at least one thing that counts.");
+  const waits = zone.waiting.filter((step) => step.on);
+  if (waits.some((step) => step.afterMin < 0 || step.afterMin > 30)) issues.push("Rider waiting: each step must start between 0 and 30 minutes.");
+  if (waits.some((step) => !step.message.trim())) issues.push("Rider waiting: each step that is on needs a message.");
+  if (zone.reservation.on && (zone.reservation.searchBeforeMin < 5 || zone.reservation.searchBeforeMin > 240)) issues.push("Reservations: start looking 5 to 240 minutes before pickup.");
+  if (zone.reservation.on && zone.reservation.toExclusive && zone.reservation.exclusiveBeforeMin >= zone.reservation.searchBeforeMin) issues.push("Reservations: the switch to Exclusive must come after the search starts (a smaller number of minutes).");
+  if (zone.driverCancel.on && (zone.driverCancel.commissionCutPct < 0 || zone.driverCancel.commissionCutPct > 30)) issues.push("Driver cancels: lower commission must be 0 to 30%.");
+  if (zone.riderCancel.on && (zone.riderCancel.closerPct < 5 || zone.riderCancel.closerPct > 100)) issues.push("Rider cancels: \"came closer\" must be 5 to 100%.");
+  if (zone.stops.on && (zone.stops.max < 1 || zone.stops.max > 5)) issues.push("Stops: max stops must be 1 to 5.");
+  if (zone.longTripKm < 10 || zone.longTripKm > 500) issues.push("Long trip must be 10 to 500 km.");
+  if (zone.safety.minRating && (zone.safety.ratingBelow < 1 || zone.safety.ratingBelow > 5)) issues.push("Safety: lowest rating must be 1 to 5.");
+  if (zone.alerts.some((alert) => alert.on && !alert.panel && !alert.email && !alert.sms)) issues.push("Alerts: each alert that is on needs a place to show (panel, email or SMS).");
+  return issues;
+}
+
+export function countryIssues(country: CountryDispatch): string[] {
+  if (!country.rest.on) return [];
+  const issues: string[] = [];
+  if (country.rest.workHours < 4 || country.rest.workHours > 16) issues.push("Work hours before rest must be 4 to 16.");
+  if (country.rest.restHours < 1 || country.rest.restHours > 12) issues.push("Rest hours must be 1 to 12.");
+  return issues;
+}
+
+export function modeLabel(mode: OfferMode | "none"): string {
+  return mode === "radar" ? "Radar" : mode === "exclusive" ? "Exclusive" : "None";
+}
+
+/** Readable labels for the settings, used in change lists and the history. */
+const LABELS: Record<string, string> = {
+  "radar.on": "Radar", "radar.drivers": "Radar drivers", "radar.seconds": "Radar time", "radar.then": "After Radar",
+  "exclusive.on": "Exclusive", "exclusive.seconds": "Exclusive time to accept", "exclusive.drivers": "Exclusive drivers to try", "exclusive.then": "After Exclusive",
+  "radarApp.fullOn": "Radar full screen", "radarApp.full": "Offers on full-screen radar", "radarApp.popupOn": "Radar popup", "radarApp.popup": "Offers in the popup",
+  "radarApp.drivingOn": "Radar offers while driving", "radarApp.driving": "Offers while driving", "autoOffline.on": "Go offline automatically", "autoOffline.after": "Offline after offers not accepted",
+  "reservation.on": "Reservations", "reservation.searchBeforeMin": "Reservation search starts", "reservation.assignEarly": "Assign early", "reservation.assignHoursBefore": "Assign hours before",
+  "reservation.backup": "Backup driver", "reservation.toExclusive": "Reservation to Exclusive", "reservation.exclusiveBeforeMin": "Exclusive before pickup",
+  "choose.how": "How the mode is chosen", "choose.radarAbove": "Busy level for Radar", "choose.main": "Main mode", "choose.backup": "Backup mode", "choose.times": "Time rules",
+  rulesFrom: "Whose rules", "radius.steps": "Search distance steps", "radius.maxWaitMin": "Longest search",
+  "batching.on": "Smart waiting", "batching.seconds": "Smart waiting seconds", "batching.fromRatio": "Smart waiting from busy level",
+  "finishing.radar": "Finishing nearby on Radar", "finishing.exclusive": "Finishing nearby on Exclusive", "finishing.withinMin": "Finishing within minutes", "finishing.withinKm": "Finishing within km",
+  "favourite.on": "Favourite drivers", "favourite.maxKm": "Favourite max distance", "favourite.waitSec": "Wait for favourite",
+  waiting: "Rider waiting steps", "driverCancel.on": "Driver cancels: search again", "driverCancel.commissionCutPct": "Lower commission after a driver cancel",
+  "riderCancel.on": "Smart cancel check", "riderCancel.freeMin": "Free cancel minutes", "riderCancel.closerPct": "Came closer by", "riderCancel.fee": "Cancel fee",
+  "riderCancel.priority": "Priority after rider cancel", "riderCancel.priorityMin": "Priority minutes",
+  extras: "Special requests", longTripKm: "Long trip from", "stops.on": "Stops", "stops.max": "Max stops", "stops.freeWaitMin": "Free wait per stop",
+  "stops.perMin": "Wait price per minute", "stops.perStop": "Fee per stop", "stops.changeDuring": "Change during the trip", "stops.driverCanRefuse": "Driver can refuse changes",
+  "airport.on": "Airport queue", "airport.order": "Airport order", "airport.maxQueueMin": "Longest time in queue", "airport.queueAreas": "Queue area",
+  "goingHome.on": "Going home", "goingHome.perDay": "Going home per day", "goingHome.maxOffDeg": "Going home direction",
+  "fairness.idleBoost": "Boost for waiting drivers", "fairness.idlePoints": "Boost points", "fairness.hourCap": "Rides per hour cap", "fairness.hourRides": "Rides per hour",
+  "fairness.skipPause": "Pause after skips", "fairness.skips": "Skips in a row", "fairness.pauseMin": "Skip pause minutes",
+  "decline.on": "Saying no rules", "decline.countsAcceptance": "No lowers acceptance", "decline.pauseAfter": "Pause after no's", "decline.pauseMin": "No pause minutes",
+  "decline.longTripFree": "Long trips free to refuse", "decline.farPickupFree": "Far pickups free to refuse", "decline.farPickupKm": "Far pickup from",
+  "safety.minRating": "Lowest rating check", "safety.ratingBelow": "Lowest rating", "safety.maxCancel": "Cancel rate check", "safety.cancelAbove": "Highest cancel rate",
+  "safety.doNotMatch": "Do not match list", "safety.womenOnly": "Women-only rides", alerts: "Alerts",
+};
+
+function flat(value: unknown, prefix = ""): Map<string, string> {
+  const out = new Map<string, string>();
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (item && typeof item === "object" && !Array.isArray(item)) for (const [k, v] of flat(item, path)) out.set(k, v);
+      else out.set(path, JSON.stringify(item));
+    }
+  }
+  return out;
+}
+
+function show(raw: string | undefined): string {
+  if (raw === undefined) return "";
+  const value = JSON.parse(raw) as unknown;
+  if (value === true) return "on";
+  if (value === false) return "off";
+  if (Array.isArray(value)) return value.every((item) => typeof item === "number") ? value.join(", ") : `${value.length} items`;
+  if (value === "widen_then_exclusive") return "wider area, then Exclusive";
+  if (value === "widen_then_radar") return "wider area, then Radar";
+  if (value === "widen") return "wider area";
+  const words: Record<string, string> = { auto: "Automatic", manual: "By hand", driver: "the driver's zone", pickup: "the pickup zone", fifo: "first in the queue", best: "best driver", none: "none" };
+  if (typeof value === "string" && words[value]) return words[value];
+  if (typeof value === "string") return value === "radar" || value === "exclusive" ? modeLabel(value) : value;
+  return String(value);
+}
+
+/** What changed between two rule sets, in plain lines like "Radar drivers: 5 → 8". */
+export function changeLines(before: ZoneDispatch, after: ZoneDispatch): string[] {
+  const a = flat(before);
+  const b = flat(after);
+  const lines: string[] = [];
+  for (const [path, value] of b) {
+    if (path === "zoneId" || a.get(path) === value) continue;
+    const label = LABELS[path] ?? path;
+    lines.push(Array.isArray(JSON.parse(value)) && !(JSON.parse(value) as unknown[]).every((item) => typeof item === "number") ? `${label} changed` : `${label}: ${show(a.get(path))} → ${show(value)}`);
+  }
+  return lines;
+}
+
+export function countryLines(before: CountryDispatch, after: CountryDispatch): string[] {
+  const lines: string[] = [];
+  if (before.rest.on !== after.rest.on) lines.push(`Rest after long work: ${before.rest.on ? "on" : "off"} → ${after.rest.on ? "on" : "off"}`);
+  if (before.rest.workHours !== after.rest.workHours) lines.push(`Work hours before rest: ${before.rest.workHours} → ${after.rest.workHours}`);
+  if (before.rest.restHours !== after.rest.restHours) lines.push(`Rest hours: ${before.rest.restHours} → ${after.rest.restHours}`);
+  return lines;
+}
+
+/** The main way a zone offers rides, as a short badge. */
+export function mainMode(zone: ZoneDispatch): "radar" | "exclusive" | "auto" {
+  if (zone.choose.how === "auto") return "auto";
+  return zone.choose.main;
+}
+
+/** Big changes need a second admin: switching the main way of offering, or switching a mode off. */
+export function isBigChange(before: ZoneDispatch, after: ZoneDispatch): boolean {
+  return mainMode(before) !== mainMode(after) || (before.radar.on && !after.radar.on) || (before.exclusive.on && !after.exclusive.on);
+}
+
+export type ZoneChange = { zoneId: string; lines: string[]; big: boolean; issues: string[] };
+
+/** Zones whose working copy differs from what is live. */
+export function pendingChanges(book: DispatchBook, working: Record<string, ZoneDispatch>, zoneIds: readonly string[]): ZoneChange[] {
+  return zoneIds.flatMap((zoneId) => {
+    const next = working[zoneId] ?? draftRules(book, zoneId);
+    const lines = changeLines(liveRules(book, zoneId), next);
+    return lines.length ? [{ zoneId, lines, big: isBigChange(liveRules(book, zoneId), next), issues: zoneIssues(next) }] : [];
+  });
+}
+
+export function saveDraft(book: DispatchBook, working: Record<string, ZoneDispatch>, countries: Record<string, CountryDispatch>): DispatchBook {
+  return { ...book, draftRev: book.draftRev + 1, draft: { ...book.draft, ...clone(working) }, countries: { ...book.countries, ...clone(countries) } };
+}
+
+/**
+ * Make the working rules live. Big changes wait for a second admin; everything else goes live now.
+ * Returns the new book, what went live and what waits.
+ */
+export function publish(
+  book: DispatchBook,
+  working: Record<string, ZoneDispatch>,
+  countries: Record<string, CountryDispatch>,
+  zoneIds: readonly string[],
+  actorId: string,
+  at: string,
+  note: string,
+): { book: DispatchBook; live: string[]; waiting: string[]; error?: string } {
+  const changes = pendingChanges(book, working, zoneIds);
+  const countryChanges = Object.values(countries).flatMap((item) => countryLines(liveCountry(book, item.country), item).map((line) => `${market(item.country).name}: ${line}`));
+  const bad = changes.find((change) => change.issues.length);
+  if (bad) return { book, live: [], waiting: [], error: `${zoneById(bad.zoneId)?.name ?? bad.zoneId}: ${bad.issues[0]}` };
+  const badCountry = Object.values(countries).map(countryIssues).find((list) => list.length);
+  if (badCountry) return { book, live: [], waiting: [], error: badCountry[0] };
+  if (!changes.length && !countryChanges.length) return { book, live: [], waiting: [], error: "Nothing to publish. Change a rule first." };
+  const now = changes.filter((change) => !change.big);
+  const later = changes.filter((change) => change.big);
+  const nextLive = { ...book.live };
+  for (const change of now) nextLive[change.zoneId] = clone(working[change.zoneId] ?? draftRules(book, change.zoneId));
+  const nextCountries = { ...book.liveCountries, ...clone(countries) };
+  const draft = { ...book.draft };
+  for (const change of now) delete draft[change.zoneId];
+  const draftCountries = { ...book.countries };
+  for (const id of Object.keys(countries)) delete draftCountries[id];
+  for (const change of later) draft[change.zoneId] = clone(working[change.zoneId] ?? draftRules(book, change.zoneId));
+  const approvals = later.length ? [...book.approvals.filter((item) => !(item.kind === "publish" && item.zoneIds.some((id) => later.some((change) => change.zoneId === id)))), {
+    id: `AP-${book.draftRev + 1}`,
+    kind: "publish" as const,
+    zoneIds: later.map((change) => change.zoneId),
+    lines: later.flatMap((change) => change.lines.map((line) => `${zoneById(change.zoneId)?.name ?? change.zoneId}: ${line}`)),
+    by: actorId,
+    at,
+    zones: Object.fromEntries(later.map((change) => [change.zoneId, clone(working[change.zoneId] ?? draftRules(book, change.zoneId))])),
+  }] : book.approvals;
+  const lines = [...now.flatMap((change) => change.lines.map((line) => `${zoneById(change.zoneId)?.name ?? change.zoneId}: ${line}`)), ...countryChanges];
+  const versions = now.length || countryChanges.length
+    ? [{ rev: book.draftRev + 1, at, actorId, note, zoneIds: now.map((change) => change.zoneId), lines, live: clone(nextLive), liveCountries: clone(nextCountries) }, ...book.versions].slice(0, 40)
+    : book.versions;
+  return {
+    book: { ...book, draftRev: book.draftRev + 1, live: nextLive, liveCountries: nextCountries, draft, countries: draftCountries, approvals, versions },
+    live: now.map((change) => change.zoneId),
+    waiting: later.map((change) => change.zoneId),
+  };
+}
+
+/** A second admin approves a waiting change. The person who asked cannot approve it. */
+export function approve(book: DispatchBook, approvalId: string, actorId: string, at: string): { book: DispatchBook; error?: string } {
+  const item = book.approvals.find((entry) => entry.id === approvalId);
+  if (!item) return { book, error: "That approval is gone." };
+  if (item.by === actorId) return { book, error: "A second admin must approve. You asked for this change." };
+  const approvals = book.approvals.filter((entry) => entry.id !== approvalId);
+  if (item.kind === "control" && item.control) {
+    return { book: { ...book, draftRev: book.draftRev + 1, approvals, control: { ...book.control, [item.control.zoneId]: { ...item.control.value, at } } } };
+  }
+  const live = { ...book.live, ...clone(item.zones ?? {}) };
+  const draft = { ...book.draft };
+  for (const id of item.zoneIds) delete draft[id];
+  const version: Version = { rev: book.draftRev + 1, at, actorId: item.by, approvedBy: actorId, note: "Approved by a second admin", zoneIds: item.zoneIds, lines: item.lines, live: clone(live), liveCountries: clone(book.liveCountries) };
+  return { book: { ...book, draftRev: book.draftRev + 1, approvals, live, draft, versions: [version, ...book.versions].slice(0, 40) } };
+}
+
+export function decline(book: DispatchBook, approvalId: string): DispatchBook {
+  return { ...book, draftRev: book.draftRev + 1, approvals: book.approvals.filter((entry) => entry.id !== approvalId) };
+}
+
+/** Go back to an older version: it becomes live again and is saved as a new version. */
+export function undoTo(book: DispatchBook, rev: number, actorId: string, at: string): { book: DispatchBook; error?: string } {
+  const index = book.versions.findIndex((entry) => entry.rev === rev);
+  const target = book.versions[index];
+  if (!target) return { book, error: "That version was not found." };
+  // Undoing a version means going back to what was live just before it.
+  const previous = book.versions[index + 1];
+  const live = previous ? clone(previous.live) : {};
+  const liveCountries = previous ? clone(previous.liveCountries) : {};
+  const version: Version = { rev: book.draftRev + 1, at, actorId, note: `Undo of version ${rev}`, zoneIds: target.zoneIds, lines: target.lines.map((line) => `Undone: ${line}`), live: clone(live), liveCountries: clone(liveCountries) };
+  return { book: { ...book, draftRev: book.draftRev + 1, live, liveCountries, versions: [version, ...book.versions].slice(0, 40) } };
+}
+
+/** Live switch from the Live tab: pause a zone or force a mode. Big ones wait for a second admin. */
+export function requestControl(book: DispatchBook, zoneId: string, value: Omit<Control, "at" | "by">, actorId: string, at: string): { book: DispatchBook; waiting: boolean } {
+  const current = book.control[zoneId] ?? { paused: false, mode: null, by: "", at: "" };
+  const big = value.paused !== current.paused || value.mode !== current.mode;
+  const resume = !value.paused && !value.mode;
+  if (!big || resume) return { book: { ...book, draftRev: book.draftRev + 1, control: { ...book.control, [zoneId]: { ...value, by: actorId, at } } }, waiting: false };
+  const lines = [`${zoneById(zoneId)?.name ?? zoneId}: ${value.paused ? "pause dispatch" : `use ${modeLabel(value.mode ?? "none")} now`}`];
+  const approvals = [...book.approvals.filter((item) => !(item.kind === "control" && item.control?.zoneId === zoneId)), { id: `AP-${book.draftRev + 1}`, kind: "control" as const, zoneIds: [zoneId], lines, by: actorId, at, control: { zoneId, value: { ...value, by: actorId, at } } }];
+  return { book: { ...book, draftRev: book.draftRev + 1, approvals }, waiting: true };
+}
+
+export type CopyPart = TabId;
+
+const PART_KEYS: Record<TabId, (keyof ZoneDispatch)[]> = {
+  modes: ["radar", "exclusive", "radarApp", "reservation", "choose", "rulesFrom"],
+  best: ["factors", "radius", "batching", "finishing", "favourite"],
+  waiting: ["waiting"],
+  rides: ["extras", "longTripKm", "stops", "driverCancel", "riderCancel", "airport"],
+  drivers: ["goingHome", "fairness", "decline", "autoOffline"],
+  safety: ["safety"],
+  alerts: ["alerts"],
+};
+
+export function copyParts(from: ZoneDispatch, to: ZoneDispatch, parts: readonly TabId[]): ZoneDispatch {
+  const next = clone(to) as unknown as Record<string, unknown>;
+  for (const part of parts) for (const key of PART_KEYS[part]) next[key] = clone(from[key]);
+  return next as unknown as ZoneDispatch;
+}
+
+export function applyPreset(zone: ZoneDispatch, preset: Preset, country: MarketId): ZoneDispatch {
+  const money = feeDefaults(country);
+  const values = clone(preset.values);
+  return {
+    ...values,
+    zoneId: zone.zoneId,
+    // Built-in presets carry no money, so fees stay in the country's currency.
+    riderCancel: preset.builtIn ? { ...values.riderCancel, fee: money.fee } : values.riderCancel,
+    stops: preset.builtIn ? { ...values.stops, perMin: money.perMin, perStop: money.perStop } : values.stops,
+  };
+}
+
+export function presetFrom(zone: ZoneDispatch, name: string, id: string): Preset {
+  const { zoneId: _drop, ...values } = clone(zone);
+  void _drop;
+  return { id, name, note: `Saved from ${zoneById(zone.zoneId)?.name ?? zone.zoneId}`, builtIn: false, values };
+}
+
+function minutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+export function inTime(rule: Pick<TimeRule, "from" | "to">, hhmm: string): boolean {
+  const now = minutes(hhmm);
+  const from = minutes(rule.from);
+  const to = minutes(rule.to);
+  return from < to ? now >= from && now < to : now >= from || now < to;
+}
+
+/** Which mode a new request uses right now, and why. */
+export function modeNow(zone: ZoneDispatch, control: Control | undefined, busy: number, hhmm: string): { mode: OfferMode | null; why: string } {
+  if (control?.paused) return { mode: null, why: "Dispatch is paused in this zone." };
+  if (control?.mode) return { mode: control.mode, why: `An admin switched this zone to ${modeLabel(control.mode)}.` };
+  const timed = zone.choose.times.find((rule) => rule.on && zone[rule.mode].on && inTime(rule, hhmm));
+  if (timed) return { mode: timed.mode, why: `Time rule ${timed.from}–${timed.to} uses ${modeLabel(timed.mode)}.` };
+  if (zone.choose.how === "auto" && zone.radar.on && zone.exclusive.on) {
+    return busy >= zone.choose.radarAbove
+      ? { mode: "radar", why: `Busy: ${busy.toFixed(1)} requests per free driver (Radar from ${zone.choose.radarAbove}).` }
+      : { mode: "exclusive", why: `Calm: ${busy.toFixed(1)} requests per free driver (Radar from ${zone.choose.radarAbove}).` };
+  }
+  const main = zone[zone.choose.main].on ? zone.choose.main : zone.radar.on ? "radar" : zone.exclusive.on ? "exclusive" : null;
+  return main ? { mode: main, why: `Main mode is ${modeLabel(main)}.` } : { mode: null, why: "No mode is on." };
+}
+
+export function insideRing(point: [number, number], ring: readonly [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ay, ax] = ring[i];
+    const [by, bx] = ring[j];
+    if ((ay > point[0]) !== (by > point[0]) && point[1] < ((bx - ax) * (point[0] - ay)) / (by - ay || 1e-12) + ax) inside = !inside;
+  }
+  return inside;
+}
+
+/** During an event, a pickup inside its area uses the event's mode (and radar size). */
+export function withEvent(zone: ZoneDispatch, event: DispatchEvent | null, pickup: [number, number]): { rules: ZoneDispatch; event: DispatchEvent | null } {
+  if (!event || !event.on || !insideRing(pickup, event.ring)) return { rules: zone, event: null };
+  const rules: ZoneDispatch = {
+    ...zone,
+    radar: { ...zone.radar, on: zone.radar.on || event.mode === "radar", drivers: event.mode === "radar" ? event.radarDrivers : zone.radar.drivers },
+    exclusive: { ...zone.exclusive, on: zone.exclusive.on || event.mode === "exclusive" },
+    choose: { ...zone.choose, how: "manual", main: event.mode, backup: event.mode === "radar" ? (zone.exclusive.on ? "exclusive" : "none") : (zone.radar.on ? "radar" : "none"), times: [] },
+  };
+  return { rules, event };
+}
+
+export type DriverFacts = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  zoneId: string;
+  /** free, or finishing a ride: minutes to the drop-off and its distance to the new pickup. */
+  finishing: { inMin: number; dropKm: number } | null;
+  rating: number;
+  acceptancePct: number;
+  cancelPct: number;
+  idleMin: number;
+  categories: string[];
+  extras: ExtraId[];
+  female: boolean;
+  ridesThisHour: number;
+  skipsInRow: number;
+  noInRow: number;
+  favourite: boolean;
+  goingHome: boolean;
+  homeDirectionOk: boolean;
+  priorityUntilMin: number;
+  queuePos: number | null;
+  restNeeded: boolean;
+};
+
+export type TestRequest = {
+  zoneId: string;
+  at: [number, number];
+  category: string;
+  extras: ExtraId[];
+  womenOnly: boolean;
+  tripKm: number;
+  blocked: string[];
+};
+
+export type Ranked = {
+  driver: DriverFacts;
+  km: number;
+  etaMin: number;
+  score: number;
+  parts: { label: string; points: number }[];
+  out: string | null;
+  ring: number;
+};
+
+export function distanceKm(a: [number, number], b: [number, number]): number {
+  const x = (b[1] - a[1]) * Math.cos(((a[0] + b[0]) / 2) * (Math.PI / 180));
+  const y = b[0] - a[0];
+  return Math.sqrt(x * x + y * y) * 111.32 * 1.25;
+}
+
+const round1 = (value: number) => Math.round(value * 10) / 10;
+
+/** Score and order drivers for a request with the zone's rules. Drivers who cannot take it get a reason. */
+export function rankDrivers(zone: ZoneDispatch, country: CountryDispatch, request: TestRequest, drivers: readonly DriverFacts[]): Ranked[] {
+  const widest = zone.radius.steps[zone.radius.steps.length - 1] ?? 8;
+  const weights = new Map(zone.factors.filter((item) => item.on).map((item) => [item.id, item.weight]));
+  const total = [...weights.values()].reduce((sum, value) => sum + value, 0) || 1;
+  const rows = drivers.map((driver): Ranked => {
+    const finishingOk = driver.finishing && (zone.finishing.radar || zone.finishing.exclusive) && weights.has("finishing") && driver.finishing.inMin <= zone.finishing.withinMin && driver.finishing.dropKm <= zone.finishing.withinKm;
+    const km = round1(driver.finishing ? driver.finishing.dropKm : distanceKm([driver.lat, driver.lng], request.at));
+    const etaMin = Math.max(1, Math.round((km / 24) * 60) + (driver.finishing ? driver.finishing.inMin : 0));
+    const ring = zone.radius.steps.findIndex((step) => km <= step);
+    let out: string | null = null;
+    if (country.rest.on && driver.restNeeded) out = `Needs ${country.rest.restHours} h rest after ${country.rest.workHours} h of work`;
+    else if (driver.finishing && !finishingOk) out = "On a ride that does not end close enough or soon enough";
+    else if (!driver.categories.includes(request.category)) out = "Not allowed to drive this category";
+    else if (request.blocked.includes(driver.id) && zone.safety.doNotMatch) out = "On the do-not-match list with this rider";
+    else if (request.womenOnly && zone.safety.womenOnly && !driver.female) out = "The rider asked for a woman driver";
+    else if (zone.safety.minRating && driver.rating < zone.safety.ratingBelow) out = `Rating ${driver.rating.toFixed(1)} is under ${zone.safety.ratingBelow}`;
+    else if (zone.safety.maxCancel && driver.cancelPct > zone.safety.cancelAbove) out = `Cancel rate ${driver.cancelPct}% is over ${zone.safety.cancelAbove}%`;
+    else if (zone.fairness.hourCap && driver.ridesThisHour >= zone.fairness.hourRides) out = `Already had ${driver.ridesThisHour} rides this hour (cap ${zone.fairness.hourRides})`;
+    else if (zone.fairness.skipPause && driver.skipsInRow >= zone.fairness.skips) out = `Paused ${zone.fairness.pauseMin} min after ${driver.skipsInRow} skipped offers`;
+    else if (zone.autoOffline.on && driver.noInRow >= zone.autoOffline.after) out = `Went offline after ${driver.noInRow} offers not accepted in a row`;
+    else if (zone.decline.on && driver.noInRow >= zone.decline.pauseAfter) out = `Paused ${zone.decline.pauseMin} min after ${driver.noInRow} no's in a row`;
+    else if (zone.goingHome.on && driver.goingHome && !driver.homeDirectionOk) out = "Going home, and this ride is the other way";
+    else if (request.extras.some((extra) => zone.extras.find((item) => item.id === extra)?.on && extra !== "long_trip" && !driver.extras.includes(extra))) out = "Does not have what the rider asked for";
+    else if (km > widest) out = `Too far: ${km} km (widest search ${widest} km)`;
+    const parts: { label: string; points: number }[] = [];
+    const add = (id: FactorId, label: string, ratio: number) => {
+      const weight = weights.get(id);
+      if (weight) parts.push({ label, points: Math.round((weight / total) * 100 * Math.max(0, Math.min(1, ratio))) });
+    };
+    add("eta", `${etaMin} min to pickup`, 1 - etaMin / 20);
+    add("rating", `rating ${driver.rating.toFixed(1)}`, (driver.rating - 3.5) / 1.5);
+    add("acceptance", `accepts ${driver.acceptancePct}%`, driver.acceptancePct / 100);
+    add("cancel", `cancels ${driver.cancelPct}%`, 1 - driver.cancelPct / 30);
+    add("idle", `waited ${driver.idleMin} min`, driver.idleMin / 30);
+    if (finishingOk) add("finishing", `finishes in ${driver.finishing!.inMin} min nearby`, 1);
+    if (driver.favourite && zone.favourite.on && km <= zone.favourite.maxKm) add("favourite", "rider's favourite", 1);
+    if (zone.fairness.idleBoost && driver.idleMin >= 20) parts.push({ label: "fairness boost", points: zone.fairness.idlePoints });
+    if (zone.riderCancel.on && zone.riderCancel.priority && driver.priorityUntilMin > 0) parts.push({ label: "first in line after a rider cancel", points: 25 });
+    return { driver, km, etaMin, score: parts.reduce((sum, part) => sum + part.points, 0), parts, out, ring: ring < 0 ? zone.radius.steps.length : ring };
+  });
+  const airportFifo = zone.airport.on && zone.airport.order === "fifo";
+  return rows.sort((a, b) => Number(Boolean(a.out)) - Number(Boolean(b.out))
+    || (airportFifo ? (a.driver.queuePos ?? 999) - (b.driver.queuePos ?? 999) : 0)
+    || b.score - a.score
+    || a.km - b.km);
+}
+
+export type SimStep = { atSec: number; who: "system" | "driver" | "rider" | "admin"; title: string; detail: string };
+
+/** What happens second by second when nobody accepts: every offer, every wider search, every message to the rider. */
+export function simulate(zone: ZoneDispatch, ranked: readonly Ranked[], start: OfferMode | null): SimStep[] {
+  const steps: SimStep[] = [];
+  if (!start) return [{ atSec: 0, who: "system", title: "No offer", detail: "Dispatch is paused or no mode is on, so the request waits for an admin." }];
+  const able = ranked.filter((row) => !row.out);
+  let t = zone.batching.on ? zone.batching.seconds : 0;
+  if (zone.batching.on) steps.push({ atSec: 0, who: "system", title: "Smart waiting", detail: `Collects requests for ${zone.batching.seconds} s, then matches them together.` });
+  const limit = zone.radius.maxWaitMin * 60;
+  let ring = 0;
+  let mode: OfferMode = start;
+  let tried = 0;
+  // A driver who already said no to this request is not asked again on Exclusive.
+  const asked = new Set<string>();
+  const switched = new Set<OfferMode>();
+  let guard = 0;
+  while (t < limit && guard < 40) {
+    guard += 1;
+    const km = zone.radius.steps[ring] ?? zone.radius.steps[zone.radius.steps.length - 1];
+    // Drivers finishing a ride see Radar offers only when offers while driving are on.
+    const inRing = able.filter((row) => row.km <= km && (!row.driver.finishing || (mode === "radar" ? zone.finishing.radar && zone.radarApp.drivingOn : zone.finishing.exclusive)));
+    if (mode === "radar") {
+      const shown = inRing.slice(0, zone.radar.drivers);
+      steps.push({ atSec: t, who: "driver", title: `Radar, ${km} km`, detail: shown.length ? `Shown to ${shown.length} driver${shown.length === 1 ? "" : "s"} at once for ${zone.radar.seconds} s: ${shown.map((row) => row.driver.name).join(", ")}.` : `No driver within ${km} km.` });
+      t += zone.radar.seconds;
+      const wider = ring < zone.radius.steps.length - 1;
+      if ((zone.radar.then === "widen" || zone.radar.then === "widen_then_exclusive") && wider) ring += 1;
+      else if ((zone.radar.then === "exclusive" || zone.radar.then === "widen_then_exclusive") && zone.exclusive.on && !switched.has("exclusive")) { switched.add("exclusive"); mode = "exclusive"; tried = 0; steps.push({ atSec: t, who: "system", title: "Switch to Exclusive", detail: "Nobody accepted on the radar." }); }
+      else if (wider) ring += 1;
+      else break;
+    } else {
+      const next = inRing.find((row) => !asked.has(row.driver.id));
+      if (next && tried < zone.exclusive.drivers) {
+        asked.add(next.driver.id);
+        steps.push({ atSec: t, who: "driver", title: `Exclusive to ${next.driver.name}`, detail: `${next.km} km, ${next.etaMin} min away. ${zone.exclusive.seconds} s to accept.` });
+        t += zone.exclusive.seconds;
+        tried += 1;
+        continue;
+      }
+      const wider = ring < zone.radius.steps.length - 1;
+      if ((zone.exclusive.then === "widen" || zone.exclusive.then === "widen_then_radar") && wider) { ring += 1; tried = 0; steps.push({ atSec: t, who: "system", title: "Wider search", detail: `Now up to ${zone.radius.steps[ring]} km.${able.some((row) => row.km <= zone.radius.steps[ring] && !asked.has(row.driver.id)) ? "" : " No new driver in the wider area."}` }); }
+      else if ((zone.exclusive.then === "radar" || zone.exclusive.then === "widen_then_radar") && zone.radar.on && !switched.has("radar")) { switched.add("radar"); mode = "radar"; steps.push({ atSec: t, who: "system", title: "Switch to Radar", detail: `${asked.size ? `${asked.size} driver${asked.size === 1 ? "" : "s"} said no.` : "No driver to try."} Many drivers see it now.` }); }
+      else if (wider) { ring += 1; tried = 0; }
+      else break;
+    }
+  }
+  let end = limit;
+  for (const step of zone.waiting.filter((item) => item.on).sort((a, b) => a.afterMin - b.afterMin)) {
+    const at = step.afterMin * 60;
+    if (at > end) break;
+    const label = WAIT_KINDS.find((item) => item.id === step.kind)?.label ?? step.kind;
+    steps.push({ atSec: at, who: step.kind === "alert_admin" ? "admin" : "rider", title: label, detail: step.kind === "keep_waiting" && step.extraMin ? `${step.message} (wait ${step.extraMin} more min)` : step.message });
+    if (step.kind === "busy") end = at;
+  }
+  const shown = steps.filter((step) => step.atSec <= end);
+  shown.push({ atSec: end, who: "system", title: "Search stops", detail: end < limit ? "The rider saw the busy message." : `Longest search is ${zone.radius.maxWaitMin} min.` });
+  return shown.sort((a, b) => a.atSec - b.atSec);
+}
+
+export type CancelRecord = {
+  id: string;
+  tripId: string;
+  zoneId: string;
+  rider: string;
+  driverId: string;
+  driver: string;
+  acceptedAt: string;
+  cancelledAt: string;
+  minutesAfterAccept: number;
+  atAccept: { km: number; etaMin: number };
+  atCancel: { km: number; etaMin: number };
+  path: [number, number][];
+  pickup: [number, number];
+};
+
+/** The automatic fee decision for a rider cancel, and the reason in words. */
+export function cancelDecision(record: CancelRecord, zone: ZoneDispatch): { fee: boolean; why: string; closerPct: number } {
+  const closerPct = record.atAccept.km > 0 ? Math.round(((record.atAccept.km - record.atCancel.km) / record.atAccept.km) * 100) : 0;
+  if (!zone.riderCancel.on) return { fee: false, why: "The smart cancel check is off in this zone.", closerPct };
+  if (record.minutesAfterAccept < zone.riderCancel.freeMin) return { fee: false, why: `Cancelled ${record.minutesAfterAccept} min after accept, inside the free ${zone.riderCancel.freeMin} min.`, closerPct };
+  if (closerPct >= zone.riderCancel.closerPct) return { fee: true, why: `The driver came ${closerPct}% closer (${record.atAccept.km} → ${record.atCancel.km} km). Fee applies.`, closerPct };
+  return { fee: false, why: `The driver came only ${Math.max(0, closerPct)}% closer (needs ${zone.riderCancel.closerPct}%). No fee.`, closerPct };
+}
+
+/** Everything the backend needs, in one file: the live rules per zone, country rules, events and groups. */
+export function rulesFile(book: DispatchBook, country: MarketId, at: string) {
+  const info = market(country);
+  return {
+    format: "movera.dispatch.rules",
+    version: 1,
+    exportedAt: at,
+    revision: book.draftRev,
+    country: { id: country, name: info.name, currency: info.currency, timeZone: info.timeZone, ...liveCountry(book, country) },
+    glossary: {
+      radar: "One request shown to the N nearest suitable drivers at once. The first to accept gets it.",
+      exclusive: "One request offered to one driver at a time, best first, for a few seconds each.",
+      busy: "Waiting requests divided by free online drivers in the zone.",
+      score: "Each factor gives 0 to its weight; drivers are offered in order of total score.",
+      radarApp: "The most Radar offers one driver sees at once: on the full-screen radar, in the popup over the map, and while driving a rider.",
+      autoOffline: "After this many offers in a row that the driver did not accept, the driver is set offline.",
+    },
+    zones: info.zones.map((zone) => ({ id: zone.id, name: zone.name, kind: zone.kind, control: book.control[zone.id] ?? { paused: false, mode: null }, rules: liveRules(book, zone.id) })),
+    events: book.events.filter((event) => event.country === country),
+    groups: book.groups.filter((group) => group.country === country),
+  };
+}
