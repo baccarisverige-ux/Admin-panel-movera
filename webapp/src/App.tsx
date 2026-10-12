@@ -43,6 +43,7 @@ import { SystemPage } from "./pages/SystemPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TripsPage } from "./pages/TripsPage";
 import { TripPage } from "./pages/TripPage";
+import { AdminPage } from "./pages/AdminPage";
 import { VehicleDetailPage } from "./pages/VehicleDetailPage";
 import { ZoneDetailPage } from "./pages/ZoneDetailPage";
 import { ZonesPage } from "./pages/ZonesPage";
@@ -178,6 +179,7 @@ function Authed() {
         <Route path="promotions" element={<Screen id="promotions" />} />
         <Route path="reviews" element={<Screen id="reviews" />} />
         <Route path="team" element={<Screen id="team" />} />
+        <Route path="team/:adminId" element={<AdminPage />} />
         <Route path="audit" element={<Screen id="audit" />} />
         <Route path="settings" element={<Screen id="settings" />} />
         <Route path="confirm" element={<Screen id="confirm" />} />

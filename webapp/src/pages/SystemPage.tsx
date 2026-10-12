@@ -1,3 +1,4 @@
+import { DevBanner } from "../platform/DevBanner";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAdminApi } from "../api/AdminApiContext";
@@ -47,13 +48,14 @@ export function SystemPage() {
   const { agent } = useSession();
   return (
     <>
+      <DevBanner />
       <div className="page-heading">
         <div>
           <h2>System</h2>
           <p>Read-only. No secrets and no database console.</p>
         </div>
       </div>
-      <ul aria-label="Integrations">
+      <ul className="pl-integrations" aria-label="Integrations">
         {INTEGRATIONS.map(([name, value, state]) => (
           <li key={name}>{name}: {value} · {state}</li>
         ))}
