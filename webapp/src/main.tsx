@@ -14,6 +14,7 @@ import "./styles/alerts.css";
 import "./styles/reports.css";
 import "./styles/ops.css";
 import "./styles/fleetops.css";
+import "./styles/finance.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
