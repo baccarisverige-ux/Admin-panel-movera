@@ -12,6 +12,7 @@ import "./styles/riders.css";
 import "./styles/dispatch.css";
 import "./styles/alerts.css";
 import "./styles/reports.css";
+import "./styles/ops.css";
 import "./styles/support.css";
 
 createRoot(document.getElementById("root")!).render(
