@@ -325,3 +325,6 @@
 @media (max-width: 900px) {
   .op-shift-lists { grid-template-columns: minmax(0, 1fr); }
 }
+.op-log { margin-top: 8px; font-size: 12px; color: var(--dash-ink-2); }
+.op-log summary { cursor: pointer; font-weight: 700; }
+.op-log ol { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; }

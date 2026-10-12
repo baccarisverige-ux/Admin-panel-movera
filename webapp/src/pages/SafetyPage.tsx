@@ -270,7 +270,7 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
           {(["take", "contact", "resolve"] as const).map((kind) => {
             const prepared = safetyAction(store, record, me, kind, kind === "take" ? "Responder accepted incident" : text);
             return (
-              <CommandButton key={kind} command={`admin.safety.${kind}`} className={kind === "take" ? "dash-btn small danger" : "dash-btn small"} targetId={record.id} scope={record.zoneId} collection="incidents" patch={{ status: prepared.status }} entityState={record.status} sliceKey="safetyOps" value={prepared.book} expectedSliceRev={store.draftRev} confirmTarget={false} disabled={storeLoading || Boolean(prepared.error)} title={prepared.error} after={prepared.status} onDone={() => { setText(""); setNotice(kind === "take" ? "You took the case." : kind === "resolve" ? "Case solved." : "Contact logged."); }}>
+              <CommandButton key={kind} command={`admin.safety.${kind}`} className={kind === "take" ? "dash-btn small danger" : "dash-btn small"} targetId={record.id} scope={record.zoneId} collection="incidents" patch={{ status: prepared.status }} entityState={record.status} sliceKey="safetyOps" value={prepared.book} expectedSliceRev={store.draftRev} confirmTarget={false} disabled={storeLoading || Boolean(prepared.error)} title={prepared.error} after={prepared.status} onDone={() => { setText(""); onOpen(item.id); setNotice(kind === "take" ? "You took the case." : kind === "resolve" ? "Case solved." : "Contact logged."); }}>
                 {kind === "take" ? "Take" : kind === "contact" ? "Log contact" : "Resolve"}
               </CommandButton>
             );
@@ -332,6 +332,12 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
         <ol className="op-timeline">
           {events.map((event, index) => <li key={`${event.at}-${index}`}><time>{new Intl.DateTimeFormat(place.locale, { timeZone: place.timeZone, timeStyle: "short" }).format(new Date(event.at))}</time><i aria-hidden="true" /><span>{event.who ? <b>{event.who}: </b> : null}{event.text}</span></li>)}
         </ol>
+        {item.events.length ? (
+          <details className="op-log" open>
+            <summary>Full log ({item.events.length})</summary>
+            <ol aria-label="Incident log">{item.events.map((event, index) => <li key={index}>{time(Date.parse(event.at))} · {agentName(event.actor)} · {event.kind}: {event.text}</li>)}</ol>
+          </details>
+        ) : null}
       </section>
     </article>
   );

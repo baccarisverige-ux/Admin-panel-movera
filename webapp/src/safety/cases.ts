@@ -115,8 +115,9 @@ export type Case = {
 
 const OPEN = new Set(["queued", "taken"]);
 
-export function kindOf(row: DemoRecord): Kind {
-  if (OPEN.has(row.status)) return "sos";
+export function kindOf(row: DemoRecord, handledLive = false): Kind {
+  // An SOS stays an SOS after it is solved.
+  if (OPEN.has(row.status) || handledLive) return "sos";
   const order: Kind[] = ["accident", "harassment", "route", "lost", "other", "sos"];
   return order[hash(row.id) % order.length];
 }
@@ -128,7 +129,7 @@ export function caseOf(row: DemoRecord, safety: SafetyBook, ops: IncidentOps, no
   const take = events.find((event) => event.kind === "take");
   const resolve = events.find((event) => event.kind === "resolve");
   const open = OPEN.has(row.status);
-  const kind = kindOf(row);
+  const kind = kindOf(row, events.length > 0);
   const level = ops.cases[row.id]?.level ?? KINDS.find((item) => item.id === kind)?.level ?? "low";
   const seed = hash(row.id);
   const takenAt = take ? Date.parse(take.at) : null;
