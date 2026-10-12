@@ -217,6 +217,19 @@ body.dx-no-scroll { overflow: hidden; }
 .dx-offer-actions .yes { background: linear-gradient(135deg, #1fa463, #13a07c); color: #fff; }
 .dx-offer-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 62%; background: linear-gradient(90deg, #6250d6, #e34948); }
 .dx-offer.exclusive .dx-offer-bar { background: linear-gradient(90deg, #2a78d6, #13a0b5); }
+.dx-offer-stack i { position: absolute; z-index: 0; height: 40px; border-radius: 20px; background: rgba(255, 255, 255, .55); }
+.dx-offer { z-index: 1; }
+.dx-offer-more { font-size: 10px; font-weight: 700; color: #5b47c9; text-align: center; }
+.dx-radar-full { position: absolute; inset: 26px 0 0; z-index: 2; display: grid; align-content: start; gap: 8px; padding: 14px 12px; background: #17222d; overflow: hidden; }
+.dx-radar-full > b { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #c9bdff; }
+.dx-radar-full ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dx-radar-full li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 14px; background: #fff; color: #1d252c; }
+.dx-radar-full li span { display: grid; }
+.dx-radar-full li b { font-size: 13px; }
+.dx-radar-full li small { font-size: 10px; color: #5c656c; }
+.dx-radar-full li i { font-style: normal; font-size: 10px; font-weight: 800; color: #5b3fd1; }
+.dx-radar-full > small { font-size: 10px; color: #c9bdff; text-align: center; }
+.dx-radar-off { position: absolute; left: 14px; right: 14px; bottom: 24px; z-index: 2; margin: 0; padding: 12px; border-radius: 16px; background: #fff; color: #1d252c; font-size: 12px; font-weight: 600; text-align: center; }
 .dx-step-pick { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
 .dx-step-pick button { height: 26px; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font: inherit; font-size: 11px; font-weight: 700; color: var(--dash-ink-2); cursor: pointer; }
 .dx-step-pick button.on { background: #c2337a; border-color: #c2337a; color: #fff; }

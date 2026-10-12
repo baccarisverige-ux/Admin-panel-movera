@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import {
   ArrowDown, ArrowUp, Baby, Bell, CalendarClock, Car, Clock, Gauge, Heart, Home, Layers, ListOrdered, Luggage, Mail, MapPin, MessageSquare,
-  MonitorSmartphone, Moon, PawPrint, Plane, Plus, Radar, Route, Scale, Shield, ShieldAlert, Smartphone, Sparkles, Star, Target, Timer, Trash2,
+  MonitorSmartphone, Moon, Power, PawPrint, Plane, Plus, Radar, Route, Scale, Shield, ShieldAlert, Smartphone, Sparkles, Star, Target, Timer, Trash2,
   TrendingUp, UserCheck, UserX, Users, Accessibility, Zap,
 } from "lucide-react";
 import type { MarketId } from "../markets/markets";
@@ -73,6 +73,18 @@ function Modes({ zone, onChange, busy, disabled }: Props) {
         </Row>
         <Row label="If all say no">
           <Choice label="After Exclusive" value={zone.exclusive.then} disabled={disabled || !zone.exclusive.on} onChange={(then) => set({ exclusive: { ...zone.exclusive, then } })} options={[{ id: "radar", label: "Radar" }, { id: "widen", label: "Wider area" }, { id: "widen_then_radar", label: "Wider area, then Radar" }]} />
+        </Row>
+      </Card>
+
+      <Card title="Radar in the driver app" tone="purple" icon={<Smartphone size={18} />} help="How many Radar offers one driver sees at the same time." off={!zone.radar.on}>
+        <Row label="Full-screen radar" help="When the driver opens the radar screen." on={zone.radarApp.fullOn} disabled={disabled || !zone.radar.on} onToggle={(fullOn) => set({ radarApp: { ...zone.radarApp, fullOn } })}>
+          <Num label="Offers on full-screen radar" before="up to" value={zone.radarApp.full} unit="offers" min={1} max={20} disabled={disabled || !zone.radar.on} onChange={(full) => set({ radarApp: { ...zone.radarApp, full } })} />
+        </Row>
+        <Row label="Popup over the map" help="Small offer cards while the driver waits on the map." on={zone.radarApp.popupOn} disabled={disabled || !zone.radar.on} onToggle={(popupOn) => set({ radarApp: { ...zone.radarApp, popupOn } })}>
+          <Num label="Offers in the popup" before="up to" value={zone.radarApp.popup} unit="offers" min={1} max={5} disabled={disabled || !zone.radar.on} onChange={(popup) => set({ radarApp: { ...zone.radarApp, popup } })} />
+        </Row>
+        <Row label="While driving a rider" help="Offers for the next ride, shown during a trip. Off means no Radar offers while driving." on={zone.radarApp.drivingOn} disabled={disabled || !zone.radar.on} onToggle={(drivingOn) => set({ radarApp: { ...zone.radarApp, drivingOn } })}>
+          <Num label="Offers while driving" before="up to" value={zone.radarApp.driving} unit="offers" min={1} max={5} disabled={disabled || !zone.radar.on} onChange={(driving) => set({ radarApp: { ...zone.radarApp, driving } })} />
         </Row>
       </Card>
 
@@ -348,6 +360,12 @@ function Drivers({ zone, onChange, disabled, country, onCountry, countryName }: 
         <Row label="Saying no to a long trip does not count" on={zone.decline.longTripFree} disabled={disabled || !zone.decline.on} onToggle={(longTripFree) => set({ decline: { ...zone.decline, longTripFree } })} />
         <Row label="Saying no to a far pickup does not count" on={zone.decline.farPickupFree} disabled={disabled || !zone.decline.on} onToggle={(farPickupFree) => set({ decline: { ...zone.decline, farPickupFree } })}>
           <Num label="Far pickup from" before="from" value={zone.decline.farPickupKm} unit="km" step={0.5} min={1} max={30} disabled={disabled} onChange={(farPickupKm) => set({ decline: { ...zone.decline, farPickupKm } })} />
+        </Row>
+      </Card>
+
+      <Card title="Go offline automatically" tone="red" icon={<Power size={18} />} help="A driver who does not accept offers is set offline, so riders are not kept waiting." off={!zone.autoOffline.on} aside={<Switch label="Go offline automatically" on={zone.autoOffline.on} disabled={disabled} onChange={(on) => set({ autoOffline: { ...zone.autoOffline, on } })} />}>
+        <Row label="After offers not accepted in a row" help="Declined or ignored, on Radar or Exclusive. The driver can go online again at once.">
+          <Num label="Offline after offers not accepted" value={zone.autoOffline.after} unit="offers" min={2} max={30} disabled={disabled || !zone.autoOffline.on} onChange={(after) => set({ autoOffline: { ...zone.autoOffline, after } })} />
         </Row>
       </Card>
 

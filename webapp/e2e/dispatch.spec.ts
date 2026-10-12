@@ -198,9 +198,34 @@ test("rules file, other countries, read-only roles and phones", async ({ page })
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(392);
 });
 
+test("radar offers in the driver app and going offline automatically", async ({ page }) => {
+  await session(page);
+  await page.goto("/dispatch?zone=Z001");
+  await page.getByLabel("Offers in the popup").fill("3");
+  const phone = page.getByLabel("Driver offer preview");
+  await expect(phone.getByLabel("3 offers stacked")).toHaveCount(1);
+  await expect(phone).toContainText("1 of 3 offers");
+  await page.getByLabel("Offers on full-screen radar").fill("10");
+  await phone.getByRole("button", { name: "Full screen" }).click();
+  await expect(phone.getByLabel("Full-screen radar")).toContainText("10 offers max");
+  await page.getByLabel("While driving a rider on").uncheck();
+  await phone.getByRole("button", { name: "While driving" }).click();
+  await expect(phone).toContainText("No Radar offers while driving");
+  await page.getByRole("tab", { name: "Drivers" }).click();
+  await page.getByLabel("Offline after offers not accepted").fill("4");
+  const bar = page.getByRole("region", { name: "Publish" });
+  await bar.getByRole("button", { name: "See changes" }).click();
+  const list = page.getByRole("list", { name: "Changes not live yet" });
+  await expect(list).toContainText("Offers in the popup: 2 → 3");
+  await expect(list).toContainText("Radar offers while driving: on → off");
+  await expect(list).toContainText("Offline after offers not accepted: 5 → 4");
+  await page.getByLabel("Go offline automatically on").uncheck();
+  await expect(page.getByLabel("Offline after offers not accepted")).toBeDisabled();
+});
+
 test("a viewer can look but not change", async ({ page }) => {
   await session(page, "anna");
   await page.goto("/dispatch?zone=Z001");
   await expect(page.getByText("You can view these rules.")).toBeVisible();
-  await expect(page.getByLabel("Radar on")).toBeDisabled();
+  await expect(page.getByLabel("Radar on", { exact: true })).toBeDisabled();
 });

@@ -61,6 +61,10 @@ export type ZoneDispatch = {
   zoneId: string;
   radar: { on: boolean; drivers: number; seconds: number; then: "widen" | "exclusive" | "widen_then_exclusive" };
   exclusive: { on: boolean; seconds: number; drivers: number; then: "radar" | "widen" | "widen_then_radar" };
+  /** How many Radar offers a driver sees at once: full-screen radar, the small popup, and while driving a rider. */
+  radarApp: { fullOn: boolean; full: number; popupOn: boolean; popup: number; drivingOn: boolean; driving: number };
+  /** After this many offers in a row not accepted, the driver goes offline. */
+  autoOffline: { on: boolean; after: number };
   reservation: { on: boolean; searchBeforeMin: number; assignEarly: boolean; assignHoursBefore: number; backup: boolean; toExclusive: boolean; exclusiveBeforeMin: number };
   choose: { how: "auto" | "manual"; radarAbove: number; main: OfferMode; backup: OfferMode | "none"; times: TimeRule[] };
   rulesFrom: "driver" | "pickup";
@@ -165,6 +169,8 @@ export function defaultZone(zone: Pick<MarketZone, "id" | "kind">): ZoneDispatch
     zoneId: zone.id,
     radar: { on: true, drivers: airport ? 8 : 5, seconds: 15, then: "widen_then_exclusive" },
     exclusive: { on: true, seconds: 15, drivers: 3, then: "widen_then_radar" },
+    radarApp: { fullOn: true, full: 8, popupOn: true, popup: 2, drivingOn: true, driving: 1 },
+    autoOffline: { on: true, after: 5 },
     reservation: { on: true, searchBeforeMin: 30, assignEarly: true, assignHoursBefore: 12, backup: true, toExclusive: true, exclusiveBeforeMin: 20 },
     choose: { how: "auto", radarAbove: 1.5, main: "exclusive", backup: "radar", times: [{ id: "t1", on: false, from: "22:00", to: "04:00", mode: "radar" }] },
     rulesFrom: "driver",
@@ -333,6 +339,11 @@ export function zoneIssues(zone: ZoneDispatch): string[] {
   if (zone.radar.on && (zone.radar.drivers < 1 || zone.radar.drivers > 30)) issues.push("Radar: drivers who see a request must be 1 to 30.");
   if (zone.radar.on && (zone.radar.seconds < 5 || zone.radar.seconds > 120)) issues.push("Radar: time on the radar must be 5 to 120 seconds.");
   if (zone.exclusive.on && (zone.exclusive.seconds < 5 || zone.exclusive.seconds > 60)) issues.push("Exclusive: time to accept must be 5 to 60 seconds.");
+  if (zone.radar.on && zone.radarApp.fullOn && (zone.radarApp.full < 1 || zone.radarApp.full > 20)) issues.push("Radar in the driver app: full screen must show 1 to 20 offers.");
+  if (zone.radar.on && zone.radarApp.popupOn && (zone.radarApp.popup < 1 || zone.radarApp.popup > 5)) issues.push("Radar in the driver app: the popup must show 1 to 5 offers.");
+  if (zone.radar.on && zone.radarApp.drivingOn && (zone.radarApp.driving < 1 || zone.radarApp.driving > 5)) issues.push("Radar in the driver app: while driving must show 1 to 5 offers.");
+  if (zone.radar.on && !zone.radarApp.fullOn && !zone.radarApp.popupOn) issues.push("Radar in the driver app: switch on the full screen or the popup, or drivers cannot see Radar offers.");
+  if (zone.autoOffline.on && (zone.autoOffline.after < 2 || zone.autoOffline.after > 30)) issues.push("Go offline automatically: must be after 2 to 30 offers.");
   if (zone.exclusive.on && (zone.exclusive.drivers < 1 || zone.exclusive.drivers > 10)) issues.push("Exclusive: drivers to try must be 1 to 10.");
   if (zone.choose.how === "manual" && !zone[zone.choose.main].on) issues.push(`The main mode (${modeLabel(zone.choose.main)}) is off. Switch it on or pick the other mode.`);
   if (zone.choose.how === "manual" && zone.choose.backup !== "none" && zone.choose.backup === zone.choose.main) issues.push("The backup mode must be different from the main mode.");
@@ -377,6 +388,8 @@ export function modeLabel(mode: OfferMode | "none"): string {
 const LABELS: Record<string, string> = {
   "radar.on": "Radar", "radar.drivers": "Radar drivers", "radar.seconds": "Radar time", "radar.then": "After Radar",
   "exclusive.on": "Exclusive", "exclusive.seconds": "Exclusive time to accept", "exclusive.drivers": "Exclusive drivers to try", "exclusive.then": "After Exclusive",
+  "radarApp.fullOn": "Radar full screen", "radarApp.full": "Offers on full-screen radar", "radarApp.popupOn": "Radar popup", "radarApp.popup": "Offers in the popup",
+  "radarApp.drivingOn": "Radar offers while driving", "radarApp.driving": "Offers while driving", "autoOffline.on": "Go offline automatically", "autoOffline.after": "Offline after offers not accepted",
   "reservation.on": "Reservations", "reservation.searchBeforeMin": "Reservation search starts", "reservation.assignEarly": "Assign early", "reservation.assignHoursBefore": "Assign hours before",
   "reservation.backup": "Backup driver", "reservation.toExclusive": "Reservation to Exclusive", "reservation.exclusiveBeforeMin": "Exclusive before pickup",
   "choose.how": "How the mode is chosen", "choose.radarAbove": "Busy level for Radar", "choose.main": "Main mode", "choose.backup": "Backup mode", "choose.times": "Time rules",
@@ -570,11 +583,11 @@ export function requestControl(book: DispatchBook, zoneId: string, value: Omit<C
 export type CopyPart = TabId;
 
 const PART_KEYS: Record<TabId, (keyof ZoneDispatch)[]> = {
-  modes: ["radar", "exclusive", "reservation", "choose", "rulesFrom"],
+  modes: ["radar", "exclusive", "radarApp", "reservation", "choose", "rulesFrom"],
   best: ["factors", "radius", "batching", "finishing", "favourite"],
   waiting: ["waiting"],
   rides: ["extras", "longTripKm", "stops", "driverCancel", "riderCancel", "airport"],
-  drivers: ["goingHome", "fairness", "decline"],
+  drivers: ["goingHome", "fairness", "decline", "autoOffline"],
   safety: ["safety"],
   alerts: ["alerts"],
 };
@@ -726,6 +739,7 @@ export function rankDrivers(zone: ZoneDispatch, country: CountryDispatch, reques
     else if (zone.safety.maxCancel && driver.cancelPct > zone.safety.cancelAbove) out = `Cancel rate ${driver.cancelPct}% is over ${zone.safety.cancelAbove}%`;
     else if (zone.fairness.hourCap && driver.ridesThisHour >= zone.fairness.hourRides) out = `Already had ${driver.ridesThisHour} rides this hour (cap ${zone.fairness.hourRides})`;
     else if (zone.fairness.skipPause && driver.skipsInRow >= zone.fairness.skips) out = `Paused ${zone.fairness.pauseMin} min after ${driver.skipsInRow} skipped offers`;
+    else if (zone.autoOffline.on && driver.noInRow >= zone.autoOffline.after) out = `Went offline after ${driver.noInRow} offers not accepted in a row`;
     else if (zone.decline.on && driver.noInRow >= zone.decline.pauseAfter) out = `Paused ${zone.decline.pauseMin} min after ${driver.noInRow} no's in a row`;
     else if (zone.goingHome.on && driver.goingHome && !driver.homeDirectionOk) out = "Going home, and this ride is the other way";
     else if (request.extras.some((extra) => zone.extras.find((item) => item.id === extra)?.on && extra !== "long_trip" && !driver.extras.includes(extra))) out = "Does not have what the rider asked for";
@@ -773,7 +787,8 @@ export function simulate(zone: ZoneDispatch, ranked: readonly Ranked[], start: O
   while (t < limit && guard < 40) {
     guard += 1;
     const km = zone.radius.steps[ring] ?? zone.radius.steps[zone.radius.steps.length - 1];
-    const inRing = able.filter((row) => row.km <= km);
+    // Drivers finishing a ride see Radar offers only when offers while driving are on.
+    const inRing = able.filter((row) => row.km <= km && (!row.driver.finishing || (mode === "radar" ? zone.finishing.radar && zone.radarApp.drivingOn : zone.finishing.exclusive)));
     if (mode === "radar") {
       const shown = inRing.slice(0, zone.radar.drivers);
       steps.push({ atSec: t, who: "driver", title: `Radar, ${km} km`, detail: shown.length ? `Shown to ${shown.length} driver${shown.length === 1 ? "" : "s"} at once for ${zone.radar.seconds} s: ${shown.map((row) => row.driver.name).join(", ")}.` : `No driver within ${km} km.` });
@@ -851,6 +866,8 @@ export function rulesFile(book: DispatchBook, country: MarketId, at: string) {
       exclusive: "One request offered to one driver at a time, best first, for a few seconds each.",
       busy: "Waiting requests divided by free online drivers in the zone.",
       score: "Each factor gives 0 to its weight; drivers are offered in order of total score.",
+      radarApp: "The most Radar offers one driver sees at once: on the full-screen radar, in the popup over the map, and while driving a rider.",
+      autoOffline: "After this many offers in a row that the driver did not accept, the driver is set offline.",
     },
     zones: info.zones.map((zone) => ({ id: zone.id, name: zone.name, kind: zone.kind, control: book.control[zone.id] ?? { paused: false, mode: null }, rules: liveRules(book, zone.id) })),
     events: book.events.filter((event) => event.country === country),

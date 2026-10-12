@@ -110,4 +110,16 @@ assert(withEvent(base, arena, [59.334, 18.063]).event === null, "normal rules ou
 const once = simulate(base, rankDrivers(base, country, request, [driver("a", {}), driver("b", { lat: 59.335 })]), "exclusive");
 assert(once.filter((step) => step.title === "Exclusive to a").length === 1, "a driver who said no is not asked again");
 
+// Radar in the driver app and going offline.
+assert(zoneIssues({ ...base, radarApp: { ...base.radarApp, popup: 9 } }).some((line) => line.includes("popup")), "popup has a limit");
+assert(zoneIssues({ ...base, radarApp: { ...base.radarApp, fullOn: false, popupOn: false } }).some((line) => line.includes("cannot see")), "radar needs a screen");
+const offline = rankDrivers(base, country, request, [driver("quiet", { noInRow: 6 })]);
+assert(offline[0].out?.includes("offline"), "driver goes offline after offers not accepted");
+assert(!rankDrivers({ ...base, autoOffline: { on: false, after: 5 } }, country, request, [driver("quiet", { noInRow: 6 })])[0].out?.includes("offline"), "auto offline can be off");
+const busyDriver = driver("busy", { finishing: { inMin: 2, dropKm: 0.5 } });
+const noDriving = { ...base, radarApp: { ...base.radarApp, drivingOn: false } };
+assert(!simulate(noDriving, rankDrivers(noDriving, country, request, [busyDriver]), "radar")[0].detail.includes("busy"), "no radar offers while driving when off");
+assert(simulate(base, rankDrivers(base, country, request, [busyDriver]), "radar")[0].detail.includes("busy"), "radar offers while driving when on");
+assert(changeLines(base, { ...base, autoOffline: { on: true, after: 8 } })[0] === "Offline after offers not accepted: 5 → 8", "change line for auto offline");
+
 console.log("dispatch rules ok");
