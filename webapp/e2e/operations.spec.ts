@@ -143,10 +143,13 @@ test("risk: safety rules keep working, fraud rules preview before saving, and fl
   await expect(page.getByText("After 12 h of work, 6 h rest")).toBeVisible();
   await page.getByRole("tab", { name: "Fraud rules" }).click();
   const preview = page.getByRole("region", { name: "Test before saving" });
-  await expect(preview).toContainText(/[1-9]\d* people flagged/);
-  const before = (await preview.innerText()).match(/(\d+) people flagged/)?.[1];
   await page.getByLabel("Promotion abuse on").check();
-  await expect(page.getByRole("region", { name: "Test before saving" })).toContainText(`(now ${before})`);
+  await expect(preview).toContainText(/\(now [1-9]\d*\)/);
+  const now = (await preview.innerText()).match(/\(now (\d+)\)/)?.[1];
+  await page.getByLabel("Promotion abuse on").uncheck();
+  await expect(preview).toContainText(`${now} people flagged`);
+  await page.getByLabel("Promotion abuse on").check();
+  await expect(preview).toContainText(`(now ${now})`);
   await page.getByRole("button", { name: "Save fraud rules" }).click();
   await confirm(page);
   await expect(page.getByText("Everything is saved")).toBeVisible();
