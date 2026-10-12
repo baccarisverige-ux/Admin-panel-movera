@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import { ArrowLeft } from "lucide-react";
 import {
   PAYMENT_METHODS,
   defaultFinanceBook,
@@ -19,10 +20,21 @@ import { useSession } from "../auth/SessionContext";
 import { CATEGORIES, formatOre } from "../domain/contract";
 import { accountOk, bicOk, clearingBank, ibanOk } from "../payments/ledger";
 import { CommandButton } from "../ui/CommandButton";
-import { DataTable } from "../ui/DataTable";
+import { PaymentsDesk } from "../payments/PaymentsDesk";
+
+type Tab = "payments" | "failed" | "disputes" | "numbers" | "rules" | "tools";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "payments", label: "Payments" },
+  { id: "failed", label: "Failed and retries" },
+  { id: "disputes", label: "Disputes" },
+  { id: "numbers", label: "Numbers" },
+  { id: "rules", label: "Rules" },
+  { id: "tools", label: "Methods and tools" },
+];
 
 export function PaymentsPage() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const { agent } = useSession();
   const payments = useRecords("payments", null);
   const zones = useRecords("zones", null);
@@ -91,16 +103,30 @@ export function PaymentsPage() {
     setPolicyDraft(null);
   }
 
+  const tab = (TABS.find((item) => item.id === params.get("tab"))?.id ?? "payments") as Tab;
+  const selectTab = (id: Tab) => setParams(() => {
+    const next = new URLSearchParams(globalThis.location.search);
+    if (id === "payments") next.delete("tab");
+    else next.set("tab", id);
+    return next;
+  }, { replace: true });
+
   return (
-    <>
-      <div className="page-heading">
-        <div>
+    <div className="dx-page fn-page pm-page">
+      <header className="dx-head">
+        <button data-command="admin.payment.view" type="button" className="dash-btn ghost dx-back" onClick={() => (globalThis.history.length > 1 ? navigate(-1) : navigate("/"))}><ArrowLeft size={16} aria-hidden="true" /> Back</button>
+        <div className="dx-head-text">
           <h2>Payments</h2>
           <p data-testid="payment-count">
             {rows.length} payments in the demo ledger. Amounts are SEK. Wallet vouchers are constrained to 100, 200 and 500 kr. Finance revision {finance.draftRev}.
           </p>
         </div>
+      </header>
+      <div className="dash-tabs dx-views" role="tablist" aria-label="Payment sections">
+        {TABS.map((item) => <button data-command="admin.payment.view" key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "active" : undefined} onClick={() => selectTab(item.id)}>{item.label}</button>)}
       </div>
+      {tab !== "tools" ? <PaymentsDesk tab={tab} rows={rows} loading={payments.isLoading} /> : (
+      <>
       <p className="state-line">{notice} {financeStore.message}</p>
 
       <article className="panel" data-testid="payment-policy">
@@ -168,17 +194,6 @@ export function PaymentsPage() {
           <button data-command="admin.card.action" className="secondary-btn" type="button" disabled={!policyDirty} onClick={() => setPolicyDraft(null)}>Discard unsaved</button>
         </div>
       </article>
-
-      <DataTable
-        head={["Payment", "Method", "Status", "Zone", "Amount"]}
-        rows={rows.map((row) => [row.id, row.name, row.status, row.zoneId, formatOre(row.fareOre ?? 0)])}
-        state={payments.isLoading ? "loading" : payments.isError ? "error" : "ready"}
-        onRetry={() => void payments.refetch()}
-        onRow={(index) => {
-          const id = rows[index]?.id;
-          if (id) navigate(`/payments/${id}`);
-        }}
-      />
 
       <div className="split">
         <article className="panel">
@@ -312,6 +327,8 @@ export function PaymentsPage() {
           {bicOk(bic) ? "BIC length is valid." : "BIC must be 8 or 11 characters."}
         </p>
       </article>
-    </>
+      </>
+      )}
+    </div>
   );
 }

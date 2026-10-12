@@ -13,6 +13,10 @@ import "./styles/dispatch.css";
 import "./styles/alerts.css";
 import "./styles/reports.css";
 import "./styles/ops.css";
+import "./styles/fleetops.css";
+import "./styles/finance.css";
+import "./styles/support.css";
+import "./styles/growth.css";
 import "./styles/platform.css";
 
 createRoot(document.getElementById("root")!).render(

@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { ArrowLeft } from "lucide-react";
 import {
   bankReview,
   bankValidation,
@@ -16,9 +18,21 @@ import { useSession } from "../auth/SessionContext";
 import { formatOre } from "../domain/contract";
 import { CommandButton } from "../ui/CommandButton";
 import { DataTable } from "../ui/DataTable";
+import { can } from "../auth/permissions";
+import { formatMoney } from "../markets/markets";
+import { useMarketScope } from "../markets/useMarketScope";
+import { PayoutLines, RunCard, ScheduleView } from "../payments/PayoutParts";
+import { PAYOUT_OPS_KEY, bankReady, countryOfPayout, emptyPayoutOps, failedOf, holdOf, nextRun, normalizePayoutOps, type PayoutOps } from "../payments/runs";
 
 export function PayoutsPage() {
   const { agent } = useSession();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const scope = useMarketScope();
+  const drivers = useRecords("drivers", null);
+  const opsSlice = useSlice<PayoutOps>(PAYOUT_OPS_KEY, emptyPayoutOps());
+  const ops = normalizePayoutOps(opsSlice.value);
+  const [now] = useState(() => Date.now());
   const payouts = useRecords("payouts", null);
   const financeStore = useSlice<FinanceBook>("finance", defaultFinanceBook());
   const finance = useMemo(() => normalizeFinanceBook(financeStore.value), [financeStore.value]);
@@ -28,6 +42,17 @@ export function PayoutsPage() {
   const [bankDraft, setBankDraft] = useState<BankReview | null>(null);
   const [bankNote, setBankNote] = useState("Verified account holder");
   const [notice, setNotice] = useState("Payout status is ledger-derived and cannot be typed manually.");
+
+  const tab = params.get("tab") === "schedule" ? "schedule" : "payouts";
+  const selectTab = (id: string) => setParams(() => {
+    const next = new URLSearchParams(globalThis.location.search);
+    if (id === "payouts") next.delete("tab");
+    else next.set("tab", id);
+    return next;
+  }, { replace: true });
+  const country = scope.market.id;
+  const money = (minor: number) => formatMoney(minor, country);
+  const driverName = (id: string | null | undefined) => (drivers.data ?? []).find((row) => row.id === id)?.name ?? id ?? "";
 
   if (payouts.isLoading || financeStore.loading) return <p className="state-line">Loading payouts.</p>;
   if (!selected) return <p className="state-line">No payouts are available.</p>;
@@ -52,26 +77,42 @@ export function PayoutsPage() {
     setBankDraft({ ...bank, ...patch, status: "in_review", reviewedBy: "", reviewedAt: "", note: "" });
   }
 
+  const open = rows.filter((row) => payoutState(finance, row).status !== "paid");
+  const next = nextRun(ops.schedules[country], now, scope.market.timeZone);
+  const fileRows = open.flatMap((row) => {
+    const review = bankReview(finance, row.driverId ?? "");
+    if (bankReady(review, holdOf(ops, row.id), failedOf(ops, row))) return [];
+    return [{ id: row.id, driver: driverName(row.driverId), iban: review.iban, bic: review.bic, amount: row.fareOre ?? 0, reference: `Movera payout ${row.id}` }];
+  });
+  const blockPay = holdOf(ops, selected.id) ? "On hold." : failedOf(ops, selected) ? "Failed at the bank. Retry first." : null;
+
   return (
-    <>
-      <div className="page-heading">
-        <div>
+    <div className="dx-page fn-page po-page">
+      <header className="dx-head">
+        <button data-command="admin.payout.view" type="button" className="dash-btn ghost dx-back" onClick={() => (globalThis.history.length > 1 ? navigate(-1) : navigate("/"))}><ArrowLeft size={16} aria-hidden="true" /> Back</button>
+        <div className="dx-head-text">
           <h2>Payouts</h2>
           <p>
             Weekly payouts. Wallet vouchers are 100, 200 and 500 kr. Refunds of 200 kr or more need a second authorised agent.
             Demo rows {rows.length}. Finance revision {finance.draftRev}.
           </p>
         </div>
+      </header>
+      <div className="dash-tabs dx-views" role="tablist" aria-label="Payout sections">
+        {[["payouts", "Payouts"], ["schedule", "Schedule and rules"]].map(([id, label]) => <button data-command="admin.payout.view" key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "active" : undefined} onClick={() => selectTab(id)}>{label}</button>)}
       </div>
+      {tab === "schedule" ? <ScheduleView ops={ops} country={country} editable={Boolean(agent && can(agent.role, "approval.decide"))} /> : (
+      <>
       <p className="state-line">{notice} {financeStore.message}</p>
+      <RunCard run={`run-${country}-${next.slice(0, 10)}`} rows={open} ops={ops} country={country} next={next} money={money} fileRows={fileRows} startedBy="system" currency={scope.market.currency} />
 
       <DataTable
-        head={["Payout", "Week", "Driver", "Amount", "Status", "Bank"]}
+        head={["Payout", "Week", "Driver", "Amount", "Status", "Bank", "Hold"]}
         rowIds={rows.map((row) => row.id)}
         rows={rows.map((row) => {
           const payout = payoutState(finance, row);
           const review = bankReview(finance, row.driverId ?? "");
-          return [row.id, row.name, row.driverId ?? "", formatOre(row.fareOre ?? 0), payout.status, review.status];
+          return [row.id, row.name, row.driverId ?? "", formatOre(row.fareOre ?? 0), failedOf(ops, row) ? "failed" : payout.status, review.status, holdOf(ops, row.id) ? "On hold" : "–"];
         })}
         onRow={(index) => {
           const id = rows[index]?.id;
@@ -84,7 +125,7 @@ export function PayoutsPage() {
         onRetry={() => void payouts.refetch()}
       />
 
-      <article className="panel" data-testid="payout-detail">
+      <article className="panel fn-panel" data-testid="payout-detail">
         <h3>{selected.id}</h3>
         <p>
           {selected.driverId} · {formatOre(selected.fareOre ?? 0)} · payout {state.status}. Bank {bank.status}.
@@ -172,16 +213,19 @@ export function PayoutsPage() {
             expectedSliceRev={finance.draftRev}
             sliceKey="finance"
             value={paid.book}
-            disabled={state.status === "paid"}
+            disabled={state.status === "paid" || Boolean(blockPay)}
             validationError={paid.error}
             onValidationError={(message) => setNotice(message)}
-            title={state.status === "paid" ? "Already paid." : undefined}
+            title={state.status === "paid" ? "Already paid." : blockPay ?? undefined}
             onDone={() => setNotice("Payout marked paid once. Reusing the operation key cannot pay it twice.")}
           >
             Mark paid
           </CommandButton>
         </div>
       </article>
-    </>
+      <PayoutLines record={selected} fleet={Boolean((drivers.data ?? []).find((row) => row.id === selected.driverId)?.fleetId)} ops={ops} country={countryOfPayout(selected)} money={(minor) => formatMoney(minor, countryOfPayout(selected))} onNotice={setNotice} />
+      </>
+      )}
+    </div>
   );
 }
