@@ -45,6 +45,7 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.reports.saveView", label: "Save a report view", reason: false, permission: "overview.read" },
   { id: "admin.reports.schedule", label: "Save a scheduled report", reason: true, permission: "overview.read" },
   { id: "admin.reports.access", label: "Choose who sees other admins' work", reason: true, permission: "team.read" },
+  { id: "admin.tax.rules", label: "Save tax rules", reason: true, permission: "approval.decide" },
   { id: "admin.gateA.record", label: "Record frontend acceptance evidence", reason: true, permission: "system.read" },
   { id: "admin.content.slot", label: "Choose content slot", reason: false, permission: "settings.read" },
   { id: "admin.content.publish", label: "Publish content", reason: true, permission: "settings.publish" },

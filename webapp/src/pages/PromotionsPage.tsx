@@ -7,15 +7,13 @@ import { useSession } from "../auth/SessionContext";
 import { can } from "../auth/permissions";
 import { Card, Num, Row, Switch } from "../dispatch/fields";
 import { BONUS_KEY, emptyBonusBook, normalizeBonusBook, type BonusBook } from "../drivers/bonus";
-import { PROMO_OPS_KEY, emptyPromoOps, normalizePromoOps, referralError, results, returnPer, saveVoucher, statusWithBudget, voucherError, type HubItem, type HubKind, type PromoOps, type Referral, type Voucher } from "../growth/hub";
+import { AVG_FARE, PROMO_OPS_KEY, emptyPromoOps, hubItems, normalizePromoOps, referralError, results, returnPer, saveVoucher, voucherError, type HubItem, type HubKind, type PromoOps, type Referral, type Voucher } from "../growth/hub";
 import { useMarketScope } from "../markets/useMarketScope";
 import { Cards } from "../reports/ui";
 import { CARE_KEY, emptyRiderCare, normalizeCare, type RiderCare } from "../riders/care";
 import { CommandButton } from "../ui/CommandButton";
 import { GrowthPage } from "./GrowthPage";
 
-/** Average fare per country, major units, for demo results until rides are counted per promotion. */
-const AVG_FARE = { SE: 250, FR: 22, TN: 15 } as const;
 const KINDS: { id: HubKind | "all"; label: string }[] = [
   { id: "all", label: "All" },
   { id: "rider", label: "Rider promotions" },
@@ -49,20 +47,7 @@ export function PromotionsPage() {
     return next;
   }, { replace: true });
 
-  const items = useMemo<HubItem[]>(() => {
-    const fare = AVG_FARE[country];
-    const make = (base: Omit<HubItem, "cost" | "rides" | "newRiders" | "revenue">): HubItem => {
-      const result = results(base.id, base.budget, fare);
-      return { ...base, ...result, status: statusWithBudget(base.status, result.cost, base.budget, ops.autoStop) };
-    };
-    const referral = ops.referral[country];
-    return [
-      ...care.promotions.filter((item) => item.country === country).map((item) => make({ id: item.id, kind: "rider", title: item.title, code: item.code, status: item.status, budget: item.budget, link: `/riders?view=promotions&country=${country}`, madeIn: "Riders" })),
-      ...bonuses.bonuses.filter((item) => item.country === country).map((item) => make({ id: item.id, kind: "driver", title: item.name, status: item.status, budget: item.budget, link: `/drivers?view=bonuses&country=${country}`, madeIn: "Drivers" })),
-      ...ops.vouchers.filter((item) => item.country === country).map((item) => make({ id: item.id, kind: "voucher", title: item.title, code: item.code, status: item.on ? (item.to && item.to < new Date().toISOString().slice(0, 10) ? "ended" : "active") : "paused", budget: item.budget, link: `/promotions?tab=vouchers&country=${country}`, madeIn: "Promotions" })),
-      make({ id: `REF-${country}`, kind: "referral", title: "Invite a friend", status: referral.on ? "active" : "paused", budget: referral.budget, link: `/promotions?tab=referral&country=${country}`, madeIn: "Promotions" }),
-    ];
-  }, [care.promotions, bonuses.bonuses, ops, country]);
+  const items = useMemo<HubItem[]>(() => hubItems({ promotions: care.promotions, bonuses: bonuses.bonuses, ops, country, today: new Date().toISOString().slice(0, 10) }), [care.promotions, bonuses.bonuses, ops, country]);
 
   const shown = items.filter((item) => kind === "all" || item.kind === kind);
   const live = items.filter((item) => item.status === "active");
