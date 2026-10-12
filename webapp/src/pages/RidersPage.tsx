@@ -406,13 +406,20 @@ const PROMO_CATEGORIES = ["economy", "comfort", "premium", "priority", "xl", "el
 const AUTO_STATE: Record<ReturnType<typeof autoState>, string> = { off: "Off", running: "Running now", waiting: "Starts later", ended: "Ended" };
 
 function AutoPromosCard({ care, rows, country, canEdit, onNotice, now }: { care: RiderCare; rows: RiderRow[]; country: "SE" | "FR" | "TN"; canEdit: boolean; onNotice: (text: string) => void; now: number }) {
-  const [auto, setAuto] = useState<AutoPromos>(care.autoPromos);
+  const [draft, setAuto] = useState<AutoPromos>(care.autoPromos);
   const [preview, setPreview] = useState<keyof AutoPromos | null>(null);
-  const saved = setAutoPromos(care, auto);
   const [choosing, setChoosing] = useState<keyof AutoPromos | null>(null);
   const [seed, setSeed] = useState(1);
   const names = useMemo(() => new Map(rows.map((row) => [row.rider.id, row.rider.name])), [rows]);
   const randomIds = (count: number, round: number) => pickAudience(rows, "random", count, round).map((row) => row.rider.id);
+  // Random riders picked before the rider list loaded come out empty; pick them once the list is here.
+  const auto = useMemo(() => {
+    if (!rows.length) return draft;
+    const keys = Object.keys(draft) as (keyof AutoPromos)[];
+    if (!keys.some((key) => draft[key].audience === "random" && !draft[key].riderIds.length)) return draft;
+    return Object.fromEntries(keys.map((key) => [key, draft[key].audience === "random" && !draft[key].riderIds.length ? { ...draft[key], riderIds: pickAudience(rows, "random", draft[key].count, seed).map((row) => row.rider.id) } : draft[key]])) as AutoPromos;
+  }, [draft, rows, seed]);
+  const saved = setAutoPromos(care, auto);
   function setAudience(key: keyof AutoPromos, audience: AutoAudience) {
     const item = auto[key];
     const riderIds = audience === "random" ? randomIds(item.count, seed) : audience === "picked" ? item.riderIds : [];
