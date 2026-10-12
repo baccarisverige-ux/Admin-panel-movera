@@ -18,6 +18,7 @@ import { compareWindow, csvOf, emptyReportSettings, normalizeReportSettings, REP
 import { AlertsTab, DispatchTab, DriversTab, MoneyTab, OverviewTab, RidersTab, RidesTab, type CsvTable } from "../reports/Tabs";
 import { TripExport } from "../reports/TripExport";
 import { WorkTab } from "../reports/WorkTab";
+import { CareTab, FleetsTab, PromosTab, SurgeTab, TaxesTab, ZonesTab } from "../reports/ExtraTabs";
 
 const COMPARES: { id: Compare; label: string }[] = [
   { id: "previous", label: "vs the period before" },
@@ -63,6 +64,7 @@ export function ReportsPage() {
     if (format === "min") return `${value} min`;
     if (format === "sec") return `${value} s`;
     if (format === "hours") return `${new Intl.NumberFormat(market.locale).format(value)} h`;
+    if (format === "stars") return `${value} / 5`;
     return new Intl.NumberFormat(market.locale).format(value);
   };
 
@@ -180,6 +182,12 @@ export function ReportsPage() {
       {tab === "dispatch" ? <DispatchTab {...props} /> : null}
       {tab === "alerts" ? <AlertsTab {...props} /> : null}
       {tab === "work" ? <WorkTab {...props} settings={settings} /> : null}
+      {tab === "taxes" ? <TaxesTab {...props} /> : null}
+      {tab === "fleets" ? <FleetsTab {...props} /> : null}
+      {tab === "zones" ? <ZonesTab {...props} /> : null}
+      {tab === "surge" ? <SurgeTab {...props} /> : null}
+      {tab === "care" ? <CareTab {...props} /> : null}
+      {tab === "promos" ? <PromosTab {...props} /> : null}
 
       <SaveViewDialog open={viewOpen} onClose={() => setViewOpen(false)} settings={settings} agentId={agent?.id ?? ""} build={(name, shared) => ({ id: `RV-${Date.now().toString(36)}`, name, by: agent?.id ?? "", shared, tab, period: periodParams(period, new URLSearchParams()).toString(), compare, filters, country: market.id, zones: scope.zones.join(",") })} onSaved={(name) => setNotice(`View ${name} saved.`)} />
       <ScheduleDialog key={`${tab}-${scheduleOpen}`} open={scheduleOpen} onClose={() => setScheduleOpen(false)} settings={settings} agentId={agent?.id ?? ""} tab={tab} country={market.id} onSaved={setNotice} />

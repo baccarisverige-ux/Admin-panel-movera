@@ -115,3 +115,26 @@ export function referralError(referral: Referral): string | null {
   if (referral.perPerson < 1 || referral.afterRides < 1) return "Friends per person and rides before the reward must be at least 1.";
   return null;
 }
+
+/** Average fare per country, major units, for demo results until rides are counted per promotion. */
+export const AVG_FARE: Record<MarketId, number> = { SE: 250, FR: 22, TN: 15 };
+
+type Promo = { id: string; title: string; code: string; status: HubItem["status"]; budget: number | null; country: MarketId };
+type Bonus = { id: string; name: string; status: HubItem["status"]; budget: number | null; country: MarketId };
+
+/** Every promotion in a country as one list: rider promotions, driver bonuses, vouchers and invite a friend. */
+export function hubItems(input: { promotions: readonly Promo[]; bonuses: readonly Bonus[]; ops: PromoOps; country: MarketId; today: string }): HubItem[] {
+  const { ops, country } = input;
+  const fare = AVG_FARE[country];
+  const make = (base: Omit<HubItem, "cost" | "rides" | "newRiders" | "revenue">): HubItem => {
+    const result = results(base.id, base.budget, fare);
+    return { ...base, ...result, status: statusWithBudget(base.status, result.cost, base.budget, ops.autoStop) };
+  };
+  const referral = ops.referral[country];
+  return [
+    ...input.promotions.filter((item) => item.country === country).map((item) => make({ id: item.id, kind: "rider", title: item.title, code: item.code, status: item.status, budget: item.budget, link: `/riders?view=promotions&country=${country}`, madeIn: "Riders" })),
+    ...input.bonuses.filter((item) => item.country === country).map((item) => make({ id: item.id, kind: "driver", title: item.name, status: item.status, budget: item.budget, link: `/drivers?view=bonuses&country=${country}`, madeIn: "Drivers" })),
+    ...ops.vouchers.filter((item) => item.country === country).map((item) => make({ id: item.id, kind: "voucher", title: item.title, code: item.code, status: item.on ? (item.to && item.to < input.today ? "ended" : "active") : "paused", budget: item.budget, link: `/promotions?tab=vouchers&country=${country}`, madeIn: "Promotions" })),
+    make({ id: `REF-${country}`, kind: "referral", title: "Invite a friend", status: referral.on ? "active" : "paused", budget: referral.budget, link: `/promotions?tab=referral&country=${country}`, madeIn: "Promotions" }),
+  ];
+}

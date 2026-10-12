@@ -31,7 +31,7 @@ export type TabProps = {
   onCsv: (table: CsvTable) => void;
 };
 
-function useZoneRows(market: Market, zones: MarketZone[], window: PeriodWindow): ZoneRow[] {
+export function useZoneRows(market: Market, zones: MarketZone[], window: PeriodWindow): ZoneRow[] {
   return useMemo(() => zones.map((zone) => {
     const one = earningsReport(market.id, [zone.id], window);
     const requested = one.totals.trips + one.totals.cancelled;
@@ -56,7 +56,7 @@ function useReport(market: Market, zones: MarketZone[], window: PeriodWindow) {
   return useMemo(() => earningsReport(market.id, ids ? ids.split(",") : [], window), [market.id, ids, window]);
 }
 
-function useCsv(onCsv: (table: CsvTable) => void, table: CsvTable) {
+export function useCsv(onCsv: (table: CsvTable) => void, table: CsvTable) {
   const key = JSON.stringify(table);
   // Hand the table to the page only when it changed, so Export always takes what is on screen.
   useEffect(() => onCsv(JSON.parse(key) as CsvTable), [key, onCsv]);
@@ -131,7 +131,7 @@ export function MoneyTab({ market, zones, window, compare, filters, fmt, money, 
           ]} />
         </Panel>
       </div>
-      <p className="rp-foot">Taxes per country come in a later report.</p>
+      <p className="rp-foot">VAT and taxes per country are in the <Link to="/reports?tab=taxes">Taxes</Link> tab.</p>
     </div>
   );
 }

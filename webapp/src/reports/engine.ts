@@ -8,7 +8,7 @@ import type { Activity } from "./activityLog.ts";
 
 export const REPORT_SETTINGS_KEY = "reportSettings";
 
-export type ReportTab = "overview" | "rides" | "money" | "drivers" | "riders" | "dispatch" | "alerts" | "work";
+export type ReportTab = "overview" | "rides" | "money" | "drivers" | "riders" | "dispatch" | "alerts" | "work" | "taxes" | "fleets" | "zones" | "surge" | "care" | "promos";
 export type Compare = "previous" | "year" | "none";
 export type Filters = { category: string; method: string; driverId: string; fleetId: string };
 export const NO_FILTERS: Filters = { category: "", method: "", driverId: "", fleetId: "" };
@@ -22,6 +22,12 @@ export const TABS: { id: ReportTab; label: string }[] = [
   { id: "dispatch", label: "Dispatch" },
   { id: "alerts", label: "Alerts" },
   { id: "work", label: "Admin work" },
+  { id: "taxes", label: "Taxes" },
+  { id: "fleets", label: "Fleet owners" },
+  { id: "zones", label: "Zones" },
+  { id: "surge", label: "Surge" },
+  { id: "care", label: "Support & safety" },
+  { id: "promos", label: "Promotions" },
 ];
 
 export type Format = "money" | "count" | "pct" | "min" | "sec" | "hours" | "stars";
