@@ -1,3 +1,4 @@
+import { logExport } from "../reports/activityLog";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import {
@@ -191,6 +192,7 @@ export function ZoneMap({ country, wizard, onWizard }: { country: MarketId; wiza
     link.href = url;
     link.download = `zones-${country.toLowerCase()}.geojson`;
     link.click();
+    logExport(agent?.id, `Zones of ${country} (GeoJSON)`);
     URL.revokeObjectURL(url);
   }
 

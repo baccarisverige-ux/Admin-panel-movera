@@ -1,30 +1,21 @@
+import { logExport } from "../reports/activityLog";
 import { useMemo, useState } from "react";
 import { CheckCircle2, Copy, Download, Mail, Repeat, Search, Timer, Trophy } from "lucide-react";
+import { useSession } from "../auth/SessionContext";
 import { useAlertsData } from "./AlertsContext";
 import { agentName } from "./AlertActions";
 import { LEVEL_ICON } from "./OpenView";
-import { historyCsv, historyRows, kindDef, numbers, weeklySummary, type HistoryRow, type Level } from "./engine";
+import { solvedHistory } from "./history";
+import { historyCsv, kindDef, numbers, weeklySummary, type HistoryRow, type Level } from "./engine";
 
 /** Solved alerts with both names, the numbers behind them, a CSV export and a weekly summary for managers. */
 export function HistoryView() {
   const data = useAlertsData();
+  const { agent } = useSession();
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<Level | "all">("all");
   const [notice, setNotice] = useState("");
-  const rows = useMemo(() => {
-    // SOS are solved in Incidents; their history comes from there, with the same names.
-    const sos: HistoryRow[] = Object.entries(data.safety.value.incidents).flatMap(([id, item]) => {
-      const take = item.events.find((event) => event.kind === "take");
-      const done = [...item.events].reverse().find((event) => event.kind === "resolve");
-      if (!done) return [];
-      const since = take ? Date.parse(take.at) - 2 * 60_000 : Date.parse(done.at);
-      return [{
-        id: `sos:${id}`, kind: "sos", level: "critical", title: `SOS ${id}`, zoneId: data.facts.incidents.find((row) => row.id === id)?.zoneId ?? null, since: new Date(since).toISOString(), status: "done", owner: done.actor, events: [],
-        takenBy: take?.actor ?? done.actor, solvedBy: done.actor, takeMin: take ? Math.round((Date.parse(take.at) - since) / 60_000) : 0, solveMin: Math.round((Date.parse(done.at) - since) / 60_000), note: done.text, doneAt: done.at,
-      }];
-    });
-    return [...historyRows(data.book), ...sos].sort((a, b) => b.doneAt.localeCompare(a.doneAt));
-  }, [data.book, data.safety.value, data.facts.incidents]);
+  const rows = useMemo(() => solvedHistory(data.book, data.safety.value, (id) => data.facts.incidents.find((row) => row.id === id)?.zoneId ?? null), [data.book, data.safety.value, data.facts.incidents]);
   const shown = rows.filter((row) => (level === "all" || row.level === level) && (!query.trim() || `${row.title} ${row.note} ${agentName(row.solvedBy)} ${agentName(row.takenBy)}`.toLowerCase().includes(query.trim().toLowerCase())));
   const stats = numbers(rows);
   const label = (kind: HistoryRow["kind"]) => kindDef(kind)?.label ?? "Your rule";
@@ -41,6 +32,7 @@ export function HistoryView() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    logExport(agent?.id, `${rows.length} solved alerts (CSV)`);
     setNotice(`${rows.length} solved alerts exported.`);
   }
 

@@ -40,6 +40,11 @@ const RAW_COMMANDS: CommandSpec[] = [
   { id: "admin.studio.publish", label: "Publish content", reason: true, permission: "settings.publish" },
   { id: "admin.studio.rollback", label: "Roll back content", reason: true, permission: "settings.publish" },
   { id: "admin.report.export", label: "Create scoped report export", reason: true, permission: "overview.read" },
+  { id: "admin.reports.view", label: "Reports view", reason: false, permission: "overview.read" },
+  { id: "admin.reports.download", label: "Download a report", reason: false, permission: "overview.read" },
+  { id: "admin.reports.saveView", label: "Save a report view", reason: false, permission: "overview.read" },
+  { id: "admin.reports.schedule", label: "Save a scheduled report", reason: true, permission: "overview.read" },
+  { id: "admin.reports.access", label: "Choose who sees other admins' work", reason: true, permission: "team.read" },
   { id: "admin.gateA.record", label: "Record frontend acceptance evidence", reason: true, permission: "system.read" },
   { id: "admin.content.slot", label: "Choose content slot", reason: false, permission: "settings.read" },
   { id: "admin.content.publish", label: "Publish content", reason: true, permission: "settings.publish" },
@@ -355,6 +360,7 @@ const OWNER_BY_DOMAIN: Record<string, string> = {
   dispatch: "Dispatch",
   live: "Dispatch",
   alerts: "Operations",
+  reports: "Overview",
 };
 
 const ALLOWED_STATES: Record<string, readonly string[]> = {

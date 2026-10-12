@@ -1,3 +1,4 @@
+import { logActivity } from "../reports/activityLog";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AGENTS, IDLE_MS, isIdle, signIn, type Agent } from "./permissions";
@@ -63,6 +64,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const timer = window.setInterval(() => {
       const last = Number(localStorage.getItem(ACTIVITY_KEY) || "0");
       if (isIdle(last, Date.now(), IDLE_MS)) {
+        logActivity({ actorId: agent?.id ?? "", kind: "signout", what: "Signed out after 15 min without activity", at: new Date(last + IDLE_MS).toISOString() });
         localStorage.removeItem(SESSION_KEY);
         queryClient.clear();
         setAgent(null);
@@ -87,11 +89,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         localStorage.setItem(SESSION_KEY, result.agent.id);
         localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
+        logActivity({ actorId: result.agent.id, kind: "signin", what: "Signed in" });
         setError(null);
         setAgent(result.agent);
         return result.agent;
       },
       signOut() {
+        if (agent) logActivity({ actorId: agent.id, kind: "signout", what: "Signed out" });
         localStorage.removeItem(SESSION_KEY);
         queryClient.clear();
         setAgent(null);
