@@ -246,13 +246,13 @@ export function useCommand(action: string) {
   };
 }
 
-export function useSlice<T>(key: string, fallback: T) {
+export function useSlice<T>(key: string, fallback: T, options: { enabled?: boolean } = {}) {
   const api = useAdminApi();
   const { agent }=useSession();
   const [params]=useSearchParams();
   const requested=params.get("scope");
   const scope=agent ? { ...agent.scope, zones: requested ? canUseZone(agent,requested) ? parseZoneList(requested) : ["__scope-denied__"] : agent.scope.zones } : undefined;
-  const query = useQuery({ queryKey: ["slice", key, agent?.id, JSON.stringify(scope)], queryFn: () => api.readSlice(key, fallback, agent && scope ? { actorId:agent.id,role:agent.role,scope } : undefined), enabled:Boolean(agent) });
+  const query = useQuery({ queryKey: ["slice", key, agent?.id, JSON.stringify(scope)], queryFn: () => api.readSlice(key, fallback, agent && scope ? { actorId:agent.id,role:agent.role,scope } : undefined), enabled:Boolean(agent) && options.enabled !== false });
   const command = useCommand(`admin.${key}.save`);
   return {
     value: query.data ?? fallback,

@@ -91,6 +91,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     "drivers.bonuses",
     "dispatch.edit",
     "dispatch.approve",
+    "alerts.manage",
     "zones.read",
     "zones.edit",
     "zones.publish",

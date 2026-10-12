@@ -19,6 +19,7 @@ import {
   Palette,
   Radar,
   Route,
+  Bell,
   ScrollText,
   Server,
   Settings,
@@ -36,6 +37,8 @@ import {
 import { can, canUseZone } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { useInbox, useSearch } from "../api/hooks";
+import { AlertsProvider, useAlertsData } from "../alerts/AlertsContext";
+import { AlertBell } from "../alerts/AlertBell";
 import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
 import { CommandButton } from "../ui/CommandButton";
 import { useMarketScope } from "../markets/useMarketScope";
@@ -71,6 +74,7 @@ const ICONS: Record<NavIcon, typeof Menu> = {
   Shield,
   Palette,
   Radar,
+  Bell,
 };
 
 type AppShellProps = {
@@ -84,7 +88,16 @@ function buildLabel(): string {
   return sha.slice(0, 7);
 }
 
-export function AppShell({ page, children }: AppShellProps) {
+export function AppShell(props: AppShellProps) {
+  return (
+    <AlertsProvider>
+      <ShellInner {...props} />
+    </AlertsProvider>
+  );
+}
+
+function ShellInner({ page, children }: AppShellProps) {
+  const alerts = useAlertsData();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -166,7 +179,8 @@ export function AppShell({ page, children }: AppShellProps) {
           <div className="topbar-actions">
             <MarketBar />
             <CommandButton command="admin.shell.search" className="secondary-btn" type="button" onDone={() => setSearchOpen(true)}>Search</CommandButton>
-            <CommandButton command="admin.shell.inbox" className="secondary-btn" type="button" aria-label="Inbox" onDone={() => setInboxOpen((open) => !open)}>Inbox</CommandButton>
+            <AlertBell />
+            {alerts.book.settings.legacy.inbox ? <CommandButton command="admin.shell.inbox" className="secondary-btn" type="button" aria-label="Inbox" onDone={() => setInboxOpen((open) => !open)}>Inbox</CommandButton> : null}
             <div className="admin-profile">
               <div className="avatar">{agent ? agent.name.slice(0, 2).toUpperCase() : "AD"}</div>
               <div>
@@ -194,7 +208,7 @@ export function AppShell({ page, children }: AppShellProps) {
             <CommandButton command="admin.shell.closeSearch" className="secondary-btn" type="button" onDone={() => setSearchOpen(false)}>Close</CommandButton>
           </div>
         ) : null}
-        {inboxOpen ? (
+        {inboxOpen && alerts.book.settings.legacy.inbox ? (
           <div className="panel">
             <h3>Inbox</h3>
             <ul>

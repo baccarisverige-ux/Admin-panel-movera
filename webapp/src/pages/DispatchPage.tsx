@@ -12,6 +12,8 @@ import { zoneById } from "../markets/markets";
 import { zoneAllowed } from "../markets/scope";
 import { useMarketScope } from "../markets/useMarketScope";
 import { CommandButton } from "../ui/CommandButton";
+import { useAlertsMaybe } from "../alerts/AlertsContext";
+import { DispatchAlerts } from "../alerts/DispatchAlerts";
 import { cancelRecords, driverFacts, onlyFinishingNearby } from "../dispatch/demo";
 import { CancelView } from "../dispatch/CancelView";
 import { EventsView } from "../dispatch/EventsView";
@@ -111,6 +113,8 @@ export function DispatchPage() {
   const countryLive = useMemo(() => live.filter((driver) => market.zones.some((zone) => zone.id === driver.zoneId)), [live, market]);
   const factsFor = useCallback((pickup: [number, number]) => onlyFinishingNearby(driverFacts(countryLive, statsOf, pickup)), [countryLive, statsOf]);
   const [loadedAt] = useState(() => Date.now());
+  const sharedAlerts = useAlertsMaybe();
+  const ownAlerts = sharedAlerts ? sharedAlerts.book.settings.legacy.dispatchAlerts : true;
   const records = useMemo(() => cancelRecords(country, zones.map((zone) => ({ id: zone.id, name: zone.name, center: zone.center })), (drivers.data ?? []).map((row) => ({ id: row.id, name: row.name, zoneId: row.zoneId })), loadedAt), [country, zones.map((zone) => zone.id).join(","), drivers.data, loadedAt]);
 
   function go(patch: Record<string, string | null>) {
@@ -253,7 +257,7 @@ export function DispatchPage() {
           onNotice={say}
         />
       ) : null}
-      {!slice.loading && view === "live" ? <LiveView book={book} market={market} zones={zones} drivers={live.filter((driver) => zones.some((zone) => zone.id === driver.zoneId))} requests={requests} candidatesOf={candidatesOf} rulesOf={liveOf} busyOf={busyOf} hhmm={hhmm} canControl={canControl} agentId={agent?.id ?? ""} withScope={(path) => path} onNotice={say} /> : null}
+      {!slice.loading && view === "live" ? <LiveView book={book} market={market} zones={zones} drivers={live.filter((driver) => zones.some((zone) => zone.id === driver.zoneId))} requests={requests} candidatesOf={candidatesOf} rulesOf={liveOf} busyOf={busyOf} hhmm={hhmm} canControl={canControl} agentId={agent?.id ?? ""} withScope={(path) => path} onNotice={say} sharedAlerts={ownAlerts ? undefined : <DispatchAlerts zoneIds={zones.map((zone) => zone.id)} />} /> : null}
       {!slice.loading && view === "test" ? <TestView market={market} zones={zones} zoneId={zoneId || zones[0]?.id || ""} onZone={(id) => go({ zone: id })} draftOf={rulesOf} liveOf={liveOf} countryDraft={countryRules} countryLive={liveCountry(book, country)} controlOf={(id) => book.control[id]} factsFor={factsFor} busyOf={busyOf} hhmm={hhmm} hasChanges={changes.length > 0 || countryChanged.length > 0} events={book.events.filter((event) => event.country === country)} /> : null}
       {!slice.loading && view === "events" ? <EventsView book={book} market={market} drivers={countryLive.map((driver) => ({ id: driver.id, name: driver.name, zoneName: driver.zoneName }))} canEdit={canEditRole} canBonus={Boolean(agent && can(agent.role, "drivers.bonuses"))} onNotice={say} /> : null}
       {!slice.loading && view === "cancels" ? <CancelView book={book} market={market} records={records} rulesOf={liveOf} canDecide={canControl} agentId={agent?.id ?? ""} money={money} onNotice={say} /> : null}
