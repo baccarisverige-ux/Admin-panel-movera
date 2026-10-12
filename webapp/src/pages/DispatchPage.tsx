@@ -1,0 +1,263 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { AlertTriangle, ArrowLeft, CalendarDays, Download, FlaskConical, History, Radio, Save, Scale, ScrollText, Send, Undo2 } from "lucide-react";
+import { useRecords, useSlice } from "../api/hooks";
+import { can } from "../auth/permissions";
+import { useSession } from "../auth/SessionContext";
+import { liveDrivers } from "../dashboard/live";
+import { candidatesFor, rideRequests, type RideRequest } from "../dashboard/riders";
+import { CATEGORIES } from "../domain/contract";
+import { driverOps, emptyDriverOpsBook, type DriverOpsBook } from "../drivers/ops";
+import { zoneById } from "../markets/markets";
+import { zoneAllowed } from "../markets/scope";
+import { useMarketScope } from "../markets/useMarketScope";
+import { CommandButton } from "../ui/CommandButton";
+import { cancelRecords, driverFacts, onlyFinishingNearby } from "../dispatch/demo";
+import { CancelView } from "../dispatch/CancelView";
+import { EventsView } from "../dispatch/EventsView";
+import { Approvals, HistoryView } from "../dispatch/HistoryView";
+import { LiveView } from "../dispatch/LiveView";
+import { RulesView } from "../dispatch/RulesView";
+import { TestView } from "../dispatch/TestView";
+import {
+  countryLines, DISPATCH_KEY, draftCountry, draftRules, emptyDispatchBook, liveCountry, liveRules, normalizeDispatchBook, pendingChanges, publish, rulesFile, saveDraft, TABS,
+  type CountryDispatch, type DispatchBook, type TabId, type ZoneDispatch,
+} from "../dispatch/rules";
+
+const VIEWS = [
+  { id: "rules", label: "Rules", icon: ScrollText },
+  { id: "live", label: "Live", icon: Radio },
+  { id: "test", label: "Test a ride", icon: FlaskConical },
+  { id: "events", label: "Events & groups", icon: CalendarDays },
+  { id: "cancels", label: "Cancel checks", icon: Scale },
+  { id: "history", label: "History", icon: History },
+] as const;
+
+type View = (typeof VIEWS)[number]["id"];
+
+const SYMBOL = { SE: "kr", FR: "€", TN: "DT" } as const;
+
+export function DispatchPage() {
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const { agent } = useSession();
+  const scope = useMarketScope();
+  const market = scope.market;
+  const country = scope.country;
+  const view: View = VIEWS.some((item) => item.id === params.get("view")) ? (params.get("view") as View) : "rules";
+  const tab: TabId = TABS.some((item) => item.id === params.get("tab")) ? (params.get("tab") as TabId) : "modes";
+  const slice = useSlice<DispatchBook>(DISPATCH_KEY, emptyDispatchBook());
+  const book = useMemo(() => normalizeDispatchBook(slice.value), [slice.value]);
+  const driverStore = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
+  const drivers = useRecords("drivers", undefined, { refetchMs: 10_000 });
+  const trips = useRecords("trips", undefined, { refetchMs: 10_000 });
+  const vehicles = useRecords("vehicles");
+  const incidents = useRecords("incidents");
+  const riders = useRecords("riders");
+  const [working, setWorking] = useState<Record<string, ZoneDispatch>>({});
+  const [workingCountry, setWorkingCountry] = useState<Record<string, CountryDispatch>>({});
+  const [notice, setNotice] = useState("");
+  const [note, setNote] = useState("");
+  const [showChanges, setShowChanges] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => { setTick((value) => value + 1); setNow(Date.now()); }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const access = agent?.scope ?? { zones: "all" as const };
+  const zones = market.zones.filter((zone) => zoneAllowed(access, zone.id) && (!scope.zones.length || scope.zones.includes(zone.id)));
+  const zoneParam = params.get("zone");
+  const zoneId = zoneParam && zones.some((zone) => zone.id === zoneParam) ? zoneParam : "";
+  const canEditRole = Boolean(agent && can(agent.role, "dispatch.edit"));
+  const canApprove = Boolean(agent && can(agent.role, "dispatch.approve"));
+  const canControl = Boolean(agent && can(agent.role, "trips.intervene"));
+  const canEdit = useCallback((id: string) => canEditRole && Boolean(agent && (agent.scope.zones === "all" || agent.scope.zones.includes(id))), [canEditRole, agent]);
+  const symbol = SYMBOL[country];
+  const money = (value: number) => `${new Intl.NumberFormat(market.locale, { maximumFractionDigits: 2 }).format(value)} ${symbol}`;
+  const hhmm = new Intl.DateTimeFormat("en-GB", { timeZone: market.timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(now));
+
+  const rulesOf = useCallback((id: string) => working[id] ?? draftRules(book, id), [working, book]);
+  const liveOf = useCallback((id: string) => liveRules(book, id), [book]);
+  const countryRules = workingCountry[country] ?? draftCountry(book, country);
+  const zoneIds = zones.map((zone) => zone.id);
+  const allRules = Object.fromEntries(zoneIds.map((id) => [id, rulesOf(id)]));
+  const changes = pendingChanges(book, allRules, zoneIds);
+  const countryChanged = countryLines(liveCountry(book, country), countryRules);
+  const changed = new Set(changes.map((change) => change.zoneId));
+  const unsaved = Object.keys(working).some((id) => JSON.stringify(working[id]) !== JSON.stringify(draftRules(book, id))) || Boolean(workingCountry[country] && JSON.stringify(workingCountry[country]) !== JSON.stringify(draftCountry(book, country)));
+  const lineCount = changes.reduce((sum, change) => sum + change.lines.length, 0) + countryChanged.length;
+  const at = new Date(now).toISOString();
+  const countries = { ...(book.countries[country] ? { [country]: draftCountry(book, country) } : {}), ...(workingCountry[country] ? { [country]: countryRules } : {}) };
+  const published = agent ? publish(book, allRules, countries, zoneIds, agent.id, at, note.trim()) : { book, live: [], waiting: [], error: "Sign in again." };
+  const drafted = saveDraft(book, working, workingCountry);
+
+  const live = useMemo(() => liveDrivers(drivers.data ?? [], vehicles.data ?? [], trips.data ?? [], incidents.data ?? [], tick), [drivers.data, vehicles.data, trips.data, incidents.data, tick]);
+  const onlineIds = useMemo(() => new Set(live.map((driver) => driver.id)), [live]);
+  const requests = useMemo(() => rideRequests(trips.data ?? [], riders.data ?? [], (id) => onlineIds.has(id)), [trips.data, riders.data, onlineIds]);
+  const statsOf = useCallback((id: string) => {
+    const record = (drivers.data ?? []).find((row) => row.id === id);
+    if (!record) return { rating: 4.7, acceptancePct: 85, cancelPct: 5, categories: ["economy"] };
+    const ops = driverOps(driverStore.value, { id: record.id, name: record.name, fleetId: record.fleetId, status: record.status, kind: record.kind });
+    return { rating: ops.ratings.stars, acceptancePct: ops.ratings.acceptancePct, cancelPct: ops.ratings.cancellationPct, categories: CATEGORIES.filter((category) => ops.categories[category.id]).map((category) => category.id) };
+  }, [drivers.data, driverStore.value]);
+  const candidatesOf = (request: RideRequest) => candidatesFor(request, live, (id) => statsOf(id).categories);
+  const busyOf = (id: string) => {
+    const free = live.filter((driver) => driver.zoneId === id && driver.state === "free").length;
+    const waiting = requests.filter((request) => request.zoneId === id).length;
+    return Math.round((waiting / Math.max(1, free)) * 10) / 10;
+  };
+  const countryLive = useMemo(() => live.filter((driver) => market.zones.some((zone) => zone.id === driver.zoneId)), [live, market]);
+  const factsFor = useCallback((pickup: [number, number]) => onlyFinishingNearby(driverFacts(countryLive, statsOf, pickup)), [countryLive, statsOf]);
+  const [loadedAt] = useState(() => Date.now());
+  const records = useMemo(() => cancelRecords(country, zones.map((zone) => ({ id: zone.id, name: zone.name, center: zone.center })), (drivers.data ?? []).map((row) => ({ id: row.id, name: row.name, zoneId: row.zoneId })), loadedAt), [country, zones.map((zone) => zone.id).join(","), drivers.data, loadedAt]);
+
+  function go(patch: Record<string, string | null>) {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+    }
+    setParams(next, { replace: true });
+  }
+
+  function back() {
+    if (view !== "rules") go({ view: null });
+    else if (zoneId) go({ zone: null });
+    else if (window.history.length > 1) navigate(-1);
+    else navigate("/");
+  }
+
+  function downloadRules() {
+    const file = rulesFile(book, country, new Date().toISOString());
+    const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `movera-dispatch-rules-${country}-rev${book.draftRev}.json`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice(`Rules file downloaded: every zone in ${market.name}, revision ${book.draftRev}.`);
+  }
+
+  const say = (text: string) => setNotice(text);
+  const scopeLabel = (ids: string[]) => (ids.length === 1 ? ids[0] : "all");
+
+  return (
+    <div className="dx-page">
+      <header className="dx-head">
+        <button data-command="admin.dispatch.view" type="button" className="dash-btn ghost dx-back" onClick={back} aria-label="Go back"><ArrowLeft size={16} aria-hidden="true" /> Back</button>
+        <div className="dx-head-text">
+          <h2>Dispatch in {market.name}</h2>
+          <p>How ride requests find a driver: Radar, Exclusive and reservations, with rules for every zone.</p>
+        </div>
+        <button data-command="admin.dispatch.rulesFile" type="button" className="dash-btn ghost" onClick={downloadRules} title="All live rules in one file for the backend team"><Download size={15} aria-hidden="true" /> Rules file</button>
+      </header>
+
+      <div className="dash-tabs dx-views" role="tablist" aria-label="Dispatch sections">
+        {VIEWS.map((item) => {
+          const Icon = item.icon;
+          const count = item.id === "history" ? book.approvals.length : 0;
+          return (
+            <button data-command="admin.dispatch.view" key={item.id} type="button" role="tab" aria-selected={view === item.id} className={view === item.id ? "active" : undefined} onClick={() => go({ view: item.id === "rules" ? null : item.id })}>
+              <Icon size={15} aria-hidden="true" /> {item.label}{count ? <span className="tab-count">{count}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {view !== "history" ? <Approvals book={book} agentId={agent?.id ?? ""} canApprove={canApprove} onNotice={say} compact /> : null}
+
+      {view === "rules" || view === "test" ? (
+        <section className={changes.length || countryChanged.length ? "dx-publish has-changes" : "dx-publish"} aria-label="Publish">
+          <div className="dx-publish-text">
+            {changes.length || countryChanged.length ? (
+              <>
+                <b>{lineCount} change{lineCount === 1 ? "" : "s"} not live yet</b>
+                <small>{[...changes.map((change) => zoneById(change.zoneId)?.name ?? change.zoneId), ...(countryChanged.length ? [`${market.name} rules`] : [])].join(", ")}{unsaved ? " · not saved" : " · saved as a draft"}</small>
+              </>
+            ) : (
+              <>
+                <b>Everything is live</b>
+                <small>Change a rule, then publish it now or save it as a draft and test it first.</small>
+              </>
+            )}
+          </div>
+          {changes.length || countryChanged.length ? (
+            <div className="dx-publish-actions">
+              <button data-command="admin.dispatch.view" type="button" className="dash-btn small ghost" aria-expanded={showChanges} onClick={() => setShowChanges((value) => !value)}>{showChanges ? "Hide changes" : "See changes"}</button>
+              {unsaved ? <button data-command="admin.dispatch.edit" type="button" className="dash-btn small ghost" onClick={() => { setWorking({}); setWorkingCountry({}); setNotice("Unsaved changes were thrown away."); }}><Undo2 size={13} aria-hidden="true" /> Discard</button> : null}
+              {unsaved ? (
+                <CommandButton command="admin.dispatch.saveDraft" className="dash-btn small ghost" targetId="dispatch draft" confirmTarget={false} scope={scopeLabel([...changed])} before={`draft ${book.draftRev}`} after={`draft ${drafted.draftRev}`} expectedSliceRev={book.draftRev} sliceKey={DISPATCH_KEY} value={drafted} disabled={!canEditRole} onDone={() => { setWorking({}); setWorkingCountry({}); setNotice("Draft saved. Nothing is live yet. Test it in Test a ride, then publish."); }}>
+                  <Save size={13} aria-hidden="true" /> Save draft
+                </CommandButton>
+              ) : null}
+              {view !== "test" ? <button data-command="admin.dispatch.view" type="button" className="dash-btn small ghost" onClick={() => go({ view: "test" })}><FlaskConical size={13} aria-hidden="true" /> Test it</button> : null}
+              <CommandButton command="admin.dispatch.publish" className="dash-btn small publish" targetId="dispatch rules" confirmTarget={false} scope={scopeLabel([...changed])} before={`rev ${book.draftRev}`} after={`rev ${published.book.draftRev}`} expectedSliceRev={book.draftRev} sliceKey={DISPATCH_KEY} value={published.book} disabled={!canEditRole || Boolean(published.error)} title={published.error} onDone={() => {
+                const liveNames = published.live.map((id) => zoneById(id)?.name ?? id);
+                const waitNames = published.waiting.map((id) => zoneById(id)?.name ?? id);
+                setWorking({});
+                setWorkingCountry({});
+                setNote("");
+                setShowChanges(false);
+                setNotice([liveNames.length || countryChanged.length ? `Live now${liveNames.length ? `: ${liveNames.join(", ")}` : ` in ${market.name}`}.` : "", waitNames.length ? `Waiting for a second admin: ${waitNames.join(", ")}.` : ""].filter(Boolean).join(" "));
+              }}>
+                <Send size={13} aria-hidden="true" /> Publish now
+              </CommandButton>
+            </div>
+          ) : null}
+          {showChanges && (changes.length || countryChanged.length) ? (
+            <div className="dx-changes">
+              <ul aria-label="Changes not live yet">
+                {changes.map((change) => (
+                  <li key={change.zoneId}>
+                    <b>{zoneById(change.zoneId)?.name ?? change.zoneId}</b>{change.big ? <span className="dx-dot waiting">Needs a second admin</span> : null}
+                    <ul>{change.lines.map((line) => <li key={line}>{line}</li>)}</ul>
+                  </li>
+                ))}
+                {countryChanged.length ? <li><b>{market.name}</b><ul>{countryChanged.map((line) => <li key={line}>{line}</li>)}</ul></li> : null}
+              </ul>
+              <label className="field">Note for the history (optional)<input aria-label="Publish note" maxLength={120} value={note} onChange={(event) => setNote(event.target.value)} placeholder="For example More drivers on the radar for Friday nights" /></label>
+            </div>
+          ) : null}
+          {published.error && (changes.length || countryChanged.length) ? <p className="dx-publish-error" role="alert"><AlertTriangle size={13} aria-hidden="true" /> {published.error}</p> : null}
+        </section>
+      ) : null}
+
+      {notice || slice.message ? <p className="pricing-notice" role="status">{notice} {slice.message}</p> : null}
+      {slice.loading ? <p className="state-line">Loading dispatch rules.</p> : null}
+
+      {!slice.loading && view === "rules" ? (
+        <RulesView
+          book={book}
+          market={market}
+          zones={zones}
+          zoneId={zoneId}
+          onZone={(id) => go({ zone: id })}
+          tab={tab}
+          onTab={(next) => go({ tab: next === "modes" ? null : next })}
+          rulesOf={rulesOf}
+          onRules={(id, next) => setWorking((current) => ({ ...current, [id]: next }))}
+          country={countryRules}
+          onCountry={(next) => setWorkingCountry((current) => ({ ...current, [country]: next }))}
+          changed={changed}
+          canEdit={canEdit}
+          busyOf={busyOf}
+          hhmm={hhmm}
+          money={money}
+          symbol={symbol}
+          agentId={agent?.id ?? ""}
+          onNotice={say}
+        />
+      ) : null}
+      {!slice.loading && view === "live" ? <LiveView book={book} market={market} zones={zones} drivers={live.filter((driver) => zones.some((zone) => zone.id === driver.zoneId))} requests={requests} candidatesOf={candidatesOf} rulesOf={liveOf} busyOf={busyOf} hhmm={hhmm} canControl={canControl} agentId={agent?.id ?? ""} withScope={(path) => path} onNotice={say} /> : null}
+      {!slice.loading && view === "test" ? <TestView market={market} zones={zones} zoneId={zoneId || zones[0]?.id || ""} onZone={(id) => go({ zone: id })} draftOf={rulesOf} liveOf={liveOf} countryDraft={countryRules} countryLive={liveCountry(book, country)} controlOf={(id) => book.control[id]} factsFor={factsFor} busyOf={busyOf} hhmm={hhmm} hasChanges={changes.length > 0 || countryChanged.length > 0} events={book.events.filter((event) => event.country === country)} /> : null}
+      {!slice.loading && view === "events" ? <EventsView book={book} market={market} drivers={countryLive.map((driver) => ({ id: driver.id, name: driver.name, zoneName: driver.zoneName }))} canEdit={canEditRole} canBonus={Boolean(agent && can(agent.role, "drivers.bonuses"))} onNotice={say} /> : null}
+      {!slice.loading && view === "cancels" ? <CancelView book={book} market={market} records={records} rulesOf={liveOf} canDecide={canControl} agentId={agent?.id ?? ""} money={money} onNotice={say} /> : null}
+      {!slice.loading && view === "history" ? <HistoryView book={book} market={market} agentId={agent?.id ?? ""} canEdit={canEditRole} canApprove={canApprove} rulesOf={liveOf} onNotice={say} /> : null}
+    </div>
+  );
+}

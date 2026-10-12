@@ -89,6 +89,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     "riders.block",
     "riders.promotions",
     "drivers.bonuses",
+    "dispatch.edit",
+    "dispatch.approve",
     "zones.read",
     "zones.edit",
     "zones.publish",

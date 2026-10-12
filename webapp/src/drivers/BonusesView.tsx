@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Copy, Flame, MapPinned, Pencil, Plus, Radio, Trophy, Users, Wallet, Zap } from "lucide-react";
 import { useSlice } from "../api/hooks";
 import { market, type MarketId } from "../markets/markets";
@@ -6,6 +6,7 @@ import { CommandButton } from "../ui/CommandButton";
 import { BonusBuilder, categoryName, type BonusDriver } from "./BonusBuilder";
 import { DriverAppPreview } from "./DriverAppPreview";
 import { bonusSummary } from "./bonusDemo";
+import { clearBonusPrefill, takeBonusPrefill } from "../dispatch/prefill";
 import { BONUS_KEY, bonusState, emptyBonusBook, newBonus, normalizeBonusBook, rewardLine, setBonusStatus, timeLine, type BonusBook, type DriverBonus } from "./bonus";
 
 const STATE_LABEL = { live: "Live now", today: "Later today", done: "Done for today", scheduled: "Next days", paused: "Off", ended: "Ended" } as const;
@@ -38,7 +39,15 @@ export function BonusesView({ country, drivers, fleets, agentId, canEdit }: { co
   const slice = useSlice<BonusBook>(BONUS_KEY, emptyBonusBook());
   const book = useMemo(() => normalizeBonusBook(slice.value), [slice.value]);
   const [now] = useState(() => Date.now());
-  const [editing, setEditing] = useState<DriverBonus | null>(null);
+  // An event from Dispatch opens the builder with its area, time and message.
+  const [editing, setEditing] = useState<DriverBonus | null>(() => {
+    const prefill = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("prefill") === "event" ? takeBonusPrefill() : null;
+    if (!prefill) return null;
+    const base = newBonus("area", country, agentId ?? "", now);
+    const day = (iso: string) => (new Date(`${iso.slice(0, 10)}T12:00:00`).getDay() + 6) % 7;
+    return { ...base, name: prefill.name, note: prefill.note.slice(0, 140), areas: [{ id: "A-event", name: prefill.name, ring: prefill.ring }], start: prefill.from.slice(11, 16), end: prefill.until.slice(11, 16), days: [day(prefill.from)], from: prefill.from.slice(0, 10), until: prefill.until.slice(0, 10) };
+  });
+  useEffect(() => clearBonusPrefill(), []);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [notice, setNotice] = useState("");
