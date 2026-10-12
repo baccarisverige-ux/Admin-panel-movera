@@ -1,3 +1,4 @@
+import { logExport } from "../reports/activityLog";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import {
@@ -118,6 +119,7 @@ export function RidersPage() {
     link.download = `movera-riders-${country}-${new Date(now).toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
+    logExport(agent?.id, `${list.length} riders (CSV)`);
     setNotice(`Exported ${list.length} rider${list.length === 1 ? "" : "s"} to CSV.`);
   }
 

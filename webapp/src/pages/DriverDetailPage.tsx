@@ -1,3 +1,4 @@
+import { logExport } from "../reports/activityLog";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { AlertTriangle, ArrowLeft, Building2, Car, CheckCircle2, Hash, Mail, MapPin, MessageSquare, Phone, Star, StickyNote } from "lucide-react";
@@ -447,7 +448,7 @@ export function DriverDetailPage() {
             <div><h3>Earnings</h3><p>{span.label} · {fleet ? `paid to ${fleet.name}` : "paid to the driver"}</p></div>
             <div className="fd-head-tools">
               <PeriodPicker key={`e${period.kind}${period.on ?? ""}${period.from ?? ""}`} period={period} today={localDay(now, market.timeZone)} onChange={(next) => setParams(periodParams(next, params))} />
-              <a className="dash-btn ghost" download={`movera-${driver.id}-statement.csv`} href={`data:text/csv;charset=utf-8,${encodeURIComponent(statement)}`}>Download statement</a>
+              <a className="dash-btn ghost" onClick={() => logExport(agent?.id, `Statement of ${driver.name}`)} download={`movera-${driver.id}-statement.csv`} href={`data:text/csv;charset=utf-8,${encodeURIComponent(statement)}`}>Download statement</a>
             </div>
           </div>
           <div className="fd-earn">

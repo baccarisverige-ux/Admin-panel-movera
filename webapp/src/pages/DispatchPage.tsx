@@ -1,3 +1,4 @@
+import { logExport } from "../reports/activityLog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { AlertTriangle, ArrowLeft, CalendarDays, Download, FlaskConical, History, Radio, Save, Scale, ScrollText, Send, Undo2 } from "lucide-react";
@@ -144,6 +145,7 @@ export function DispatchPage() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    logExport(agent?.id, `Dispatch rules file ${country}`);
     setNotice(`Rules file downloaded: every zone in ${market.name}, revision ${book.draftRev}.`);
   }
 

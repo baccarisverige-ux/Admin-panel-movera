@@ -1,9 +1,11 @@
+import { logExport } from "../reports/activityLog";
 import { useMemo, useState, type ReactNode } from "react";
 import { getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { statusLabel, statusPresentation } from "../domain/labels";
 import { toCsv } from "../reports/csv";
 import { StatusDot } from "./kit";
 import { CommandButton } from "./CommandButton";
+import { useSession } from "../auth/SessionContext";
 
 function textOf(cell: ReactNode): string {
   if (typeof cell === "string" || typeof cell === "number") return statusLabel(String(cell));
@@ -54,6 +56,7 @@ function stableRows(rows: ReactNode[][], rowIds?: string[]): Row[] {
 }
 
 export function DataTable({ head, rows, rowIds, className, state = "ready", onRetry, onRow }: DataTableProps) {
+  const { agent } = useSession();
   const [query, setQuery] = useState("");
   const [chips, setChips] = useState<string[]>([]);
   const [page, setPage] = useState(0);
@@ -110,7 +113,7 @@ export function DataTable({ head, rows, rowIds, className, state = "ready", onRe
           }}
         />
         <CommandButton command="admin.table.filter" className="secondary-btn" type="button" onDone={() => { if (query.trim()) { setChips((current) => [...current, query.trim()]); setQuery(""); } }}>Add filter</CommandButton>
-        <a className="secondary-btn" href={`data:text/csv,${encodeURIComponent(csv)}`} download="movera.csv">Export CSV</a>
+        <a className="secondary-btn" href={`data:text/csv,${encodeURIComponent(csv)}`} download="movera.csv" onClick={() => logExport(agent?.id, "Table (CSV)")}>Export CSV</a>
       </div>
       <div className="actions">
         {chips.map((chip) => (
