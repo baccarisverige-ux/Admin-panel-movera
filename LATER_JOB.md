@@ -91,6 +91,11 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 
 ## 5. Rider app — decided design changes (mock-ups made, not built yet)
 
+Setup
+- [ ] **Google Maps on web / PWA**: add a Maps JavaScript API key (restricted to our web domains) and load the
+      Maps script in `web/index.html`. Today the web build has no Maps script, so maps show a plain grey
+      surface (phones are not affected). The app no longer crashes without it.
+
 Home
 - [ ] Keep current design and colours; sheet background pure white.
 - [ ] Promotion ticket back on top of the sheet when down, no X, tap opens details; update the architecture guard test that forbids promotions.
