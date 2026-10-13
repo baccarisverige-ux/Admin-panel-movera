@@ -89,7 +89,10 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 
 ---
 
-## 5. Rider app — decided design changes (mock-ups made, not built yet)
+## 5. Rider app — decided design changes
+
+Built and merged (13 Oct): Home, Where to, Categories, Set pickup, Payments + Pay with + Add card (design only),
+route colours, Driver on the way sheet, booking-lifecycle fixes. Ticked below. Unticked = still to build.
 
 Book for later (decided 13 Oct, not built yet)
 - [ ] **Same screens as Book now, up to Set pickup.** Home "Later" → new Where to (full screen, suggestions while
@@ -117,37 +120,39 @@ Setup
       surface (phones are not affected). The app no longer crashes without it.
 
 Home
-- [ ] Keep current design and colours; sheet background pure white.
-- [ ] Promotion ticket back on top of the sheet when down, no X, tap opens details; update the architecture guard test that forbids promotions.
-- [ ] Favourites: tap empty Home / Work / Add opens "Set your address" popup.
-- [ ] Sheet: slide up stops at middle; slide down from top goes all the way down; smooth staggered content, soft stop, haptic,
+- [x] Keep current design and colours; sheet background pure white.
+- [x] Promotion ticket back on top of the sheet when down, no X, tap opens details; update the architecture guard test that forbids promotions.
+- [x] Favourites: tap empty Home / Work / Add opens "Set your address" popup.
+- [x] Sheet: slide up stops at middle; slide down from top goes all the way down; smooth staggered content, soft stop, haptic,
       gentle map move, rubber stretch at ends, handle reacts.
 
 "Where to?" screen
-- [ ] Full screen, one move, keyboard ready; pickup shows exact address.
-- [ ] Real suggestions while typing, typed letters coloured, distance; no Next button (tap a real address to continue).
-- [ ] "+" Add stop shown now, "⇅" swap; current map-pin icon on the right of the field → "Choose on map".
-- [ ] Before typing: Home, Work, 5 recent; unset Home/Work opens the same popup as home.
+- [x] Full screen, one move, keyboard ready; pickup shows exact address.
+- [x] Real suggestions while typing, typed letters coloured, distance; no Next button (tap a real address to continue).
+- [x] "+" Add stop shown now, "⇅" swap; current map-pin icon on the right of the field → "Choose on map".
+- [x] Before typing: Home, Work, 5 recent; unset Home/Work opens the same popup as home.
 
 Categories screen
-- [ ] Drag from anywhere; 3 positions (low, middle, full); opens at middle; filters only at full.
-- [ ] Map moves a little to keep the route visible.
-- [ ] Rows: "6 min · Arrive 23:43"; discounted price + crossed old price; promotion ticket on top.
-- [ ] Payment as one thin separate block; "Anything we should know?" deleted.
-- [ ] After Book: (Card with none saved → Add card) → **Set pickup every time** (current location preselected, spots, bags,
+- [x] Drag from anywhere; 3 positions (low, middle, full); opens at middle; filters only at full.
+- [x] Map moves a little to keep the route visible.
+- [x] Rows: "6 min · Arrive 23:43"; discounted price + crossed old price; promotion ticket on top.
+- [x] Payment as one thin separate block; "Anything we should know?" deleted.
+- [x] After Book: (Card with none saved → Add card) → **Set pickup every time** (current location preselected, spots, bags,
       price, payment, "Confirm and search") → search starts.
-- [ ] Set pickup map never moves by itself; pin lifts on touch and drops with a small bounce on release.
-- [ ] "Pay with" full screen only when tapping the payment line.
+- [x] Set pickup map never moves by itself; pin lifts on touch and drops with a small bounce on release.
+- [x] "Pay with" full screen only when tapping the payment line.
 
 All screens
-- [ ] Route colour green → blue (was purple); green pickup pin, blue destination pin.
-- [ ] Pins always show times (pickup time, "Arrive by").
-- [ ] Search screen ("Finding your driver"): keep as it is now.
+- [x] Route colour green → blue (was purple); green pickup pin, blue destination pin.
+- [ ] Pins always show times (pickup time, "Arrive by"). **Done** on Categories and Set pickup (estimates).
+      **Not yet** on Search, Driver on the way and Trip: those pins need the live driver ETA from the server (see 2).
+- [x] Search screen ("Finding your driver"): keep as it is now.
 
 Menu → Wallet & Payments
-- [ ] Same payment list as booking; remove PayPal, separate Swish and **Klarna everywhere**; new Add card screen.
+- [x] Same payment list as booking; remove PayPal, separate Swish and **Klarna everywhere**; new Add card screen.
 
 ---
 
 ## Still to discuss
-- [ ] Rider app: "Driver is on the way" screen and the trip screen.
+- [x] Rider app: "Driver is on the way" screen (built) and the trip screen (decided, see section 5).
+- [ ] Rider app: "Driver has arrived" popup — keep as is (decided). Trip complete / rating screen — not discussed yet.
