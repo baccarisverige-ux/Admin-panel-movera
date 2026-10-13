@@ -25,6 +25,14 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 - [ ] Removed methods stay off everywhere: **PayPal**, **Swish as its own method** (it is inside "Pay in car"), **Klarna**.
 - [ ] Refunds to card or wallet visible in Finance (payments + wallet ledger).
 
+### Wallet used first (split payment)
+- [ ] Minimum wallet balance to use on a ride (for example 10 kr), so tiny balances do not create a split charge.
+- [ ] Order of deductions: promotion first, then wallet, then card / Apple Pay / Google Pay / Pay in car (editable).
+- [ ] Wallet may cover the tip yes/no.
+- [ ] "Use wallet balance first" default on/off for new riders.
+- [ ] Price increases after booking (waiting time, route change) go to the card method only, never beyond the wallet balance; price decreases refund the wallet part first.
+- [ ] Reports and receipts show the wallet part and the card part as two lines totalling the real fare.
+
 ### Promotions
 - [ ] Rider promotion ticket ("30% off your next 5 rides") reads rides left + end date from the admin promotion
       (shown on rider home, categories screen and "Pay with → Vouchers").
@@ -89,10 +97,14 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 - [ ] Receive a **new destination or stop live** during the ride (and accept/decline if admin allows).
 - [ ] Show the **pickup spot name** (for example "Klockarvägen 37 – entrance").
 - [ ] Driver app buttons: every confirm / continue button black, not blue (done in the rider app).
+- [ ] Wallet used first: the driver sees only the amount to collect in cash ("Collect 150 kr"), never the wallet part; the trip summary shows "Wallet 50 kr · Cash 150 kr".
+- [ ] Driver earnings are computed on the full fare, not on the cash part.
 
 ---
 
 ## 5. Rider app — decided design changes
+
+- [ ] Wallet used first: full price stays on the categories list; under the selected ride "50 kr from your wallet · you pay 150 kr" (green "Paid by wallet" tag when it covers all); Set location Total shows "Movera Wallet −50 kr" and the rest on the chosen method; Pay with has "Use wallet balance first" (on by default); receipt shows two lines.
 
 Built and merged (13 Oct): Home, Where to, Categories, Set pickup, Payments + Pay with + Add card (design only),
 route colours, Driver on the way sheet, booking-lifecycle fixes. Ticked below. Unticked = still to build.
