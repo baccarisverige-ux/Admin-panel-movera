@@ -35,6 +35,8 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 - [ ] Max destination changes per ride.
 - [ ] Allowed during trip yes/no; driver may accept/decline a new destination or stop yes/no.
 - [ ] Default refund when the new price is lower: back to card or to Movera Wallet (rider can still choose).
+- [ ] Refund wording per payment method: wallet credit is immediate; card, Apple Pay and Google Pay refunds say "within 2 to 3 business days" (editable text).
+- [ ] Admin panel buttons: every confirm / continue button black, not blue (done in the rider app).
 - [ ] Log of every change, new price, difference charged or refunded.
 
 ### From earlier admin-panel work (said "later")
@@ -86,6 +88,7 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 - [ ] Show **bags** on the ride request.
 - [ ] Receive a **new destination or stop live** during the ride (and accept/decline if admin allows).
 - [ ] Show the **pickup spot name** (for example "Klockarvägen 37 – entrance").
+- [ ] Driver app buttons: every confirm / continue button black, not blue (done in the rider app).
 
 ---
 
