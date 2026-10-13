@@ -168,7 +168,7 @@ Menu → Wallet & Payments
 - [x] Same payment list as booking; remove PayPal, separate Swish and **Klarna everywhere**; new Add card screen.
 
 ---
-- [ ] Set location: when the sheet is short (down), add a Bags option at the top right of the sheet; keep the full-sheet Bags row as well.
+- [x] Set location: when the sheet is short (down), add a Bags option at the top right of the sheet; keep the full-sheet Bags row as well.
 - [x] Change the route while searching, waiting for the driver and on trip: change pickup (until the driver arrives), change destination, add a stop; new price shown before confirming; driver notified. (Rider screens; admin rules are in section 1.)
 
 ## Still to discuss
