@@ -154,7 +154,7 @@ Menu → Wallet & Payments
 
 ---
 - [ ] Set location: when the sheet is short (down), add a Bags option at the top right of the sheet; keep the full-sheet Bags row as well.
-- [ ] Change the route while searching, waiting for the driver and on trip: change pickup (until the driver arrives), change destination, add a stop; new price shown before confirming; driver notified. (Rider screens; admin rules are in section 1.)
+- [x] Change the route while searching, waiting for the driver and on trip: change pickup (until the driver arrives), change destination, add a stop; new price shown before confirming; driver notified. (Rider screens; admin rules are in section 1.)
 
 ## Still to discuss
 - [x] Rider app: "Driver is on the way" screen (built) and the trip screen (decided, see section 5).
