@@ -115,9 +115,10 @@ Ride in progress (built 13 Oct, PR #281)
 - [x] "Driver has arrived" popup stays as it is.
 
 Setup
-- [ ] **Google Maps on web / PWA**: add a Maps JavaScript API key (restricted to our web domains) and load the
-      Maps script in `web/index.html`. Today the web build has no Maps script, so maps show a plain grey
-      surface (phones are not affected). The app no longer crashes without it.
+- [x] **Google Maps on the live web app**: already done — the deploy (`publish-web-live.yml`) injects the Maps key
+      from the `MAPS1` secret into `index.html`. Only local and CI builds have no map (grey surface, no crash).
+- [ ] Owner tests the rider app from the **live web link in Safari** (bookmark), not a native build. Keep that in
+      mind: web-only paths (Safari, no camera padding, DOM map) must be tested on the live site after each deploy.
 
 Home
 - [x] Keep current design and colours; sheet background pure white.
