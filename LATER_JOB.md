@@ -94,14 +94,14 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 Built and merged (13 Oct): Home, Where to, Categories, Set pickup, Payments + Pay with + Add card (design only),
 route colours, Driver on the way sheet, booking-lifecycle fixes. Ticked below. Unticked = still to build.
 
-Book for later (decided 13 Oct, not built yet)
-- [ ] **Same screens as Book now, up to Set pickup.** Home "Later" → new Where to (full screen, suggestions while
+Book for later (built 13 Oct, PR #282)
+- [x] **Same screens as Book now, up to Set pickup.** Home "Later" → new Where to (full screen, suggestions while
       typing, Home/Work/recent) → date & time → categories (scheduled: rows and pins show "Pickup 07:05 · Arrive 08:19")
       → "Schedule [car]" → the new Set pickup sheet (current location preselected, bags, price, payment) with the
       button "Confirm and schedule" → "Your ride is scheduled".
-- [ ] Drop the old "Plan your ride" and old "Confirm pickup spot" from that path. Keep them only for editing an
+- [x] Drop the old "Plan your ride" and old "Confirm pickup spot" from that path. Keep them only for editing an
       existing reservation until that flow is moved too.
-- [ ] Switching Book now → Book for later on the categories screen asks only for the time; the pickup is set once,
+- [x] Switching Book now → Book for later on the categories screen asks only for the time; the pickup is set once,
       on Set pickup at the end.
 
 Ride in progress (built 13 Oct, PR #281)
