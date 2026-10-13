@@ -153,6 +153,7 @@ Menu → Wallet & Payments
 - [x] Same payment list as booking; remove PayPal, separate Swish and **Klarna everywhere**; new Add card screen.
 
 ---
+- [ ] Set location: when the sheet is short (down), add a Bags option at the top right of the sheet; keep the full-sheet Bags row as well.
 
 ## Still to discuss
 - [x] Rider app: "Driver is on the way" screen (built) and the trip screen (decided, see section 5).
