@@ -104,15 +104,15 @@ Book for later (decided 13 Oct, not built yet)
 - [ ] Switching Book now → Book for later on the categories screen asks only for the time; the pickup is set once,
       on Set pickup at the end.
 
-Ride in progress (decided 13 Oct, not built yet)
-- [ ] Headline = the live arrival time, "Arrive by 08:19", destination under it; "ON TRIP" stays as the small chip.
+Ride in progress (built 13 Oct, PR #281)
+- [x] Headline = the live arrival time, "Arrive by 08:19", destination under it; "ON TRIP" stays as the small chip.
       The destination pin shows the same "Arrive by 08:19", updated live.
-- [ ] Same three sheet stops and motion as Driver on the way: low = one row ("Arrive by 08:19" + driver photo,
+- [x] Same three sheet stops and motion as Driver on the way: low = one row ("Arrive by 08:19" + driver photo,
       name, plate); middle = driver card with Message/Call; full = ends where the content ends; stagger, haptic,
       gentle map reframe, recenter button rides on the sheet.
-- [ ] Under the headline, one slim line "Movera · Pay in car · 259 kr" instead of the destination card
+- [x] Under the headline, one slim line "Movera · Pay in car · 259 kr" instead of the destination card
       (the destination was shown twice). Driver card sits higher.
-- [ ] "Driver has arrived" popup stays as it is.
+- [x] "Driver has arrived" popup stays as it is.
 
 Setup
 - [ ] **Google Maps on web / PWA**: add a Maps JavaScript API key (restricted to our web domains) and load the
@@ -144,8 +144,8 @@ Categories screen
 
 All screens
 - [x] Route colour green → blue (was purple); green pickup pin, blue destination pin.
-- [ ] Pins always show times (pickup time, "Arrive by"). **Done** on Categories and Set pickup (estimates).
-      **Not yet** on Search, Driver on the way and Trip: those pins need the live driver ETA from the server (see 2).
+- [x] Pins always show times (pickup time, "Arrive by"): Categories and Set pickup (estimates), Search (chosen
+      ride's estimate), Driver on the way (live "N min"), Trip ("Arrive by", live). Built 13 Oct, PR #281.
 - [x] Search screen ("Finding your driver"): keep as it is now.
 
 Menu → Wallet & Payments
