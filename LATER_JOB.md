@@ -39,7 +39,7 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 - [ ] Reports and receipts show the wallet part and the card part as two lines totalling the real fare.
 
 ### Promotions
-- [ ] Rider promotion ticket ("30% off your next 5 rides") reads rides left + end date from the admin promotion
+- [ ] Rider promotion ticket ("30% off your next 5 rides") reads rides left + end date from the admin promotion (rider side built: PR #296)
       (shown on rider home, categories screen and "Pay with → Vouchers").
 - [ ] Driver side: admin-written promotion shown to drivers on their map (asked earlier — confirm it is wired).
 
@@ -73,13 +73,13 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
       or refund it (card 3–5 days, or wallet instantly — rider chooses).
 - [ ] **Real address search**: instant suggestions from the first letter, typo tolerant ("drottn 5" → Drottninggatan 5),
       nearest first, area + postcode, distance in km, "Show more results".
-- [ ] **Pickup spots per address**: entrances, parking spot, previously used, "Near Home".
+- [ ] **Pickup spots per address**: entrances, parking spot, previously used, "Near Home". (rider side built with a mock: PR #298)
 - [ ] **Live times for map pins**: pickup = time until driver arrives (estimate while searching, live once a driver is found);
       destination = "Arrive by HH:MM" (estimate, then live, also during the trip).
 - [ ] **Badges + category order** sent with the quotes (from admin rules).
 - [ ] **Bags** (No / 1–2 / 3+) saved on the booking. Rider app sends `notes.bags` + `notes.bagsCount` ("1-2" / "3+").
 - [ ] **Quote from the exact pickup point**: quotes are priced from addresses today; when the rider moves the pin on
-      Set pickup the price should be re-quoted from the new coordinates (server re-checks the price at booking).
+      Set pickup the price should be re-quoted from the new coordinates (server re-checks the price at booking). (rider side built with a mock: PR #297)
 - [ ] **Saved cards list** for the rider (after the payment provider): until then Card always opens Add card first.
 - [ ] **Movera Wallet**: balance, "use wallet first" then rest from the chosen method; wallet shown only when balance > 0.
 - [ ] **Promotion**: rides left, end date, discounted price + original price per category in the quote.
