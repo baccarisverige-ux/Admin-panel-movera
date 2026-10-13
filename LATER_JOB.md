@@ -91,6 +91,16 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 
 ## 5. Rider app — decided design changes (mock-ups made, not built yet)
 
+Book for later (decided 13 Oct, not built yet)
+- [ ] **Same screens as Book now, up to Set pickup.** Home "Later" → new Where to (full screen, suggestions while
+      typing, Home/Work/recent) → date & time → categories (scheduled: rows and pins show "Pickup 07:05 · Arrive 08:19")
+      → "Schedule [car]" → the new Set pickup sheet (current location preselected, bags, price, payment) with the
+      button "Confirm and schedule" → "Your ride is scheduled".
+- [ ] Drop the old "Plan your ride" and old "Confirm pickup spot" from that path. Keep them only for editing an
+      existing reservation until that flow is moved too.
+- [ ] Switching Book now → Book for later on the categories screen asks only for the time; the pickup is set once,
+      on Set pickup at the end.
+
 Setup
 - [ ] **Google Maps on web / PWA**: add a Maps JavaScript API key (restricted to our web domains) and load the
       Maps script in `web/index.html`. Today the web build has no Maps script, so maps show a plain grey
