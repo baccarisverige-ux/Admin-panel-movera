@@ -101,6 +101,16 @@ Book for later (decided 13 Oct, not built yet)
 - [ ] Switching Book now → Book for later on the categories screen asks only for the time; the pickup is set once,
       on Set pickup at the end.
 
+Ride in progress (decided 13 Oct, not built yet)
+- [ ] Headline = the live arrival time, "Arrive by 08:19", destination under it; "ON TRIP" stays as the small chip.
+      The destination pin shows the same "Arrive by 08:19", updated live.
+- [ ] Same three sheet stops and motion as Driver on the way: low = one row ("Arrive by 08:19" + driver photo,
+      name, plate); middle = driver card with Message/Call; full = ends where the content ends; stagger, haptic,
+      gentle map reframe, recenter button rides on the sheet.
+- [ ] Under the headline, one slim line "Movera · Pay in car · 259 kr" instead of the destination card
+      (the destination was shown twice). Driver card sits higher.
+- [ ] "Driver has arrived" popup stays as it is.
+
 Setup
 - [ ] **Google Maps on web / PWA**: add a Maps JavaScript API key (restricted to our web domains) and load the
       Maps script in `web/index.html`. Today the web build has no Maps script, so maps show a plain grey
