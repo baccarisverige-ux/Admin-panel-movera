@@ -112,7 +112,7 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 
 ## 5. Rider app — decided design changes
 
-- [x] Menu screen redesign (rider side built, branch rider/menu-redesign): full-screen page with name/photo, Wallet, picture tiles, six illustrated cards, account rows. Still to build behind the cards:
+- [x] Menu screen redesign (rider side built, PR #301 merged 14 Oct): full-screen page with name/photo, Wallet, picture tiles, six illustrated cards, account rows. Still to build behind the cards:
   - [ ] Movera Family: family members on one account, book for them, trip visible to the booker (server + rider screens).
   - [ ] Movera Business: business profile, work rides separated, monthly receipts for expensing (server + rider screens).
   - [ ] Greener rides: CO₂ saved per trip and per year on receipts (server calculation + rider display).
