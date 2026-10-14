@@ -120,6 +120,7 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
   - [ ] Invite friends: referral amounts (give kr 50 / get kr 50) from admin settings, not hard-coded.
   - [ ] Rider rating under the name (★ 5.00) once drivers' ratings are stored server-side.
   - [ ] Promotions NEW badge: mark an offer as new only until the rider has opened it (needs a "seen" flag).
+  - [ ] Menu greeting: always "Hi <first name>" from the rider's real profile name (server/login), never the "Welcome to Movera" placeholder; the rider side already shows "Hi <name>" once a name exists.
 - [ ] Wallet used first: full price stays on the categories list; under the selected ride "50 kr from your wallet · you pay 150 kr" (green "Paid by wallet" tag when it covers all); Set location Total shows "Movera Wallet −50 kr" and the rest on the chosen method; Pay with has "Use wallet balance first" (on by default); receipt shows two lines.
 
 Built and merged (13 Oct): Home, Where to, Categories, Set pickup, Payments + Pay with + Add card (design only),
