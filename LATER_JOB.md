@@ -22,7 +22,7 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 ### Ride categories from the server
 - [ ] Endpoint `GET /api/v1/ride-types` (or in the quotes response): id, name, icon, seats, description, badge, base price, order, enabled, per country/zone. The rider app loads it at start and on the categories screen and caches the last list (rider side built).
 - [ ] The category ids used in promotions and pricing must be the same ids the rider app receives, so "Comfort" in a promotion matches "Comfort" in the list.
-- [ ] Admin: adding, renaming, hiding or reordering a category updates the rider list without an app release.
+- [ ] Admin: adding, renaming, hiding or reordering a category updates the rider list without an app release (rider side built: PR #299, 14 categories with pictures).
 
 ### Payments
 - [ ] **Payment methods on/off per country**: Pay in car (default for every rider), Movera Wallet,
@@ -64,6 +64,7 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 ## 2. Server (backend)
 
 - [ ] Serve the ride categories (`GET /api/v1/ride-types`) from the admin's list; the rider app already reads it.
+- [ ] Category pictures uploaded from the admin: the ride-types response carries an image URL per category; the rider app downloads and caches it, falling back to its built-in picture (today the 14 pictures ship inside the app, so changing one needs an app update).
 
 - [ ] Save and enforce all admin rules (dispatch, radar/exclusive, alerts, pricing/surge per zone, promotions,
       payment methods per country, badges, category order, stop/change rules).
