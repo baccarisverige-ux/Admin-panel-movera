@@ -112,7 +112,14 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 
 ## 5. Rider app — decided design changes
 
-- [ ] Menu screen: next design work (14 Oct). Owner to list the changes (PR #300 no-fix pickup merged 14 Oct).
+- [x] Menu screen redesign (rider side built, branch rider/menu-redesign): full-screen page with name/photo, Wallet, picture tiles, six illustrated cards, account rows. Still to build behind the cards:
+  - [ ] Movera Family: family members on one account, book for them, trip visible to the booker (server + rider screens).
+  - [ ] Movera Business: business profile, work rides separated, monthly receipts for expensing (server + rider screens).
+  - [ ] Greener rides: CO₂ saved per trip and per year on receipts (server calculation + rider display).
+  - [ ] Safety checkup: real step count (trusted contact, preferences, …) from the server; the card shows "1 of 4 done" once it exists.
+  - [ ] Invite friends: referral amounts (give kr 50 / get kr 50) from admin settings, not hard-coded.
+  - [ ] Rider rating under the name (★ 5.00) once drivers' ratings are stored server-side.
+  - [ ] Promotions NEW badge: mark an offer as new only until the rider has opened it (needs a "seen" flag).
 - [ ] Wallet used first: full price stays on the categories list; under the selected ride "50 kr from your wallet · you pay 150 kr" (green "Paid by wallet" tag when it covers all); Set location Total shows "Movera Wallet −50 kr" and the rest on the chosen method; Pay with has "Use wallet balance first" (on by default); receipt shows two lines.
 
 Built and merged (13 Oct): Home, Where to, Categories, Set pickup, Payments + Pay with + Add card (design only),
