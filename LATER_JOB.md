@@ -85,6 +85,21 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 - [ ] **Movera Wallet**: balance, "use wallet first" then rest from the chosen method; wallet shown only when balance > 0.
 - [ ] **Promotion**: rides left, end date, discounted price + original price per category in the quote.
 
+From the rider-app audit fixes (14 Oct, rider PRs #304–#317), the server still has to:
+- [ ] Expire a search that finds no driver and report `noDriverFound` / `expired` (rider app now waits for the server instead of giving up by itself after 3 min).
+- [ ] Return the original ride when the same booking key is sent again (retries must never create a second ride or charge).
+- [ ] Route changes: issue a route quote (`routeQuoteId`, expiry, new total, difference) and refuse an apply whose quote is unknown, expired or re-priced.
+- [ ] Enforce the maximum offer (`maxOfferMinor`) when the rider raises the price while searching.
+- [ ] Login tokens carry the rider id (`sub`); account deletion endpoint (`POST /account/deletion`), revoke sessions and push tokens, erasure schedule.
+- [ ] Current ride and history from the server: `GET /rider/trips/active` and `GET /rider/trips?cursor=` (so a new phone or a cleared browser gets the ride back).
+- [ ] Live ride updates carry `eventId`, `serverTime`, a version that only goes up per trip, and `etaSeconds`.
+- [ ] Rider profile on the server: `PATCH /rider/profile` (already sent by the app) and `GET` for a second device.
+- [ ] Payment methods (`GET /payment-methods`, `PATCH /payment-methods/default`) and a server wallet ledger (top-up credited on capture, ride debited when paid; intents carry `purpose`). Until then release builds keep wallet, saved cards and Book for later switched off.
+- [ ] Book for later: reservations on the server with a quote for the scheduled time.
+- [ ] Ride PIN checked by the driver side on a ride-scoped route (the rider-side verify call was removed).
+- [ ] Notifications inbox API, so the rider's notification list survives a restart.
+- [ ] Support: real messages / cases (today Support lists the rider's rides and an optional email card).
+
 ---
 
 ## 3. Payment provider (for example Stripe)
@@ -96,6 +111,7 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 - [ ] **Apple Pay / Google Pay**: the system pay window shows once, on top of the search screen, when the search starts.
 - [ ] **Saved card**: silent hold when search starts, charge at the end of the ride.
 - [ ] **Pay in car**: no payment window at all.
+- [ ] Card entry through the payment provider's hosted fields (needed before saved cards can be switched on in release builds).
 
 ---
 
@@ -126,6 +142,23 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
 - [x] Home sheet (top position): "Your <Month>" card (month name changes itself; rides this month, amount, rides per week bars, CO₂ tile) + "Start your journey" strip (Catch your flight, Comfort car, Highly rated chauffeur, with pictures) + Help centre row, all on one screen; Schedule a ride button back to blue. (rider side built, PR #302 merged 14 Oct)
   - [ ] Server: the "Your <Month>" numbers come from the server per rider (rides this month, kr saved by promotions/wallet, per-week counts, real CO₂ avoided from distance and vehicle class). Today the app counts the rides saved on the phone, shows the amount spent (not saved), and estimates CO₂ at 0.4 kg per ride.
 - [ ] Wallet used first: full price stays on the categories list; under the selected ride "50 kr from your wallet · you pay 150 kr" (green "Paid by wallet" tag when it covers all); Set location Total shows "Movera Wallet −50 kr" and the rest on the chosen method; Pay with has "Use wallet balance first" (on by default); receipt shows two lines.
+
+Audit fixes — not finished (14 Oct, rider PRs #304–#317 merged; these were left open):
+- [ ] Add the 7 Poppins font files to `assets/google_fonts/` (list in its README); then the app stops downloading fonts (UI-15).
+- [ ] Decide a minimum size for the very small (under 10 px) texts (UI-8).
+- [ ] Move the remaining colours, corner radii and icon sizes to the shared design tokens (UI-18).
+- [ ] Money as whole öre everywhere inside the app (ride snapshot price, finding, wallet, catalog, reservations, offer raise); today only quotes, route changes and the booking check use it (ARCH-11).
+- [ ] Three navigation helpers still open screens directly (notifications, scheduled checkout, ride restore); move them behind the navigation layer (ARCH-17).
+- [ ] Release builds: hide the buttons for features switched off there (wallet, Book for later, saved cards) instead of showing an error when tapped (ARCH-7).
+- [ ] Language setting should change the app's language (FLOW-7).
+- [ ] Two "book for later" paths: History opens the old Schedule map screen, Home uses the new route picker; choose one (NAV-12).
+- [ ] After "Change route" on the No driver found sheet, keep the destination filled in on Home (RIDE-19).
+- [ ] Quotes on the categories list should include the stops; scheduled bookings should send the destination point and stops (ARCH-8, RIDE-22).
+- [ ] Real Terms and Privacy text from legal (the pages are a summary today) (FLOW-16).
+- [ ] Support email address for the "Email support" card (`MOVERA_SUPPORT_EMAIL` at build) (FLOW-8).
+- [ ] Code used only by tests (update policy, map coordinator, anti-abuse, driver-arriving repository/view, fare breakdown, ride details sheet, plan-ride address box, messages, reservation trip adapter, catalog quote repository, quick ride notes, confirm location): wire each in or move it to test support (CODE-10).
+- [ ] CI: fold the many phase/batch checks into one workflow and add an iOS build (CODE-13).
+- [ ] Pass the real app version at build (`MOVERA_APP_VERSION`) and use it in the menu instead of the fixed "v1.0.0" (CODE-20).
 
 Built and merged (13 Oct): Home, Where to, Categories, Set pickup, Payments + Pay with + Add card (design only),
 route colours, Driver on the way sheet, booking-lifecycle fixes. Ticked below. Unticked = still to build.
@@ -193,5 +226,7 @@ Menu → Wallet & Payments
 - [x] Change the route while searching, waiting for the driver and on trip: change pickup (until the driver arrives), change destination, add a stop; new price shown before confirming; driver notified. (Rider screens; admin rules are in section 1.)
 
 ## Still to discuss
+- [ ] Category id for the standard car: `movera` or `economy` (rider, driver, admin and server must use the same id).
+- [ ] Payment status `processing`: is it the same as `authorized`? (rider app reads it that way for now).
 - [x] Rider app: "Driver is on the way" screen (built) and the trip screen (decided, see section 5).
 - [ ] Rider app: "Driver has arrived" popup — keep as is (decided). Trip complete / rating screen — not discussed yet.
