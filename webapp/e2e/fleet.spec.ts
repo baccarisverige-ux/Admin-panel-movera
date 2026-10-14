@@ -32,8 +32,12 @@ test("each driver document has its own status, expiry date and colour", async ({
   await signInAs(page);
   await page.goto("/drivers/D0002?tab=documents");
   const row = page.getByTestId("doc-vehicle_insurance");
-  const soon = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
-  await row.getByLabel("Vehicle insurance expiry date").fill(soon);
+  const expiry = row.getByLabel("Vehicle insurance expiry date");
+  // Pick a date that differs from the seeded one, or Save never appears.
+  const current = await expiry.inputValue();
+  let soon = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
+  if (soon === current) soon = new Date(Date.now() + 11 * 86_400_000).toISOString().slice(0, 10);
+  await expiry.fill(soon);
   await expect(row).toContainText("Expires in");
   await row.getByRole("button", { name: "Save Vehicle insurance" }).click();
   await expect(page.getByText(/Vehicle insurance saved: Expires in/)).toBeVisible();
