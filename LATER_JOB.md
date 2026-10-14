@@ -123,6 +123,8 @@ Rule: whenever the owner says **"add to later job"**, Claude adds the item here 
   - [ ] Menu greeting: always "Hi <first name>" from the rider's real profile name (server/login), never the "Welcome to Movera" placeholder; the rider side already shows "Hi <name>" once a name exists.
 - [x] Home sheet: remove the pictures from the cards below Where to (the Movera Comfort / Safety carousel cards and any others), keep only the "Plan ahead. Ride on time." card's picture. (rider side built, branch rider/menu-where-to)
 - [ ] Home sheet: no stop in the middle while sliding; only the low and the top positions.
+- [x] Home sheet (top position): "Your <Month>" card (month name changes itself; rides this month, amount, rides per week bars, CO₂ tile) + "Start your journey" strip (Catch your flight, Comfort car, Highly rated chauffeur, with pictures) + Help centre row, all on one screen; Schedule a ride button back to blue. (rider side built, branch rider/menu-where-to)
+  - [ ] Server: the "Your <Month>" numbers come from the server per rider (rides this month, kr saved by promotions/wallet, per-week counts, real CO₂ avoided from distance and vehicle class). Today the app counts the rides saved on the phone, shows the amount spent (not saved), and estimates CO₂ at 0.4 kg per ride.
 - [ ] Wallet used first: full price stays on the categories list; under the selected ride "50 kr from your wallet · you pay 150 kr" (green "Paid by wallet" tag when it covers all); Set location Total shows "Movera Wallet −50 kr" and the rest on the chosen method; Pay with has "Use wallet balance first" (on by default); receipt shows two lines.
 
 Built and merged (13 Oct): Home, Where to, Categories, Set pickup, Payments + Pay with + Add card (design only),
