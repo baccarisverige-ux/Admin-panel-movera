@@ -1,15 +1,19 @@
 import { Link, useNavigate, useParams } from "react-router";
 import { useMemo, useState } from "react";
 import { ArrowLeft, Banknote, Car, Clock3, Eye, FileText, Flag, History, ListOrdered, Lock, MapPinned, MessagesSquare, Route as RouteIcon, ShieldCheck, Star, Users, Wrench } from "lucide-react";
-import { useAudit, useDrivers, useRecords, useSlice, useTrips } from "../api/hooks";
+import { useAdminApi } from "../api/AdminApiContext";
+import { emptySafety, useAudit, useDrivers, useRecords, useSlice, useTrips, type SafetyBook } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
 import { can } from "../auth/permissions";
+import { demoShift } from "../dashboard/scheduled";
 import { formatOre } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
 import { MapPanel } from "../dispatch/maps";
 import { formatMoney, market, zoneById } from "../markets/markets";
 import { emptyPricingStore, normalizeStore, zoneBook, SLICE_KEY as PRICING_KEY } from "../pricing/zonePricing";
 import { Cards } from "../reports/ui";
+import { INCIDENT_OPS_KEY, caseOf, emptyIncidentOps, normalizeIncidentOps, type IncidentOps } from "../safety/cases";
+import { answerLabel, asRideChecks, followText, isRed, reasonText, shiftOf, shifted, triggerLabel } from "../safety/rideCheck";
 import {
   TRIP_OPS_KEY,
   callsOf,
@@ -54,6 +58,8 @@ import { adjustFare, waitingMinutes } from "../trips/rules";
 import { CommandButton } from "../ui/CommandButton";
 import { StatusDot } from "../ui/kit";
 
+type TimelineEvent = { at: string; text: string; tone: "status" | "good" | "muted" | "call" | "check" | "alert"; link?: { to: string; label: string } };
+
 const SECTIONS = [
   ["timeline", "Timeline"],
   ["route", "Route"],
@@ -76,6 +82,12 @@ export function TripPage() {
   const opsSlice = useSlice<TripOps>(TRIP_OPS_KEY, emptyTripOps(), { enabled: can(role, "trips.read") });
   const pricing = useSlice<unknown>(PRICING_KEY, emptyPricingStore());
   const ops = normalizeTripOps(opsSlice.value);
+  const api = useAdminApi();
+  const canSafety = can(role, "incidents.read");
+  const rideCheckRows = useRecords("rideChecks", null);
+  const incidents = useRecords("incidents", null);
+  const safety = useSlice<SafetyBook>("safetyOps", emptySafety(), { enabled: canSafety });
+  const incidentOps = useSlice<IncidentOps>(INCIDENT_OPS_KEY, emptyIncidentOps(), { enabled: canSafety });
   const trip = trips.data?.find((item) => item.id === tripId);
   const [driverId, setDriverId] = useState("");
   const [farePercent, setFarePercent] = useState("10");
@@ -137,7 +149,27 @@ export function TripPage() {
   const zone = zoneById(trip.zoneId);
   const time = (iso: string) => new Intl.DateTimeFormat(place.locale, { timeZone: place.timeZone, timeStyle: "short" }).format(new Date(iso));
 
-  const events = [
+  // Ride checks on this trip: when the card opened and what each person answered.
+  const now = Date.now();
+  const rideEvents: TimelineEvent[] = asRideChecks(rideCheckRows.data).filter((check) => check.tripId === trip.id).flatMap((check) => {
+    const incident = check.incidentId ? incidents.data?.find((row) => row.id === check.incidentId) : undefined;
+    const openedAt = incident ? caseOf(incident, safety.value, normalizeIncidentOps(incidentOps.value), now).openedAt : null;
+    const shift = shiftOf(check, openedAt, demoShift(now, api.demo));
+    const at = (iso: string) => new Date(shifted(iso, shift)).toISOString();
+    const link = check.incidentId && canSafety ? { to: `/incidents?case=${check.incidentId}`, label: check.incidentId } : undefined;
+    return [
+      { at: at(check.at), text: `Ride check: ${triggerLabel(check.trigger)} · ${reasonText(check)}`, tone: "check", link },
+      ...(["driver", "rider"] as const).flatMap((who): TimelineEvent[] => {
+        const answer = check[who];
+        if (!answer) return [{ at: at(check.at), text: `Ride check, ${who}: no answer yet`, tone: "muted" }];
+        const extra = [...(answer.follow ?? []).map(followText), ...(answer.text ? [`“${answer.text}”`] : [])];
+        return [{ at: at(answer.at), text: `Ride check, ${who}: ${answerLabel(who, answer)}${extra.length ? ` · ${extra.join(" · ")}` : ""}`, tone: isRed(answer) ? "alert" : answer.choice === "ok" ? "good" : "check" }];
+      }),
+    ];
+  });
+
+  const events: TimelineEvent[] = [
+    ...rideEvents,
     ...timelineOf(trip).map((event) => ({ at: event.at, text: event.label, tone: "status" as const })),
     ...offers.map((offer) => ({ at: offer.at, text: offer.answer === "accepted" ? `${driverName(offer.driverId)} said yes` : `Asked ${driverName(offer.driverId)}: ${offer.answer}`, tone: offer.answer === "accepted" ? "good" as const : "muted" as const })),
     ...calls.map((call) => ({ at: call.at, text: `${call.from === "driver" ? "The driver called the rider" : "The rider called the driver"}${call.answered ? "" : " (not answered)"}`, tone: "call" as const })),
@@ -191,7 +223,7 @@ export function TripPage() {
         <Section id="timeline" title="Timeline" icon={<Clock3 size={16} />} testId="trip-timeline">
           <ol className="op-timeline">
             {events.map((event, index) => (
-              <li key={`${event.at}-${index}`} className={event.tone}><time>{time(event.at)}</time><i aria-hidden="true" /><span>{event.text}</span></li>
+              <li key={`${event.at}-${index}`} className={event.tone}><time>{time(event.at)}</time><i aria-hidden="true" /><span>{event.text}{event.link ? <> · <Link to={event.link.to}>{event.link.label}</Link></> : null}</span></li>
             ))}
           </ol>
           <p className="op-help">Who cancelled: {cancelledBy(trip.status)}. Reason: {cancelReason(trip)}.</p>

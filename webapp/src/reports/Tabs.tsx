@@ -244,7 +244,7 @@ export function DispatchTab({ zones, window, compare, fmt, onCsv }: TabProps) {
 
 export function AlertsTab({ window, compare, fmt, onCsv }: TabProps) {
   const shared = useAlertsMaybe();
-  const history = useMemo(() => (shared ? solvedHistory(shared.book, shared.safety.value, (id) => shared.facts.incidents.find((row) => row.id === id)?.zoneId ?? null) : []), [shared?.book, shared?.safety.value, shared?.facts.incidents]);
+  const history = useMemo(() => (shared ? solvedHistory(shared.book, shared.safety.value, (id) => shared.facts.incidents.find((row) => row.id === id)?.zoneId ?? null, (id) => shared.facts.incidents.find((row) => row.id === id)?.kind === "ride_check") : []), [shared?.book, shared?.safety.value, shared?.facts.incidents]);
   const data = alertsData(history, window, shared?.counts ?? { critical: 0, important: 0, info: 0 });
   useCsv(onCsv, { name: "alerts", head: ["Alert", "Level", "Taken by", "Solved by", "Solved at", "Minutes to solve", "Note"], rows: data.rows.map((row) => [row.title, row.level, agentName(row.takenBy), agentName(row.solvedBy), row.doneAt, row.solveMin, row.note]) });
   return (

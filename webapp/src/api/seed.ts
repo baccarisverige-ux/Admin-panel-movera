@@ -1,7 +1,9 @@
 import { TRIP_STATUSES } from "../domain/contract.ts";
 import { MARKETS } from "../markets/markets.ts";
+import type { RideCheck } from "../safety/rideCheck.ts";
 import { marketRows } from "./marketSeed.ts";
 import { sosDriverId } from "./presence.ts";
+import { seedRideChecks } from "./rideCheckSeed.ts";
 
 export const PLATE = "ABC 123";
 export const TRIP_ID = "T0001";
@@ -98,6 +100,8 @@ export type DemoDb = {
   reservations: DemoRecord[];
   tickets: DemoRecord[];
   incidents: DemoRecord[];
+  /** Every Ride check the driver and rider apps sent, OK or not. */
+  rideChecks: RideCheck[];
   payments: DemoRecord[];
   refunds: DemoRecord[];
   payouts: DemoRecord[];
@@ -326,6 +330,7 @@ export function createSeed(now = SEED_NOW): DemoDb {
     ownerId: index === 1 ? "O2" : "O1",
   }));
   const abroad = marketRows(now, { riders, drivers, zones: zones.slice(0, 9).map((zone) => zone.id) });
+  const rideChecks = seedRideChecks(now, { trips, riders, vehicles: [...vehicles, ...extraVehicles] });
   return {
     rev: 1,
     updatedAt: now,
@@ -338,7 +343,8 @@ export function createSeed(now = SEED_NOW): DemoDb {
     trips: [...trips, ...abroad.trips],
     reservations: [...reservations, ...abroad.sePastReservations, ...abroad.reservations],
     tickets: [...tickets, ...abroad.tickets],
-    incidents: [...incidents, ...abroad.incidents],
+    incidents: [...incidents, ...abroad.incidents, ...rideChecks.incidents],
+    rideChecks: rideChecks.checks,
     payments: [...payments, ...abroad.payments],
     refunds,
     payouts: [...payouts, ...abroad.payouts],

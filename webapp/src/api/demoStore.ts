@@ -20,12 +20,26 @@ function storage(): StorageLike {
   return localStorage;
 }
 
+let seedChecks: Pick<DemoDb, "rideChecks" | "incidents"> | null = null;
+
+/** Demo data saved before Ride check existed gets the seeded checks and their incidents. */
+function withRideChecks(db: DemoDb): DemoDb {
+  if (Array.isArray(db.rideChecks)) return db;
+  seedChecks ??= (() => {
+    const seed = createSeed();
+    return { rideChecks: seed.rideChecks, incidents: seed.incidents.filter((row) => row.kind === "ride_check") };
+  })();
+  const have = new Set((db.incidents ?? []).map((row) => row.id));
+  return { ...db, rideChecks: seedChecks.rideChecks, incidents: [...(db.incidents ?? []), ...seedChecks.incidents.filter((row) => !have.has(row.id))] };
+}
+
 export function loadDb(): DemoDb {
   const raw = storage().getItem(DB_KEY);
   if (!raw) return createSeed();
   try {
-    const parsed = JSON.parse(raw) as DemoDb;
-    if (!parsed || !Array.isArray(parsed.drivers)) return createSeed();
+    const stored = JSON.parse(raw) as DemoDb;
+    if (!stored || !Array.isArray(stored.drivers)) return createSeed();
+    const parsed = withRideChecks(stored);
     return {
       ...parsed,
       operations: parsed.operations ?? {},

@@ -22,7 +22,9 @@ assert(seed.reservations.filter((row) => /^B0\d\d$/.test(row.id)).length === 40,
 assert(sweden(seed.reservations).length === 70, "Stockholm adds 30 past scheduled rides");
 assert(seed.reservations.slice(0, 40).every((row) => row.status !== "no_show"), "original reservations keep their statuses");
 assert(sweden(seed.tickets).length === 35, "35 Stockholm tickets");
-assert(sweden(seed.incidents).length === 6, "6 Stockholm incidents");
+assert(sweden(seed.incidents.filter((row) => row.kind !== "ride_check")).length === 6, "6 Stockholm SOS incidents");
+assert(sweden(seed.incidents.filter((row) => row.kind === "ride_check")).length === 2, "2 Stockholm Ride check incidents");
+assert(seed.rideChecks.every((check) => seed.trips.some((trip) => trip.id === check.tripId)), "every ride check is on a real trip");
 assert(sweden(seed.payments).length === 300, "300 Stockholm payments");
 assert(seed.drivers.slice(0, 60).every((row, index) => row.id === `D${String(index + 1).padStart(4, "0")}`), "Stockholm rows keep their ids and order");
 for (const id of ["FR", "TN"] as const) {

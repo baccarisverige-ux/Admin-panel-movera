@@ -182,3 +182,30 @@
   .al-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .al-pop { position: fixed; left: 12px; right: 12px; top: 70px; width: auto; }
 }
+
+/* Ride check: the red banner under the top bar, on every page, until an admin opens the alert. */
+.rc-banner { display: grid; gap: 6px; margin: 14px 26px 0; }
+.rc-banner-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; border-radius: 14px; background: #c62f2f; color: #fff; box-shadow: 0 8px 22px rgba(198, 47, 47, .28); animation: rc-pulse 1.2s ease-in-out 3; min-width: 0; }
+.rc-banner-icon { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: rgba(255, 255, 255, .16); }
+.rc-banner-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.rc-banner-text b { font-size: 14px; }
+.rc-banner-text small { font-size: 12px; opacity: .92; overflow-wrap: anywhere; }
+.rc-banner-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: #fff; color: #a51f1f; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.rc-banner-btn:hover { background: #fdecec; }
+.rc-banner-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.rc-banner-btn:disabled { opacity: .7; cursor: progress; }
+.rc-banner .state-line { flex-basis: 100%; color: #fff; font-size: 12px; }
+.rc-banner-more { margin: 0; font-size: 12.5px; font-weight: 700; color: #9b2020; }
+/* Three short pulses when it appears, then still: a page that never stops repainting slows the maps. */
+@keyframes rc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .82; } }
+@media (prefers-reduced-motion: reduce) { .rc-banner-row { animation: none; } }
+@media (max-width: 900px) {
+  .rc-banner { margin: 10px 14px 0; }
+  .rc-banner-row { flex-wrap: wrap; }
+  .rc-banner-text { flex-basis: calc(100% - 50px); }
+  .rc-banner-btn { width: 100%; }
+}
+.dx-alerts li.rc-live { background: #c62f2f; color: #fff; }
+.dx-alerts li.rc-live .al-status { color: #fff; opacity: .9; }
+.dx-alerts li.rc-live .dash-btn.danger { background: #fff; border-color: #fff; color: #a51f1f; }
+.dx-alerts li.rc-live .state-line { color: #fff; font-size: 12px; }

@@ -19,7 +19,8 @@ export function AlertBell() {
   const channels = data.book.settings.channels;
   const signals: Signal[] = quiet ? [] : data.active
     .filter((alert) => channels[alert.level].sound || channels[alert.level].browser)
-    .map((alert) => ({ id: alert.id, title: `${LEVELS.find((item) => item.id === alert.level)?.label}: ${alert.title}`, body: alert.detail, urgent: alert.level === "critical", sound: channels[alert.level].sound, notify: channels[alert.level].browser }));
+    // The ride check banner plays its own sound, so the bell stays quiet for those.
+    .map((alert) => ({ id: alert.id, title: `${LEVELS.find((item) => item.id === alert.level)?.label}: ${alert.title}`, body: alert.detail, urgent: alert.level === "critical", sound: channels[alert.level].sound && alert.kind !== "ride_check", notify: channels[alert.level].browser }));
   const sound = useAlertSignals(signals, !data.loading);
   const total = data.active.length;
   const fresh = sound.fresh.length > 0;

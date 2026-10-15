@@ -1,12 +1,12 @@
 import { useDirtyWarning } from "../ui/useDirtyWarning";
 import { useMemo, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ArrowLeft, Car, Eye, Fingerprint, Gauge, ShieldAlert, ShieldCheck, Timer, UserRound } from "lucide-react";
+import { ArrowLeft, Car, Eye, Fingerprint, Gauge, ListChecks, ShieldAlert, ShieldCheck, Timer, UserRound } from "lucide-react";
 import { DEFAULT_SAFETY, emptySafety, validateSafety, useRecords, useSlice, type SafetyBook, type SafetyPolicy } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { Card, Choice, Num, Row, Switch } from "../dispatch/fields";
-import { DISPATCH_KEY, emptyDispatchBook, liveCountry, normalizeDispatchBook, type DispatchBook } from "../dispatch/rules";
+import { DISPATCH_KEY, emptyDispatchBook, liveCountry, liveRules, normalizeDispatchBook, type DispatchBook, type RideCheckRules } from "../dispatch/rules";
 import { zoneById } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
 import { zoneAllowed } from "../markets/scope";
@@ -25,8 +25,19 @@ const NUMBERS: { key: keyof SafetyPolicy; label: string; title: string; help: st
   { key: "warningMinutes", label: "Warning minutes", title: "Warn the driver before the limit", help: "Minutes before the limit the driver gets a message.", unit: "min" },
 ];
 
-const SWITCHES: { key: "rideCheck" | "pin" | "sharing" | "audio"; label: string; help: string }[] = [
-  { key: "rideCheck", label: "Is everything OK? check", help: "The app asks rider and driver if all is well when a car stops for long or leaves the route." },
+/** What Ride check asks on in a zone, in one line. Set in Dispatch → Safety. */
+function rideCheckLine(check: RideCheckRules): string {
+  const on = [
+    check.farOn ? `dropped ${check.farM} m away` : "",
+    check.stopOn ? `${check.stopMin} min stop` : "",
+    check.routeOn ? `${check.routeKm} km off the route` : "",
+    check.longerOn ? `${check.longerPct}% longer` : "",
+    check.crashOn ? "possible crash" : "",
+  ].filter(Boolean);
+  return on.length ? `Asks on: ${on.join(", ")}.` : "Off in this zone.";
+}
+
+const SWITCHES: { key: "pin" | "sharing" | "audio"; label: string; help: string }[] = [
   { key: "pin", label: "PIN at pickup", help: "The rider tells the driver a 4-digit code before the ride starts." },
   { key: "sharing", label: "Share the trip", help: "Riders can send their live trip to trusted contacts." },
   { key: "audio", label: "Audio recording", help: "Rider or driver can record sound during the trip. Check the law in each country first." },
@@ -88,7 +99,8 @@ function SafetyRules({ editable }: { editable: boolean }) {
   const id = zone || list[0]?.id || "";
   const policy = draft ?? store.value.policies[id] ?? DEFAULT_SAFETY;
   const error = validateSafety(policy);
-  const rest = liveCountry(normalizeDispatchBook(dispatch.value), scope.market.id).rest;
+  const dispatchBook = normalizeDispatchBook(dispatch.value);
+  const rest = liveCountry(dispatchBook, scope.market.id).rest;
   useDirtyWarning(Boolean(draft));
   return (
     <div className="op-risk-grid">
@@ -104,6 +116,13 @@ function SafetyRules({ editable }: { editable: boolean }) {
           <span><b>Driving and rest (Dispatch)</b><small>{rest.on ? `After ${rest.workHours} h of work, ${rest.restHours} h rest before going online.` : "Off in Dispatch."}</small></span>
           <Link className="dash-btn small ghost" to="/dispatch">Open Dispatch</Link>
         </div>
+        {id ? (
+          <div className="op-rest rc-risk">
+            <ListChecks size={16} aria-hidden="true" />
+            <span><b>Ride check (Dispatch)</b><small>{rideCheckLine(liveRules(dispatchBook, id).rideCheck)}</small></span>
+            <Link className="dash-btn small ghost" to={`/dispatch?zone=${id}&tab=safety`}>Ride check settings</Link>
+          </div>
+        ) : null}
       </aside>
       <div className="op-settings">
         <fieldset className="op-fieldset" disabled={!editable || store.loading}>

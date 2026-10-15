@@ -15,7 +15,7 @@ export function HistoryView() {
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<Level | "all">("all");
   const [notice, setNotice] = useState("");
-  const rows = useMemo(() => solvedHistory(data.book, data.safety.value, (id) => data.facts.incidents.find((row) => row.id === id)?.zoneId ?? null), [data.book, data.safety.value, data.facts.incidents]);
+  const rows = useMemo(() => solvedHistory(data.book, data.safety.value, (id) => data.facts.incidents.find((row) => row.id === id)?.zoneId ?? null, (id) => data.facts.incidents.find((row) => row.id === id)?.kind === "ride_check"), [data.book, data.safety.value, data.facts.incidents]);
   const shown = rows.filter((row) => (level === "all" || row.level === level) && (!query.trim() || `${row.title} ${row.note} ${agentName(row.solvedBy)} ${agentName(row.takenBy)}`.toLowerCase().includes(query.trim().toLowerCase())));
   const stats = numbers(rows);
   const label = (kind: HistoryRow["kind"]) => kindDef(kind)?.label ?? "Your rule";
