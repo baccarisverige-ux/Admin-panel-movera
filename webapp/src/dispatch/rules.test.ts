@@ -8,19 +8,28 @@ import {
   countryDefault,
   draftRules,
   emptyDispatchBook,
+  homePopupSkippedBelowMin,
   inTime,
   liveRules,
   modeNow,
+  normalizeDispatchBook,
   publish,
   rankDrivers,
   requestControl,
+  reservationStepAt,
+  reservationTimeline,
   rulesFile,
   simulate,
+  stepAfterDriverCancel,
   undoTo,
   withEvent,
   zoneDefault,
   zoneIssues,
+  type DispatchBook,
   type DriverFacts,
+  type Preset,
+  type ReservationRules,
+  type ZoneDispatch,
 } from "./rules.ts";
 
 const assert = (ok: unknown, message: string) => {
@@ -121,5 +130,93 @@ const noDriving = { ...base, radarApp: { ...base.radarApp, drivingOn: false } };
 assert(!simulate(noDriving, rankDrivers(noDriving, country, request, [busyDriver]), "radar")[0].detail.includes("busy"), "no radar offers while driving when off");
 assert(simulate(base, rankDrivers(base, country, request, [busyDriver]), "radar")[0].detail.includes("busy"), "radar offers while driving when on");
 assert(changeLines(base, { ...base, autoOffline: { on: true, after: 8 } })[0] === "Offline after offers not accepted: 5 → 8", "change line for auto offline");
+
+// Reservations: who gets them, the Home popup, Exclusive, Radar trips and what happens when a driver cancels.
+const resv = base.reservation;
+assert(resv.listTo === "all" && resv.listMinRating === 4.5, "by default every driver in the zone gets reservations in Scheduled rides");
+assert(resv.homePopup && resv.homePopupAfterMin === 10, "by default the Home popup starts 10 min after booking");
+assert(resv.toExclusive && resv.exclusiveBeforeMin === 20 && resv.toRadar && resv.radarBeforeMin === 15, "by default Exclusive 20 min and Radar trips 15 min before pickup");
+assert(resv.onDriverCancel === "byTime", "by default a cancelled reservation goes back by the time left");
+const withResv = (patch: Partial<ReservationRules>): ZoneDispatch => ({ ...base, reservation: { ...resv, ...patch } });
+const resvIssues = (patch: Partial<ReservationRules>) => zoneIssues(withResv(patch)).filter((line) => line.startsWith("Reservations:"));
+assert(resvIssues({ radarBeforeMin: 20 })[0] === "Reservations: Radar trips must come after Exclusive (a smaller number of minutes before pickup).", "Radar trips come after Exclusive");
+assert(resvIssues({ radarBeforeMin: 25 }).length === 1, "Radar at 25 min only breaks the order with Exclusive");
+assert(resvIssues({ toExclusive: false, radarBeforeMin: 30 })[0] === "Reservations: Radar trips must come after the search starts (a smaller number of minutes).", "Radar trips come after the search starts");
+assert(resvIssues({ toExclusive: false, radarBeforeMin: 25 }).length === 0, "without Exclusive, Radar only needs to be after the search starts");
+assert(resvIssues({ toRadar: false, radarBeforeMin: 25 }).length === 0, "a Radar step that is off is not checked");
+assert(resvIssues({ listTo: "rating", listMinRating: 6 })[0] === "Reservations: the lowest rating for Scheduled rides must be 1 to 5.", "rating for Scheduled rides has a limit");
+assert(resvIssues({ listTo: "all", listMinRating: 6 }).length === 0, "the rating only counts with High rating only");
+assert(resvIssues({ homePopupAfterMin: 0 })[0] === "Reservations: the Home popup must start 1 to 1440 minutes (24 h) after the rider booked.", "Home popup has a limit");
+assert(resvIssues({ exclusiveBeforeMin: 0, radarBeforeMin: 0 }).includes("Reservations: Exclusive must start 1 to 180 minutes before pickup."), "Exclusive has a limit");
+assert(resvIssues({ onDriverCancel: "home", homePopup: false })[0] === "Reservations: after a driver cancels it cannot go to the Home popup, because the Home popup is off.", "cancel to Home needs the popup");
+assert(resvIssues({ onDriverCancel: "exclusive", toExclusive: false })[0] === "Reservations: after a driver cancels it cannot become Exclusive, because \"Becomes an Exclusive trip\" is off.", "cancel to Exclusive needs Exclusive");
+assert(resvIssues({ on: false, radarBeforeMin: 25, onDriverCancel: "home", homePopup: false }).length === 0, "reservations off: nothing to check");
+
+const flow = reservationTimeline(base, 180);
+assert(flow.map((step) => step.id).join(",") === "list,home,exclusive,radar,pickup", "steps come in order: list, Home popup, Exclusive, Radar trips, pickup");
+assert(flow.map((step) => step.afterBookedMin).join(",") === "0,10,160,165,180", "booked 3 h ahead: popup after 10 min, Exclusive 20 min and Radar 15 min before pickup");
+assert(flow.every((step, index) => !step.skipped && (index === 0 || step.afterBookedMin >= flow[index - 1].afterBookedMin)), "every step happens, one after the other");
+assert(flow[0].detail.startsWith("All drivers in the zone"), "the list step says who gets it");
+const radarStep = flow.find((step) => step.id === "radar")!;
+assert(!radarStep.title.includes("Exclusive") && radarStep.detail.includes("Never labelled Exclusive"), "Radar trips are never labelled Exclusive");
+assert(reservationTimeline(withResv({ listTo: "rating", listMinRating: 4.8 }), 180)[0].detail.startsWith("Only drivers rated 4.8"), "list step with a rating");
+const late = reservationTimeline(base, 25);
+assert(late.find((step) => step.id === "home")?.skipped?.includes("already Exclusive"), "booked 25 min ahead: Exclusive comes before the popup");
+assert(late.find((step) => step.id === "exclusive")?.afterBookedMin === 5, "booked 25 min ahead: Exclusive after 5 min");
+const soon = reservationTimeline(base, 15);
+assert(soon.find((step) => step.id === "exclusive")?.afterBookedMin === 0 && soon.find((step) => step.id === "exclusive")?.detail.includes("at once"), "booked inside the Exclusive time: Exclusive at once");
+assert(reservationTimeline(withResv({ homePopup: false }), 180).find((step) => step.id === "home")?.skipped === "Off.", "popup off shows as off");
+assert(reservationTimeline({ ...base, radar: { ...base.radar, on: false } }, 180).find((step) => step.id === "radar")?.skipped === "Skipped: Radar is off in this zone.", "no Radar trips when Radar is off in the zone");
+assert(homePopupSkippedBelowMin(base) === 30 && homePopupSkippedBelowMin(withResv({ homePopup: false })) === null, "rides booked under 30 min ahead skip the popup");
+
+assert(reservationStepAt(base, 5, 100) === "list" && reservationStepAt(base, 10, 100) === "home", "list first, popup after its minutes");
+assert(reservationStepAt(base, 160, 20) === "exclusive" && reservationStepAt(base, 165, 15) === "radar", "Exclusive, then Radar trips, by minutes before pickup");
+assert(stepAfterDriverCancel(base, 120, 60) === "home", "cancel by time: the popup time has passed");
+assert(stepAfterDriverCancel(withResv({ onDriverCancel: "list" }), 120, 60) === "list", "cancel back to the list: the popup waits again");
+assert(stepAfterDriverCancel(withResv({ onDriverCancel: "home" }), 2, 600) === "home", "cancel to the popup at once");
+assert(stepAfterDriverCancel(withResv({ onDriverCancel: "exclusive" }), 2, 600) === "exclusive", "cancel to Exclusive at once");
+assert(stepAfterDriverCancel(withResv({ onDriverCancel: "list" }), 170, 10) === "radar", "a step closer to pickup wins over the chosen one");
+
+const listChange = changeLines(base, withResv({ listTo: "rating", homePopupAfterMin: 15, onDriverCancel: "list" }));
+assert(listChange.includes("Scheduled rides go to: all drivers in the zone → drivers with a high rating"), "change line for who gets Scheduled rides");
+assert(listChange.includes("Home popup after booking: 10 → 15"), "change line for the popup time");
+assert(listChange.includes("After a driver cancels: by time left → Scheduled rides"), "change line for the cancel rule");
+
+// Saved rules from before these settings still load: drafts, live, history and undo, approvals, presets.
+const oldReservation = { on: true, searchBeforeMin: 30, assignEarly: true, assignHoursBefore: 12, backup: false, toExclusive: true, exclusiveBeforeMin: 20 };
+const oldZone = (patch: Record<string, unknown> = {}) => ({ ...base, reservation: { ...oldReservation, ...patch } }) as unknown as ZoneDispatch;
+const oldBook = normalizeDispatchBook(JSON.parse(JSON.stringify({
+  ...emptyDispatchBook(),
+  draftRev: 7,
+  live: { Z001: oldZone(), Z002: oldZone({ exclusiveBeforeMin: 10 }), Z003: oldZone({ exclusiveBeforeMin: 1, searchBeforeMin: 5 }) },
+  draft: { Z004: oldZone({ listTo: "nobody", onDriverCancel: "never" }) },
+  versions: [
+    { rev: 7, at: "2026-09-01T10:00", actorId: "nora", note: "", zoneIds: ["Z001"], lines: ["Norrmalm: Backup driver: on → off"], live: { Z001: oldZone() }, liveCountries: {} },
+    { rev: 6, at: "2026-08-01T10:00", actorId: "nora", note: "", zoneIds: ["Z001"], lines: [], live: { Z001: oldZone({ exclusiveBeforeMin: 12 }) }, liveCountries: {} },
+  ],
+}))) as DispatchBook;
+const oldLive = liveRules(oldBook, "Z001");
+assert(oldLive.reservation.backup === false && oldLive.reservation.listTo === "all" && oldLive.reservation.homePopupAfterMin === 10 && oldLive.reservation.toRadar && oldLive.reservation.radarBeforeMin === 15 && oldLive.reservation.onDriverCancel === "byTime", "old live rules get the new reservation settings");
+assert(zoneIssues(oldLive).length === 0, "old live rules stay valid");
+assert(liveRules(oldBook, "Z002").reservation.radarBeforeMin === 5 && zoneIssues(liveRules(oldBook, "Z002")).length === 0, "old rules with Exclusive at 10 min get Radar at 5 min");
+assert(!liveRules(oldBook, "Z003").reservation.toRadar && zoneIssues(liveRules(oldBook, "Z003")).length === 0, "no room for Radar: the Radar step starts off");
+const oldDraft = draftRules(oldBook, "Z004");
+assert(oldDraft.reservation.listTo === "all" && oldDraft.reservation.onDriverCancel === "byTime", "unknown choices in a draft fall back to the defaults");
+assert(changeLines(liveRules(oldBook, "Z001"), draftRules(oldBook, "Z001")).length === 0, "old rules do not show as changed");
+const undone = undoTo(oldBook, 7, "nora", "2026-10-12T12:00");
+assert(!undone.error && liveRules(undone.book, "Z001").reservation.exclusiveBeforeMin === 12 && liveRules(undone.book, "Z001").reservation.radarBeforeMin === 6, "undo to an old version fills the new settings");
+const pending = publish(oldBook, { Z001: { ...oldLive, reservation: { ...oldLive.reservation, homePopupAfterMin: 20 } } }, {}, ["Z001"], "nora", "2026-10-12T13:00", "");
+assert(!pending.error && pending.live[0] === "Z001" && liveRules(pending.book, "Z001").reservation.homePopupAfterMin === 20, "a reservation change publishes now");
+assert(pending.book.versions[0].lines.join() === "Norrmalm: Home popup after booking: 10 → 20", "only the real change is listed");
+const waitingOld = { ...oldBook, approvals: [{ id: "AP-old", kind: "publish" as const, zoneIds: ["Z001"], lines: ["Norrmalm: Main mode: Automatic → By hand"], by: "nora", at: "x", zones: { Z001: oldZone() } }] };
+const approvedOld = approve(waitingOld, "AP-old", "lena", "2026-10-12T14:00");
+assert(!approvedOld.error && liveRules(approvedOld.book, "Z001").reservation.toRadar, "an old waiting approval still goes live with the new settings");
+const { zoneId: _zone, ...oldValues } = oldZone({ exclusiveBeforeMin: 10 });
+void _zone;
+const oldPreset: Preset = { id: "P-old", name: "Old", note: "", builtIn: false, values: oldValues };
+const fromOldPreset = applyPreset(zoneDefault("Z002"), oldPreset, "SE");
+assert(fromOldPreset.zoneId === "Z002" && fromOldPreset.reservation.homePopup && fromOldPreset.reservation.radarBeforeMin === 5 && zoneIssues(fromOldPreset).length === 0, "an old saved preset gets the new settings");
+const resvFile = rulesFile(oldBook, "SE", "now");
+assert(resvFile.zones[0].rules.reservation.homePopupAfterMin === 10 && resvFile.glossary.reservationTie.includes("random"), "rules file has the reservation steps and the tie rule");
 
 console.log("dispatch rules ok");

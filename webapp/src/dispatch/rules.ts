@@ -53,6 +53,48 @@ export const ALERTS: { id: AlertId; label: string; unit: string; help: string }[
   { id: "no_driver", label: "Many requests without a driver", unit: "requests", help: "Alert when this many requests are waiting without a driver." },
 ];
 
+/** Who gets a new reservation in the driver app's Scheduled rides list. */
+export type ReservationListTo = "all" | "category" | "rating";
+/** Where a reservation goes back to when the driver who took it cancels. */
+export type ReservationCancelTo = "byTime" | "list" | "home" | "exclusive";
+/** The steps an untaken reservation goes through, in this order. */
+export type ReservationStep = "list" | "home" | "exclusive" | "radar";
+
+export const RESERVATION_LIST_TO: { id: ReservationListTo; label: string; help: string }[] = [
+  { id: "all", label: "All drivers", help: "Every driver in the zone sees it in Scheduled rides." },
+  { id: "category", label: "Drivers of the category", help: "Only drivers who drive the ride's category, for example Comfort." },
+  { id: "rating", label: "High rating only", help: "Only drivers with at least the rating you set." },
+];
+
+export const RESERVATION_CANCEL_TO: { id: ReservationCancelTo; label: string; help: string }[] = [
+  { id: "byTime", label: "By time left", help: "The step the time before pickup says, as if nobody had taken it." },
+  { id: "list", label: "Scheduled rides", help: "Back to the list. The Home popup waits its minutes again, counted from the cancel." },
+  { id: "home", label: "Home popup", help: "Shows as the Home popup at once, and in the list." },
+  { id: "exclusive", label: "Exclusive", help: "Offered as Exclusive at once." },
+];
+
+export const RESERVATION_STEP_LABEL: Record<ReservationStep, string> = { list: "Scheduled rides", home: "Home popup", exclusive: "Exclusive", radar: "Radar trips" };
+
+export type ReservationRules = {
+  on: boolean;
+  searchBeforeMin: number;
+  assignEarly: boolean;
+  assignHoursBefore: number;
+  backup: boolean;
+  /** L1: who sees a new reservation in Scheduled rides; with "rating", only drivers rated at least listMinRating. */
+  listTo: ReservationListTo;
+  listMinRating: number;
+  /** L2: nobody took it yet, so it also pops up on Home this many minutes after the rider booked. */
+  homePopup: boolean;
+  homePopupAfterMin: number;
+  /** L3: close to pickup it becomes Exclusive, then also comes into Radar trips (never labelled Exclusive there). */
+  toExclusive: boolean;
+  exclusiveBeforeMin: number;
+  toRadar: boolean;
+  radarBeforeMin: number;
+  onDriverCancel: ReservationCancelTo;
+};
+
 export type WaitStep = { id: string; kind: WaitKind; on: boolean; afterMin: number; message: string; extraMin?: number };
 export type TimeRule = { id: string; on: boolean; from: string; to: string; mode: OfferMode };
 export type Factor = { id: FactorId; on: boolean; weight: number };
@@ -65,7 +107,7 @@ export type ZoneDispatch = {
   radarApp: { fullOn: boolean; full: number; popupOn: boolean; popup: number; drivingOn: boolean; driving: number };
   /** After this many offers in a row not accepted, the driver goes offline. */
   autoOffline: { on: boolean; after: number };
-  reservation: { on: boolean; searchBeforeMin: number; assignEarly: boolean; assignHoursBefore: number; backup: boolean; toExclusive: boolean; exclusiveBeforeMin: number };
+  reservation: ReservationRules;
   choose: { how: "auto" | "manual"; radarAbove: number; main: OfferMode; backup: OfferMode | "none"; times: TimeRule[] };
   rulesFrom: "driver" | "pickup";
   factors: Factor[];
@@ -171,7 +213,13 @@ export function defaultZone(zone: Pick<MarketZone, "id" | "kind">): ZoneDispatch
     exclusive: { on: true, seconds: 15, drivers: 3, then: "widen_then_radar" },
     radarApp: { fullOn: true, full: 8, popupOn: true, popup: 2, drivingOn: true, driving: 1 },
     autoOffline: { on: true, after: 5 },
-    reservation: { on: true, searchBeforeMin: 30, assignEarly: true, assignHoursBefore: 12, backup: true, toExclusive: true, exclusiveBeforeMin: 20 },
+    reservation: {
+      on: true, searchBeforeMin: 30, assignEarly: true, assignHoursBefore: 12, backup: true,
+      listTo: "all", listMinRating: 4.5,
+      homePopup: true, homePopupAfterMin: 10,
+      toExclusive: true, exclusiveBeforeMin: 20, toRadar: true, radarBeforeMin: 15,
+      onDriverCancel: "byTime",
+    },
     choose: { how: "auto", radarAbove: 1.5, main: "exclusive", backup: "radar", times: [{ id: "t1", on: false, from: "22:00", to: "04:00", mode: "radar" }] },
     rulesFrom: "driver",
     factors: [
@@ -304,6 +352,27 @@ export function normalizeDispatchBook(value: unknown): DispatchBook {
   };
 }
 
+/**
+ * Reservation settings from an older save: new settings come from the defaults, unknown choices fall back.
+ * Saves from before the Radar step get a Radar time that fits under their own Exclusive and search times, so they stay valid.
+ */
+export function completeReservation(base: ReservationRules, stored: unknown): ReservationRules {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return { ...base };
+  const raw = stored as Partial<ReservationRules>;
+  const next: ReservationRules = { ...base, ...raw };
+  if (!RESERVATION_LIST_TO.some((item) => item.id === next.listTo)) next.listTo = base.listTo;
+  if (!RESERVATION_CANCEL_TO.some((item) => item.id === next.onDriverCancel)) next.onDriverCancel = base.onDriverCancel;
+  if (raw.radarBeforeMin === undefined) {
+    const limit = next.toExclusive ? Math.min(next.exclusiveBeforeMin, next.searchBeforeMin) : next.searchBeforeMin;
+    if (next.radarBeforeMin >= limit) {
+      const fit = Math.floor(limit / 2);
+      if (fit >= 1) next.radarBeforeMin = fit;
+      else if (raw.toRadar === undefined) next.toRadar = false;
+    }
+  }
+  return next;
+}
+
 /** Fill anything missing (older saves, new settings) from the zone's defaults. */
 function complete(zoneId: string, stored: Partial<ZoneDispatch> | undefined): ZoneDispatch {
   const base = zoneDefault(zoneId);
@@ -313,6 +382,7 @@ function complete(zoneId: string, stored: Partial<ZoneDispatch> | undefined): Zo
     const fallback = (base as Record<string, unknown>)[key];
     merged[key] = value && typeof value === "object" && !Array.isArray(value) && fallback && typeof fallback === "object" && !Array.isArray(fallback) ? { ...fallback, ...value } : value;
   }
+  merged.reservation = completeReservation(base.reservation, stored.reservation);
   return { ...(merged as ZoneDispatch), zoneId };
 }
 
@@ -363,6 +433,7 @@ export function zoneIssues(zone: ZoneDispatch): string[] {
   if (waits.some((step) => !step.message.trim())) issues.push("Rider waiting: each step that is on needs a message.");
   if (zone.reservation.on && (zone.reservation.searchBeforeMin < 5 || zone.reservation.searchBeforeMin > 240)) issues.push("Reservations: start looking 5 to 240 minutes before pickup.");
   if (zone.reservation.on && zone.reservation.toExclusive && zone.reservation.exclusiveBeforeMin >= zone.reservation.searchBeforeMin) issues.push("Reservations: the switch to Exclusive must come after the search starts (a smaller number of minutes).");
+  issues.push(...reservationIssues(zone.reservation));
   if (zone.driverCancel.on && (zone.driverCancel.commissionCutPct < 0 || zone.driverCancel.commissionCutPct > 30)) issues.push("Driver cancels: lower commission must be 0 to 30%.");
   if (zone.riderCancel.on && (zone.riderCancel.closerPct < 5 || zone.riderCancel.closerPct > 100)) issues.push("Rider cancels: \"came closer\" must be 5 to 100%.");
   if (zone.stops.on && (zone.stops.max < 1 || zone.stops.max > 5)) issues.push("Stops: max stops must be 1 to 5.");
@@ -370,6 +441,104 @@ export function zoneIssues(zone: ZoneDispatch): string[] {
   if (zone.safety.minRating && (zone.safety.ratingBelow < 1 || zone.safety.ratingBelow > 5)) issues.push("Safety: lowest rating must be 1 to 5.");
   if (zone.alerts.some((alert) => alert.on && !alert.panel && !alert.email && !alert.sms)) issues.push("Alerts: each alert that is on needs a place to show (panel, email or SMS).");
   return issues;
+}
+
+/** The reservation steps must come in order: Scheduled rides → Home popup → Exclusive → Radar trips. */
+function reservationIssues(resv: ReservationRules): string[] {
+  if (!resv.on) return [];
+  const issues: string[] = [];
+  if (resv.listTo === "rating" && (resv.listMinRating < 1 || resv.listMinRating > 5)) issues.push("Reservations: the lowest rating for Scheduled rides must be 1 to 5.");
+  if (resv.homePopup && (resv.homePopupAfterMin < 1 || resv.homePopupAfterMin > 1440)) issues.push("Reservations: the Home popup must start 1 to 1440 minutes (24 h) after the rider booked.");
+  if (resv.toExclusive && (resv.exclusiveBeforeMin < 1 || resv.exclusiveBeforeMin > 180)) issues.push("Reservations: Exclusive must start 1 to 180 minutes before pickup.");
+  if (resv.toRadar && (resv.radarBeforeMin < 1 || resv.radarBeforeMin > 180)) issues.push("Reservations: Radar trips must start 1 to 180 minutes before pickup.");
+  if (resv.toRadar && resv.radarBeforeMin >= resv.searchBeforeMin) issues.push("Reservations: Radar trips must come after the search starts (a smaller number of minutes).");
+  if (resv.toRadar && resv.toExclusive && resv.radarBeforeMin >= resv.exclusiveBeforeMin) issues.push("Reservations: Radar trips must come after Exclusive (a smaller number of minutes before pickup).");
+  if (resv.onDriverCancel === "home" && !resv.homePopup) issues.push("Reservations: after a driver cancels it cannot go to the Home popup, because the Home popup is off.");
+  if (resv.onDriverCancel === "exclusive" && !resv.toExclusive) issues.push("Reservations: after a driver cancels it cannot become Exclusive, because \"Becomes an Exclusive trip\" is off.");
+  return issues;
+}
+
+export type ReservationTimelineStep = {
+  id: ReservationStep | "pickup";
+  title: string;
+  detail: string;
+  /** Minutes after the rider booked, and minutes left before pickup, when this step starts. */
+  afterBookedMin: number;
+  beforePickupMin: number;
+  /** Why the step does not happen for this booking, or null when it does. */
+  skipped: string | null;
+};
+
+function listWho(resv: ReservationRules): string {
+  if (resv.listTo === "category") return "Only drivers who drive the ride's category";
+  if (resv.listTo === "rating") return `Only drivers rated ${resv.listMinRating} or more`;
+  return "All drivers in the zone";
+}
+
+/** Exclusive and Radar steps only happen when the step and the zone's mode are both on. */
+function activeUrgent(zone: ZoneDispatch): { exclusive: boolean; radar: boolean } {
+  return { exclusive: zone.reservation.toExclusive && zone.exclusive.on, radar: zone.reservation.toRadar && zone.radar.on };
+}
+
+/**
+ * What happens to a reservation nobody takes, booked this many minutes before pickup:
+ * Scheduled rides → Home popup → Exclusive → Radar trips → pickup. Steps that are off or come too late are marked skipped.
+ */
+export function reservationTimeline(zone: ZoneDispatch, bookedBeforeMin: number): ReservationTimelineStep[] {
+  const resv = zone.reservation;
+  const lead = Math.max(0, Math.round(bookedBeforeMin));
+  const urgent = activeUrgent(zone);
+  const startAt = (beforePickup: number) => Math.max(0, lead - beforePickup);
+  const exclusiveAt = urgent.exclusive ? startAt(resv.exclusiveBeforeMin) : Infinity;
+  const radarAt = urgent.radar ? startAt(resv.radarBeforeMin) : Infinity;
+  const step = (id: ReservationTimelineStep["id"], title: string, detail: string, afterBookedMin: number, skipped: string | null): ReservationTimelineStep => {
+    const at = Math.min(lead, Math.max(0, afterBookedMin));
+    return { id, title, detail, afterBookedMin: at, beforePickupMin: lead - at, skipped };
+  };
+  const homeSkip = !resv.homePopup ? "Off."
+    : resv.homePopupAfterMin >= Math.min(exclusiveAt, radarAt) ? `Skipped: it is already ${exclusiveAt <= radarAt ? "Exclusive" : "in Radar trips"} by then.`
+      : resv.homePopupAfterMin >= lead ? "Skipped: pickup comes first."
+        : null;
+  const modeSkip = (setting: boolean, mode: OfferMode) => (!setting ? "Off." : !zone[mode].on ? `Skipped: ${modeLabel(mode)} is off in this zone.` : null);
+  return [
+    step("list", RESERVATION_STEP_LABEL.list, `${listWho(resv)} see it in Scheduled rides.`, 0, null),
+    step("home", RESERVATION_STEP_LABEL.home, "Nobody took it yet, so it also pops up on Home for online drivers. It stays in Scheduled rides.", resv.homePopupAfterMin, homeSkip),
+    step("exclusive", RESERVATION_STEP_LABEL.exclusive, lead <= resv.exclusiveBeforeMin ? "Booked this close to pickup, so it is an Exclusive offer at once." : "Close to pickup it becomes an Exclusive offer, like today's Exclusive.", lead - resv.exclusiveBeforeMin, modeSkip(resv.toExclusive, "exclusive")),
+    step("radar", RESERVATION_STEP_LABEL.radar, "It also comes into Radar trips (Home deck and Live list) as a normal trip that needs a driver soon. Never labelled Exclusive there.", lead - resv.radarBeforeMin, modeSkip(resv.toRadar, "radar")),
+    step("pickup", "Pickup", "Pickup time.", lead, null),
+  ];
+}
+
+/** Rides booked with less time than this before pickup skip the Home popup: Exclusive or Radar comes first. Null when the popup is off. */
+export function homePopupSkippedBelowMin(zone: ZoneDispatch): number | null {
+  const resv = zone.reservation;
+  if (!resv.homePopup) return null;
+  const urgent = activeUrgent(zone);
+  const first = Math.max(urgent.exclusive ? resv.exclusiveBeforeMin : 0, urgent.radar ? resv.radarBeforeMin : 0);
+  return resv.homePopupAfterMin + first;
+}
+
+const STEP_ORDER: ReservationStep[] = ["list", "home", "exclusive", "radar"];
+
+/** Where an untaken reservation is at a moment: minutes since the rider booked and minutes left before pickup. */
+export function reservationStepAt(zone: ZoneDispatch, sinceBookedMin: number, beforePickupMin: number): ReservationStep {
+  const resv = zone.reservation;
+  const urgent = activeUrgent(zone);
+  if (urgent.radar && beforePickupMin <= resv.radarBeforeMin) return "radar";
+  if (urgent.exclusive && beforePickupMin <= resv.exclusiveBeforeMin) return "exclusive";
+  if (resv.homePopup && sinceBookedMin >= resv.homePopupAfterMin) return "home";
+  return "list";
+}
+
+/** Where it goes back when the driver who took it cancels. A step closer to pickup always wins over the chosen one. */
+export function stepAfterDriverCancel(zone: ZoneDispatch, sinceBookedMin: number, beforePickupMin: number): ReservationStep {
+  const resv = zone.reservation;
+  const byTime = reservationStepAt(zone, sinceBookedMin, beforePickupMin);
+  if (resv.onDriverCancel === "byTime") return byTime;
+  // Back to the list: the Home popup waits its minutes again, counted from the cancel.
+  if (resv.onDriverCancel === "list") return reservationStepAt(zone, 0, beforePickupMin);
+  const chosen: ReservationStep = resv.onDriverCancel === "home" ? (resv.homePopup ? "home" : "list") : (activeUrgent(zone).exclusive ? "exclusive" : "list");
+  return STEP_ORDER.indexOf(chosen) >= STEP_ORDER.indexOf(byTime) ? chosen : byTime;
 }
 
 export function countryIssues(country: CountryDispatch): string[] {
@@ -392,6 +561,9 @@ const LABELS: Record<string, string> = {
   "radarApp.drivingOn": "Radar offers while driving", "radarApp.driving": "Offers while driving", "autoOffline.on": "Go offline automatically", "autoOffline.after": "Offline after offers not accepted",
   "reservation.on": "Reservations", "reservation.searchBeforeMin": "Reservation search starts", "reservation.assignEarly": "Assign early", "reservation.assignHoursBefore": "Assign hours before",
   "reservation.backup": "Backup driver", "reservation.toExclusive": "Reservation to Exclusive", "reservation.exclusiveBeforeMin": "Exclusive before pickup",
+  "reservation.listTo": "Scheduled rides go to", "reservation.listMinRating": "Lowest rating for Scheduled rides",
+  "reservation.homePopup": "Reservation Home popup", "reservation.homePopupAfterMin": "Home popup after booking",
+  "reservation.toRadar": "Reservation to Radar trips", "reservation.radarBeforeMin": "Radar trips before pickup", "reservation.onDriverCancel": "After a driver cancels",
   "choose.how": "How the mode is chosen", "choose.radarAbove": "Busy level for Radar", "choose.main": "Main mode", "choose.backup": "Backup mode", "choose.times": "Time rules",
   rulesFrom: "Whose rules", "radius.steps": "Search distance steps", "radius.maxWaitMin": "Longest search",
   "batching.on": "Smart waiting", "batching.seconds": "Smart waiting seconds", "batching.fromRatio": "Smart waiting from busy level",
@@ -424,9 +596,16 @@ function flat(value: unknown, prefix = ""): Map<string, string> {
   return out;
 }
 
-function show(raw: string | undefined): string {
+/** Words for the reservation choices, by setting, so "list" or "all" read well in change lines. */
+const PATH_WORDS: Record<string, Record<string, string>> = {
+  "reservation.listTo": { all: "all drivers in the zone", category: "drivers of the category", rating: "drivers with a high rating" },
+  "reservation.onDriverCancel": { byTime: "by time left", list: "Scheduled rides", home: "Home popup", exclusive: "Exclusive" },
+};
+
+function show(raw: string | undefined, path = ""): string {
   if (raw === undefined) return "";
   const value = JSON.parse(raw) as unknown;
+  if (typeof value === "string" && PATH_WORDS[path]?.[value]) return PATH_WORDS[path][value];
   if (value === true) return "on";
   if (value === false) return "off";
   if (Array.isArray(value)) return value.every((item) => typeof item === "number") ? value.join(", ") : `${value.length} items`;
@@ -447,7 +626,7 @@ export function changeLines(before: ZoneDispatch, after: ZoneDispatch): string[]
   for (const [path, value] of b) {
     if (path === "zoneId" || a.get(path) === value) continue;
     const label = LABELS[path] ?? path;
-    lines.push(Array.isArray(JSON.parse(value)) && !(JSON.parse(value) as unknown[]).every((item) => typeof item === "number") ? `${label} changed` : `${label}: ${show(a.get(path))} → ${show(value)}`);
+    lines.push(Array.isArray(JSON.parse(value)) && !(JSON.parse(value) as unknown[]).every((item) => typeof item === "number") ? `${label} changed` : `${label}: ${show(a.get(path), path)} → ${show(value, path)}`);
   }
   return lines;
 }
@@ -600,7 +779,8 @@ export function copyParts(from: ZoneDispatch, to: ZoneDispatch, parts: readonly 
 
 export function applyPreset(zone: ZoneDispatch, preset: Preset, country: MarketId): ZoneDispatch {
   const money = feeDefaults(country);
-  const values = clone(preset.values);
+  // Presets saved before newer settings existed get those settings from the defaults.
+  const values = complete(zone.zoneId, clone(preset.values) as Partial<ZoneDispatch>);
   return {
     ...values,
     zoneId: zone.zoneId,
@@ -868,6 +1048,9 @@ export function rulesFile(book: DispatchBook, country: MarketId, at: string) {
       score: "Each factor gives 0 to its weight; drivers are offered in order of total score.",
       radarApp: "The most Radar offers one driver sees at once: on the full-screen radar, in the popup over the map, and while driving a rider.",
       autoOffline: "After this many offers in a row that the driver did not accept, the driver is set offline.",
+      reservation: "A ride booked for later. Nobody took it yet: first in Scheduled rides (for listTo drivers), then also the Home popup homePopupAfterMin minutes after booking, then Exclusive exclusiveBeforeMin minutes before pickup, then also Radar trips radarBeforeMin minutes before pickup (never labelled Exclusive there). When a driver takes it, it leaves every other driver's app at once.",
+      reservationCancel: "onDriverCancel: where it goes back when the driver who took it cancels. byTime = the step the time says; list = Scheduled rides, the Home popup waits again from the cancel; home or exclusive = that step at once. A step closer to pickup always wins.",
+      reservationTie: "Several drivers take it at the same time: the first tap wins; at exactly the same moment the server picks one at random. The server decides, never the app.",
     },
     zones: info.zones.map((zone) => ({ id: zone.id, name: zone.name, kind: zone.kind, control: book.control[zone.id] ?? { paused: false, mode: null }, rules: liveRules(book, zone.id) })),
     events: book.events.filter((event) => event.country === country),

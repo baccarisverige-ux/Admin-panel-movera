@@ -1,7 +1,11 @@
 import { useState } from "react";
-import { Clock, Flag, MapPin, Navigation, Radar, Route, Sparkles, Target, TrendingUp, Users, X } from "lucide-react";
+import { CalendarClock, Clock, Flag, Home, List, MapPin, Navigation, Radar, Route, Sparkles, Target, TrendingUp, Users, X } from "lucide-react";
 import type { MarketId } from "../markets/markets";
-import { EXTRAS, WAIT_KINDS, type OfferMode, type ZoneDispatch } from "./rules";
+import { Choice } from "./fields";
+import {
+  EXTRAS, homePopupSkippedBelowMin, RESERVATION_STEP_LABEL, reservationTimeline, stepAfterDriverCancel, WAIT_KINDS,
+  type OfferMode, type ReservationTimelineStep, type ZoneDispatch,
+} from "./rules";
 
 /** How the rules look on the phones: the driver's offer card and the rider's waiting screen. */
 
@@ -118,5 +122,64 @@ export function RiderWaitingPreview({ zone }: { zone: ZoneDispatch }) {
       </div>
       <figcaption>Rider app · while waiting</figcaption>
     </figure>
+  );
+}
+
+/** "10 min", "2 h 40 min", "1 day". */
+export function spanLabel(minutes: number): string {
+  const value = Math.max(0, Math.round(minutes));
+  if (value < 60) return `${value} min`;
+  if (value % 1440 === 0) return value === 1440 ? "1 day" : `${value / 1440} days`;
+  const hours = Math.floor(value / 60);
+  const rest = value % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
+const SAMPLE_LEADS = [
+  { id: "30", label: "30 min" },
+  { id: "60", label: "1 h" },
+  { id: "180", label: "3 h" },
+  { id: "1440", label: "1 day" },
+] as const;
+
+const STEP_ICON: Record<ReservationTimelineStep["id"], typeof Radar> = { list: List, home: Home, exclusive: Target, radar: Radar, pickup: Flag };
+
+/** A sample reservation nobody takes, step by step, with the zone's settings. */
+export function ReservationTimelinePreview({ zone }: { zone: ZoneDispatch }) {
+  const [lead, setLead] = useState<(typeof SAMPLE_LEADS)[number]["id"]>("180");
+  const minutes = Number(lead);
+  const steps = reservationTimeline(zone, minutes);
+  const cancelBefore = Math.round(minutes / 3);
+  const back = stepAfterDriverCancel(zone, minutes - cancelBefore, cancelBefore);
+  const skipBelow = homePopupSkippedBelowMin(zone);
+  return (
+    <div className={zone.reservation.on ? "dx-sub dx-resv" : "dx-sub dx-resv off"} role="group" aria-label="Reservation timeline">
+      <b><CalendarClock size={13} aria-hidden="true" /> Step by step, if nobody takes it</b>
+      <span className="dx-resv-pick">
+        <small>Sample ride booked</small>
+        <Choice label="Sample booking" value={lead} onChange={setLead} options={SAMPLE_LEADS.map((item) => ({ id: item.id, label: item.label }))} />
+        <small>before pickup</small>
+      </span>
+      <ol className="dx-resv-flow" aria-label="Reservation steps">
+        {steps.map((step) => {
+          const Icon = STEP_ICON[step.id];
+          return (
+            <li key={step.id} className={step.skipped ? `${step.id} skipped` : step.id}>
+              <span className="dx-resv-time">
+                {step.skipped ? "—" : step.id === "list" ? "Booked" : `+${spanLabel(step.afterBookedMin)}`}
+                {step.skipped ? null : <small>{step.beforePickupMin ? `${spanLabel(step.beforePickupMin)} before` : "pickup"}</small>}
+              </span>
+              <span className="dx-resv-icon" aria-hidden="true"><Icon size={13} /></span>
+              <span><b>{step.title}</b><small>{step.skipped ?? step.detail}</small></span>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="dx-resv-foot">
+        When a driver takes it, it disappears at once from every other driver's app.
+        {" "}If that driver cancels {spanLabel(cancelBefore)} before pickup, it goes back out as <b>{RESERVATION_STEP_LABEL[back]}</b>.
+        {skipBelow !== null ? <> Rides booked less than {spanLabel(skipBelow)} before pickup skip the Home popup.</> : null}
+      </p>
+    </div>
   );
 }
