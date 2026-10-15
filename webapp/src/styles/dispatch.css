@@ -163,6 +163,28 @@ body.dx-no-scroll { overflow: hidden; }
 .dx-time-rules li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 12px; background: #fff; border: 1px solid var(--line); }
 .dx-time-rules li.off { opacity: .6; }
 .dx-time-rules input[type="time"] { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 9px; font: inherit; font-size: 13px; }
+.dx-resv.off { opacity: .6; }
+.dx-note.dx-resv-tie { flex-wrap: nowrap; align-items: flex-start; }
+.dx-resv-tie svg { flex: none; margin-top: 1px; }
+.dx-resv-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.dx-resv-pick > small { font-size: 12px; color: var(--dash-ink-2); }
+.dx-resv-flow { list-style: none; margin: 4px 0 0; padding: 0; display: grid; }
+.dx-resv-flow li { position: relative; display: grid; grid-template-columns: 100px 26px minmax(0, 1fr); gap: 8px; align-items: start; padding: 6px 0; }
+.dx-resv-flow li::before { content: ""; position: absolute; left: 120px; top: 30px; bottom: -6px; width: 2px; background: #eceef0; }
+.dx-resv-flow li:last-child::before { display: none; }
+.dx-resv-time { display: grid; gap: 1px; padding-top: 3px; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dx-resv-time small { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.dx-resv-icon { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #edf4ff; color: #2a78d6; position: relative; z-index: 1; }
+.dx-resv-flow li.home .dx-resv-icon { background: #e9f7ef; color: #1f8a4c; }
+.dx-resv-flow li.radar .dx-resv-icon { background: #f2efff; color: #6250d6; }
+.dx-resv-flow li.pickup .dx-resv-icon { background: #fff1e6; color: #e36414; }
+.dx-resv-flow li > span:last-child { display: grid; gap: 1px; min-width: 0; }
+.dx-resv-flow b { font-size: 13px; }
+.dx-resv-flow li > span:last-child small { font-size: 12px; color: var(--dash-ink-2); }
+.dx-resv-flow li.skipped .dx-resv-time { color: var(--muted); }
+.dx-resv-flow li.skipped .dx-resv-icon { background: #f1f2f3; color: var(--muted); }
+.dx-resv-flow li.skipped b { color: var(--muted); text-decoration: line-through; }
+.dx-resv-foot { margin: 2px 0 0; font-size: 12px; color: var(--dash-ink-2); }
 
 .dx-mix { display: flex; gap: 3px; height: 10px; margin: 10px 0 2px; border-radius: 999px; overflow: hidden; }
 .dx-mix i { min-width: 6px; }

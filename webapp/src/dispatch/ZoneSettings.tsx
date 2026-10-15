@@ -1,16 +1,17 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import {
-  ArrowDown, ArrowUp, Baby, Bell, CalendarClock, Car, Clock, Gauge, Heart, Home, Layers, ListOrdered, Luggage, Mail, MapPin, MessageSquare,
+  ArrowDown, ArrowUp, Baby, Bell, CalendarClock, Clock, Gauge, Heart, Home, Layers, ListOrdered, Luggage, Mail, MapPin, MessageSquare,
   MonitorSmartphone, Moon, Power, PawPrint, Plane, Plus, Radar, Route, Scale, Shield, ShieldAlert, Smartphone, Sparkles, Star, Target, Timer, Trash2,
   TrendingUp, UserCheck, UserX, Users, Accessibility, Zap,
 } from "lucide-react";
 import type { MarketId } from "../markets/markets";
 import { BonusAreaMap } from "../drivers/BonusAreaMap";
 import { Card, Check, Choice, Num, Row, Switch } from "./fields";
+import { ReservationTimelinePreview } from "./Previews";
 import {
-  ALERTS, EXTRAS, FACTORS, modeLabel, WAIT_KINDS,
-  type CountryDispatch, type ExtraId, type OfferMode, type TabId, type WaitKind, type WaitStep, type ZoneDispatch,
+  ALERTS, EXTRAS, FACTORS, modeLabel, RESERVATION_CANCEL_TO, RESERVATION_LIST_TO, WAIT_KINDS,
+  type CountryDispatch, type ExtraId, type OfferMode, type ReservationRules, type TabId, type WaitKind, type WaitStep, type ZoneDispatch,
 } from "./rules";
 
 const EXTRA_ICON: Record<ExtraId, ReactNode> = {
@@ -50,6 +51,8 @@ export function ZoneSettings(props: Props) {
 function Modes({ zone, onChange, busy, disabled }: Props) {
   const set = (patch: Partial<ZoneDispatch>) => onChange({ ...zone, ...patch });
   const choose = zone.choose;
+  const resv = zone.reservation;
+  const setResv = (patch: Partial<ReservationRules>) => set({ reservation: { ...resv, ...patch } });
   return (
     <div className="dx-cards">
       <Card title="Radar" tone="purple" icon={<Radar size={18} />} help="One request is shown to several nearby drivers at once. The first to accept gets it." off={!zone.radar.on} aside={<Switch label="Radar" on={zone.radar.on} disabled={disabled} onChange={(on) => set({ radar: { ...zone.radar, on } })} />}>
@@ -131,18 +134,41 @@ function Modes({ zone, onChange, busy, disabled }: Props) {
         </div>
       </Card>
 
-      <Card title="Reservations" tone="orange" icon={<CalendarClock size={18} />} help="Rides booked for later." off={!zone.reservation.on} aside={<Switch label="Reservations" on={zone.reservation.on} disabled={disabled} onChange={(on) => set({ reservation: { ...zone.reservation, on } })} />}>
+      <Card title="Reservations" tone="orange" icon={<CalendarClock size={18} />} help="Rides booked for later. Nobody took it yet: Scheduled rides, then the Home popup, then Exclusive, then Radar trips." off={!resv.on} aside={<Switch label="Reservations" on={resv.on} disabled={disabled} onChange={(on) => setResv({ on })} />}>
         <Row label="Start looking for a driver" help="Before the pickup time.">
-          <Num label="Reservation search starts" value={zone.reservation.searchBeforeMin} unit="min before" min={5} max={240} disabled={disabled || !zone.reservation.on} onChange={(searchBeforeMin) => set({ reservation: { ...zone.reservation, searchBeforeMin } })} />
+          <Num label="Reservation search starts" value={resv.searchBeforeMin} unit="min before" min={5} max={240} disabled={disabled || !resv.on} onChange={(searchBeforeMin) => setResv({ searchBeforeMin })} />
         </Row>
-        <Row label="Give the ride to a driver early" help="For example the night before." on={zone.reservation.assignEarly} disabled={disabled || !zone.reservation.on} onToggle={(assignEarly) => set({ reservation: { ...zone.reservation, assignEarly } })}>
-          <Num label="Assign hours before" value={zone.reservation.assignHoursBefore} unit="h before" min={1} max={72} disabled={disabled} onChange={(assignHoursBefore) => set({ reservation: { ...zone.reservation, assignHoursBefore } })} />
+        <Row label="Give the ride to a driver early" help="For example the night before." on={resv.assignEarly} disabled={disabled || !resv.on} onToggle={(assignEarly) => setResv({ assignEarly })}>
+          <Num label="Assign hours before" value={resv.assignHoursBefore} unit="h before" min={1} max={72} disabled={disabled} onChange={(assignHoursBefore) => setResv({ assignHoursBefore })} />
         </Row>
-        <Row label="Backup driver" help="A second driver is ready if the first cancels." on={zone.reservation.backup} disabled={disabled || !zone.reservation.on} onToggle={(backup) => set({ reservation: { ...zone.reservation, backup } })} />
-        <p className="dx-note"><Car size={13} aria-hidden="true" /> If the driver cancels, the ride goes back to the scheduled rides list in the driver app.</p>
-        <Row label="Becomes an Exclusive trip" help="If nobody took it, or the driver cancelled close to pickup." on={zone.reservation.toExclusive} disabled={disabled || !zone.reservation.on} onToggle={(toExclusive) => set({ reservation: { ...zone.reservation, toExclusive } })}>
-          <Num label="Exclusive before pickup" value={zone.reservation.exclusiveBeforeMin} unit="min before" min={1} max={180} disabled={disabled} onChange={(exclusiveBeforeMin) => set({ reservation: { ...zone.reservation, exclusiveBeforeMin } })} />
+        <Row label="Backup driver" help="A second driver is ready if the first cancels." on={resv.backup} disabled={disabled || !resv.on} onToggle={(backup) => setResv({ backup })} />
+        <Row label="Who gets it in Scheduled rides" help={RESERVATION_LIST_TO.find((item) => item.id === resv.listTo)?.help}>
+          <Choice label="Scheduled rides go to" value={resv.listTo} disabled={disabled || !resv.on} onChange={(listTo) => setResv({ listTo })} options={RESERVATION_LIST_TO.map((item) => ({ id: item.id, label: item.label, hint: item.help }))} />
+          {resv.listTo === "rating" ? <Num label="Lowest rating for Scheduled rides" before="at least" value={resv.listMinRating} unit="stars" step={0.1} min={1} max={5} disabled={disabled || !resv.on} onChange={(listMinRating) => setResv({ listMinRating })} /> : null}
+          {resv.listTo === "random" ? <Num label="Random group size" value={resv.listGroupSize} unit="drivers" min={1} max={500} disabled={disabled || !resv.on} onChange={(listGroupSize) => setResv({ listGroupSize })} /> : null}
+          {resv.listTo === "homeNear" ? <Num label="Home distance from pickup" before="within" value={resv.listHomeKm} unit="km of pickup" step={0.5} min={0.5} max={50} disabled={disabled || !resv.on} onChange={(listHomeKm) => setResv({ listHomeKm })} /> : null}
+          {resv.listTo === "nearNow" ? <Num label="Distance from pickup now" before="within" value={resv.listNearKm} unit="km of pickup" step={0.5} min={0.5} max={50} disabled={disabled || !resv.on} onChange={(listNearKm) => setResv({ listNearKm })} /> : null}
+          {resv.listTo === "areaRegulars" ? <Num label="Trips from the area" before="at least" value={resv.listAreaTrips} unit="trips in 30 days" min={1} max={200} disabled={disabled || !resv.on} onChange={(listAreaTrips) => setResv({ listAreaTrips })} /> : null}
         </Row>
+        {resv.listTo !== "all" ? (
+          <Row label="Open to all drivers" help="If nobody in the group took it, every driver in the zone sees it in Scheduled rides. Counted from when the rider booked." on={resv.listOpenAll} disabled={disabled || !resv.on} onToggle={(listOpenAll) => setResv({ listOpenAll })}>
+            <Num label="Open to all drivers after" value={resv.listOpenAllAfterMin} unit="min after booking" min={1} max={1440} disabled={disabled} onChange={(listOpenAllAfterMin) => setResv({ listOpenAllAfterMin })} />
+          </Row>
+        ) : null}
+        <Row label="Also show as the Home popup" help="If nobody took it from Scheduled rides yet. Counted from when the rider booked. It stays in the list too." on={resv.homePopup} disabled={disabled || !resv.on} onToggle={(homePopup) => setResv({ homePopup })}>
+          <Num label="Home popup after booking" value={resv.homePopupAfterMin} unit="min after booking" min={1} max={1440} disabled={disabled} onChange={(homePopupAfterMin) => setResv({ homePopupAfterMin })} />
+        </Row>
+        <Row label="Becomes an Exclusive trip" help="If nobody took it by then. Shown like today's Exclusive offer." on={resv.toExclusive} disabled={disabled || !resv.on} onToggle={(toExclusive) => setResv({ toExclusive })}>
+          <Num label="Exclusive before pickup" value={resv.exclusiveBeforeMin} unit="min before" min={1} max={180} disabled={disabled} onChange={(exclusiveBeforeMin) => setResv({ exclusiveBeforeMin })} />
+        </Row>
+        <Row label="Also goes to Radar trips" help="Home deck and Live list, as a normal trip that needs a driver soon. Never labelled Exclusive in Radar." on={resv.toRadar} disabled={disabled || !resv.on} onToggle={(toRadar) => setResv({ toRadar })}>
+          <Num label="Radar trips before pickup" value={resv.radarBeforeMin} unit="min before" min={1} max={180} disabled={disabled} onChange={(radarBeforeMin) => setResv({ radarBeforeMin })} />
+        </Row>
+        <Row label="If the driver who took it cancels" help={`${RESERVATION_CANCEL_TO.find((item) => item.id === resv.onDriverCancel)?.help ?? ""}${resv.onDriverCancel === "byTime" ? "" : " A step closer to pickup always wins."}`}>
+          <Choice label="After a driver cancels" value={resv.onDriverCancel} disabled={disabled || !resv.on} onChange={(onDriverCancel) => setResv({ onDriverCancel })} options={RESERVATION_CANCEL_TO.map((item) => ({ id: item.id, label: item.label, hint: item.help }))} />
+        </Row>
+        <p className="dx-note dx-resv-tie"><Users size={13} aria-hidden="true" /> <span>Two drivers take it at the same time → the first tap wins; exact same moment → the system picks one at random.</span></p>
+        <ReservationTimelinePreview zone={zone} />
       </Card>
 
       <Card title="Whose rules" tone="pink" icon={<Scale size={18} />} help="A rider and a driver can be in different zones. Drivers are matched across zone borders.">

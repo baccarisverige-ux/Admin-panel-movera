@@ -223,6 +223,58 @@ test("radar offers in the driver app and going offline automatically", async ({ 
   await expect(page.getByLabel("Offline after offers not accepted")).toBeDisabled();
 });
 
+test("reservations: who gets them, the Home popup, Exclusive, Radar trips and a driver cancel", async ({ page }) => {
+  await session(page);
+  await page.goto("/dispatch?zone=Z001");
+  const card = page.getByRole("region", { name: "Reservations" });
+  await expect(card).toContainText("Two drivers take it at the same time → the first tap wins; exact same moment → the system picks one at random.");
+  const steps = card.getByRole("list", { name: "Reservation steps" }).getByRole("listitem");
+  await expect(steps).toHaveCount(5);
+  await expect(steps.nth(0)).toContainText("All drivers in the zone");
+  await expect(steps.nth(1)).toContainText("+10 min");
+  await expect(steps.nth(2)).toContainText("+2 h 40 min");
+  await expect(steps.nth(3)).toContainText("Never labelled Exclusive");
+  await card.getByLabel("Home popup after booking").fill("15");
+  await expect(steps.nth(1)).toContainText("+15 min");
+  await card.getByRole("radiogroup", { name: "Scheduled rides go to" }).getByText("Home near pickup").click();
+  await expect(card.getByLabel("Home distance from pickup")).toHaveValue("5");
+  await expect(steps.nth(0)).toContainText("home is within 5 km of the pickup");
+  await expect(steps.nth(0)).toContainText("Still untaken after 30 min: every driver in the zone sees it.");
+  await card.getByRole("radiogroup", { name: "Scheduled rides go to" }).getByText("Random group").click();
+  await expect(card.getByLabel("Random group size")).toHaveValue("10");
+  await expect(steps.nth(0)).toContainText("A random group of 10 drivers");
+  await card.getByRole("radiogroup", { name: "Scheduled rides go to" }).getByText("High rating only").click();
+  await expect(card.getByLabel("Lowest rating for Scheduled rides")).toHaveValue("4.5");
+  await expect(steps.nth(0)).toContainText("Only drivers rated 4.5 or more");
+  await card.getByRole("radiogroup", { name: "Sample booking" }).getByText("30 min").click();
+  await expect(steps.nth(1)).toContainText("already Exclusive");
+
+  const alert = page.getByLabel("Norrmalm rules").getByRole("alert");
+  const bar = page.getByRole("region", { name: "Publish" });
+  await card.getByLabel("Radar trips before pickup").fill("25");
+  await expect(alert).toContainText("Radar trips must come after Exclusive");
+  await expect(bar.getByRole("button", { name: "Publish now" })).toBeDisabled();
+  await card.getByLabel("Radar trips before pickup").fill("10");
+  await expect(alert).toHaveCount(0);
+  await card.getByRole("radiogroup", { name: "After a driver cancels" }).getByText("Exclusive").click();
+  await card.getByLabel("Becomes an Exclusive trip on").uncheck();
+  await expect(alert).toContainText("cannot become Exclusive");
+  await card.getByLabel("Becomes an Exclusive trip on").check();
+  await expect(alert).toHaveCount(0);
+
+  await bar.getByRole("button", { name: "See changes" }).click();
+  const list = page.getByRole("list", { name: "Changes not live yet" });
+  await expect(list).toContainText("Home popup after booking: 10 → 15");
+  await expect(list).toContainText("Scheduled rides go to: all drivers in the zone → drivers with a high rating");
+  await expect(list).toContainText("Radar trips before pickup: 15 → 10");
+  await expect(list).toContainText("After a driver cancels: by time left → Exclusive");
+  await bar.getByRole("button", { name: "Publish now" }).click();
+  await confirm(page);
+  await expect(page.getByText("Live now: Norrmalm.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Reservations" }).getByLabel("Home popup after booking")).toHaveValue("15");
+});
+
 test("a viewer can look but not change", async ({ page }) => {
   await session(page, "anna");
   await page.goto("/dispatch?zone=Z001");
