@@ -198,6 +198,12 @@ export function money(value: number, id: MarketId): string {
   return new Intl.NumberFormat(item.locale, { style: "currency", currency: item.currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 }
 
+/** An amount in Swedish kronor in a market's own money, with the same rate and rounding the default prices use. */
+export function fromSek(amountSek: number, id: MarketId): number {
+  const { factor, step } = CURRENCY[id];
+  return roundTo(amountSek * factor, step);
+}
+
 export function currencySymbol(id: MarketId): string {
   return { SE: "kr", FR: "€", TN: "DT" }[id];
 }

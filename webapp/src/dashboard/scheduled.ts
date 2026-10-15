@@ -21,6 +21,13 @@ const ESTIMATE: Record<string, number> = { SE: 52_000, FR: 4_800, TN: 28_000 };
 const CATEGORY_FACTOR: Record<string, number> = { economy: 1, comfort: 1.25, premium: 1.7, priority: 1.15, xl: 1.45, electric: 1.1, pet: 1.15 };
 const OPEN = new Set(["waiting", "booked"]);
 
+/** A booked ride's fare in minor units: the stored fare, or an estimate from the country and category. */
+export function reservationFareMinor(row: Pick<DemoRecord, "zoneId" | "category" | "fareOre">): { minor: number; estimated: boolean } {
+  const country = marketOfZone(row.zoneId)?.id ?? "SE";
+  const category = row.category ?? "economy";
+  return row.fareOre !== undefined ? { minor: row.fareOre, estimated: false } : { minor: Math.round(ESTIMATE[country] * (CATEGORY_FACTOR[category] ?? 1)), estimated: true };
+}
+
 /**
  * Scheduled rides as the dashboard shows them. `shiftMs` moves demo pickup times so the
  * fixed demo data lines up with today; it is 0 with a live backend.
@@ -31,8 +38,8 @@ export function scheduledRides(reservations: readonly DemoRecord[], drivers: rea
     .filter((row) => row.pickupAt)
     .map((row): ScheduledRide => {
       const pickupAt = Date.parse(row.pickupAt!) + shiftMs;
-      const country = marketOfZone(row.zoneId)?.id ?? "SE";
       const category = row.category ?? "economy";
+      const fare = reservationFareMinor(row);
       const minutes = (pickupAt - nowMs) / 60_000;
       const unassigned = OPEN.has(row.status) && !row.driverId;
       return {
@@ -43,8 +50,8 @@ export function scheduledRides(reservations: readonly DemoRecord[], drivers: rea
         driver: row.driverId ? names.get(row.driverId) ?? row.driverId : null,
         status: row.status,
         pickupAt,
-        fareMinor: row.fareOre ?? Math.round(ESTIMATE[country] * (CATEGORY_FACTOR[category] ?? 1)),
-        estimated: row.fareOre === undefined,
+        fareMinor: fare.minor,
+        estimated: fare.estimated,
         hasReturn: Boolean(row.returnAt),
         warning: unassigned && minutes >= 0 && minutes < 60 ? "red" : unassigned && minutes >= 0 && minutes < 120 ? "amber" : null,
       };

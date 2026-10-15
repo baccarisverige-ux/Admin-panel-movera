@@ -1,10 +1,11 @@
-export type OpenValue = { id: string; label: string; today: string };
+/** `link`: where the value is set today. Values set in Dispatch point there, so there is one place to change them. */
+export type OpenValue = { id: string; label: string; today: string; link?: string };
 
 /** Unconfirmed product defaults. Today's value is the demo default. Do not invent a second number. */
 export const OPEN_VALUES: OpenValue[] = [
-  { id: "offer-time", label: "Offer time", today: "8.5 s" },
-  { id: "search-radius", label: "Search radius", today: "30 km" },
-  { id: "next-trip", label: "Next-trip radius", today: "30 km" },
+  { id: "offer-time", label: "Offer time", today: "Set per zone in Dispatch", link: "/dispatch" },
+  { id: "search-radius", label: "Search radius", today: "Set per zone in Dispatch", link: "/dispatch?tab=best" },
+  { id: "next-trip", label: "Next-trip radius", today: "Set per zone in Dispatch", link: "/dispatch?tab=best" },
   { id: "free-waiting", label: "Free waiting", today: "2 min" },
   { id: "waiting-fee", label: "Waiting fee", today: "none" },
   { id: "no-show", label: "No-show time", today: "5 min" },
@@ -14,9 +15,9 @@ export const OPEN_VALUES: OpenValue[] = [
   { id: "adjustment", label: "Adjustment range", today: "65–180%" },
   { id: "cancel-fee", label: "Cancellation fee", today: "none published" },
   { id: "free-cancel", label: "Free-cancel window", today: "2 minutes after accept" },
-  { id: "horizon", label: "Reservation horizon", today: "7 days" },
-  { id: "lead", label: "Assignment lead", today: "30 min" },
-  { id: "give-up", label: "Give-up time", today: "5 min" },
+  { id: "horizon", label: "Reservation horizon", today: "7 days", link: "/dispatch?tab=reservations" },
+  { id: "lead", label: "Assignment lead", today: "30 min", link: "/dispatch?tab=reservations" },
+  { id: "give-up", label: "Give-up time", today: "5 min", link: "/dispatch?tab=reservations" },
   { id: "tips", label: "Tips", today: "10/20/30 kr" },
   { id: "commission", label: "Commission", today: "none" },
   { id: "documents", label: "Required documents", today: "11 listed" },
@@ -32,7 +33,7 @@ export const OPEN_VALUES: OpenValue[] = [
   { id: "vehicles", label: "Vehicle requirements", today: "none" },
   { id: "taxi", label: "Swedish taxi compliance", today: "open" },
   { id: "quote", label: "Quote validity", today: "2 minutes" },
-  { id: "reservation-wait", label: "Included reservation waiting", today: "5 minutes" },
+  { id: "reservation-wait", label: "Included reservation waiting", today: "5 minutes", link: "/dispatch?tab=reservations" },
   { id: "topup", label: "Wallet top-up", today: "100, 200, 500 kr" },
   { id: "travel", label: "Impossible travel", today: "55 m/s" },
   { id: "stops", label: "Max stops", today: "3" },

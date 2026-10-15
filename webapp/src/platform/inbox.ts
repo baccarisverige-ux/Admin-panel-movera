@@ -67,7 +67,7 @@ export function inboxItems(input: {
     detail: `Today: ${item.today}`,
     by: null,
     mine: false,
-    link: "/confirm?tab=values",
+    link: item.link ?? "/confirm?tab=values",
   }));
   return [...money, ...settings, ...values];
 }

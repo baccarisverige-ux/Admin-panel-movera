@@ -225,7 +225,7 @@ test("radar offers in the driver app and going offline automatically", async ({ 
 
 test("reservations: who gets them, the Home popup, Exclusive, Radar trips and a driver cancel", async ({ page }) => {
   await session(page);
-  await page.goto("/dispatch?zone=Z001");
+  await page.goto("/dispatch?zone=Z001&tab=reservations");
   const card = page.getByRole("region", { name: "Reservations" });
   await expect(card).toContainText("Two drivers take it at the same time → the first tap wins; exact same moment → the system picks one at random.");
   const steps = card.getByRole("list", { name: "Reservation steps" }).getByRole("listitem");
@@ -273,6 +273,98 @@ test("reservations: who gets them, the Home popup, Exclusive, Radar trips and a 
   await expect(page.getByText("Live now: Norrmalm.")).toBeVisible();
   await page.reload();
   await expect(page.getByRole("region", { name: "Reservations" }).getByLabel("Home popup after booking")).toHaveValue("15");
+});
+
+test("reservations in one place: a driver group, the Home popup, smart gap, cancels, a fare raise and rides given by Movera", async ({ page }) => {
+  await session(page);
+  await page.goto("/dispatch?zone=Z001");
+  await expect(page.getByRole("region", { name: "Reservations" })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Reservations" }).click();
+  await expect(page).toHaveURL(/tab=reservations/);
+  const card = page.getByRole("region", { name: "Reservations" });
+  const steps = card.getByRole("list", { name: "Reservation steps" }).getByRole("listitem");
+
+  // Who gets it: one saved group from Events & groups. The Home popup can go wider.
+  await card.getByRole("radiogroup", { name: "Scheduled rides go to" }).getByText("A driver group").click();
+  await expect(card.getByLabel("Driver group for Scheduled rides")).toHaveValue("G-airport");
+  await expect(card).toContainText("The group Airport drivers has no drivers yet");
+  await card.getByLabel("Driver group for Scheduled rides").selectOption("G-comfort");
+  await expect(steps.nth(0)).toContainText("Only drivers in the group Comfort drivers");
+  await expect(steps.nth(1)).toContainText("the same drivers as the list");
+  await expect(steps.nth(1)).toContainText("back as an Exclusive");
+  await card.getByRole("radiogroup", { name: "Home popup goes to" }).getByText("All drivers in the zone").click();
+  await expect(steps.nth(1)).toContainText("every online driver in the zone");
+  await card.getByLabel("Closed with ×: comes back as Exclusive if nobody took it on").uncheck();
+  await expect(steps.nth(1)).not.toContainText("back as an Exclusive");
+
+  // Smart gap and the times per kind of ride.
+  const gap = page.getByRole("region", { name: "Smart gap" });
+  await expect(gap.getByLabel("Normal spare minutes")).toHaveValue("15");
+  await expect(gap.getByLabel("Smart gap example")).toContainText("08:50");
+  await gap.getByLabel("Normal spare minutes").fill("20");
+  await expect(gap.getByLabel("Smart gap example")).toContainText("08:55");
+  await expect(gap.getByLabel("Airport be online before")).toHaveValue("60");
+  await expect(gap.getByLabel("Comfort and Premium be online before")).toHaveValue("45");
+  await gap.getByLabel("Airport first reminder").fill("10");
+  const alert = page.getByLabel("Norrmalm rules").getByRole("alert");
+  await expect(alert).toContainText("Reservations, Airport: the first reminder must come before the second");
+  await gap.getByLabel("Airport first reminder").fill("90");
+  await expect(alert).toHaveCount(0);
+  await gap.getByLabel("Backup driver after the late warning").fill("8");
+
+  // Cancels: drivers never pay; riders free until 1 h before.
+  const cancels = page.getByRole("region", { name: "Cancels" });
+  await expect(cancels).toContainText("Drivers never pay");
+  await expect(cancels.getByLabel("Rider free cancel, minutes before pickup")).toHaveValue("60");
+  await expect(cancels.getByLabel("Driver late cancel, hours before pickup")).toHaveValue("1");
+  await expect(cancels.getByLabel("Late cancels before a pause")).toHaveValue("2");
+  await expect(cancels.getByLabel("Rider late cancel fee")).toHaveValue("50");
+  await cancels.getByLabel("Rider late cancel fee").fill("75");
+
+  // No driver near pickup: raise from Movera's commission, never over 500 kr.
+  const none = page.getByRole("region", { name: "No driver near pickup" });
+  await expect(none.getByLabel("Highest fare raise")).toHaveValue("500");
+  const trial = none.getByRole("group", { name: "Try a raise" });
+  await trial.getByLabel("Sample raise").fill("50");
+  await expect(trial.getByRole("status")).toContainText("All from Movera's commission");
+  await trial.getByLabel("Sample raise").fill("200");
+  await expect(trial.getByRole("status")).toContainText("beyond Movera's commission");
+  await none.getByLabel("Highest fare raise").fill("900");
+  await none.getByLabel("Highest fare raise").blur();
+  await expect(none.getByLabel("Highest fare raise")).toHaveValue("500");
+  await none.getByLabel("Highest fare raise").fill("300");
+
+  await page.getByRole("region", { name: "Movera gives a ride to a driver" }).getByLabel("Time to accept a ride assigned by Movera").fill("90");
+
+  // The driver's phone and the rider's phone follow the settings.
+  const phone = page.getByLabel("Driver reservation preview");
+  await phone.getByRole("button", { name: "Assigned by Movera" }).click();
+  await expect(phone.getByLabel("90 seconds to accept")).toBeVisible();
+  await phone.getByRole("button", { name: "Late" }).click();
+  await expect(phone.getByLabel("Island")).toContainText("Head to your 07:40 pickup");
+  await expect(phone).toContainText("backup driver in 8 min");
+  await page.getByRole("tab", { name: "Rider app" }).click();
+  await expect(page.getByLabel("Rider reservation preview")).toContainText("Your driver");
+  await expect(page.getByLabel("Rider reservation preview")).toContainText("Free cancel until 06:40 · then 75 kr");
+
+  const bar = page.getByRole("region", { name: "Publish" });
+  await bar.getByRole("button", { name: "See changes" }).click();
+  const list = page.getByRole("list", { name: "Changes not live yet" });
+  await expect(list).toContainText("Scheduled rides go to: all drivers in the zone → a driver group");
+  await expect(list).toContainText("Driver group for Scheduled rides: none → G-comfort");
+  await expect(list).toContainText("Home popup goes to: same drivers as the list → all drivers in the zone");
+  await expect(list).toContainText("Closed popup comes back as Exclusive: on → off");
+  await expect(list).toContainText("Normal rides: spare minutes: 15 → 20");
+  await expect(list).toContainText("Airport rides: first reminder: 60 → 90");
+  await expect(list).toContainText("Rider late cancel fee: 50 → 75");
+  await expect(list).toContainText("Highest fare raise: 500 → 300");
+  await expect(list).toContainText("Time to accept a ride assigned by Movera: 30 → 90");
+  await bar.getByRole("button", { name: "Publish now" }).click();
+  await confirm(page);
+  await expect(page.getByText("Live now: Norrmalm.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Smart gap" }).getByLabel("Normal spare minutes")).toHaveValue("20");
+  await expect(page.getByRole("region", { name: "Reservations" }).getByLabel("Driver group for Scheduled rides")).toHaveValue("G-comfort");
 });
 
 test("a viewer can look but not change", async ({ page }) => {
