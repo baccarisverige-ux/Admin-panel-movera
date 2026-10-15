@@ -112,6 +112,34 @@ export type WaitStep = { id: string; kind: WaitKind; on: boolean; afterMin: numb
 export type TimeRule = { id: string; on: boolean; from: string; to: string; mode: OfferMode };
 export type Factor = { id: FactorId; on: boolean; weight: number };
 
+/**
+ * Ride check: when the driver and rider apps show "Is everything OK?". Each trigger can be off.
+ * Off the route has two parts: km away from the route, or the trip that much longer than expected.
+ */
+export type RideCheckRules = {
+  farOn: boolean;
+  farM: number;
+  stopOn: boolean;
+  stopMin: number;
+  routeOn: boolean;
+  routeKm: number;
+  longerOn: boolean;
+  longerPct: number;
+  crashOn: boolean;
+};
+
+/** Lowest and highest value for each Ride check number, used by the fields and the checks. */
+export const RIDE_CHECK_LIMITS = {
+  farM: { min: 100, max: 5000 },
+  stopMin: { min: 1, max: 30 },
+  routeKm: { min: 0.5, max: 20 },
+  longerPct: { min: 10, max: 300 },
+} as const;
+
+export function rideCheckDefault(): RideCheckRules {
+  return { farOn: true, farM: 500, stopOn: true, stopMin: 4, routeOn: true, routeKm: 2, longerOn: true, longerPct: 50, crashOn: true };
+}
+
 export type ZoneDispatch = {
   zoneId: string;
   radar: { on: boolean; drivers: number; seconds: number; then: "widen" | "exclusive" | "widen_then_exclusive" };
@@ -139,6 +167,7 @@ export type ZoneDispatch = {
   fairness: { idleBoost: boolean; idlePoints: number; hourCap: boolean; hourRides: number; skipPause: boolean; skips: number; pauseMin: number };
   decline: { on: boolean; countsAcceptance: boolean; pauseAfter: number; pauseMin: number; longTripFree: boolean; farPickupFree: boolean; farPickupKm: number };
   safety: { minRating: boolean; ratingBelow: number; maxCancel: boolean; cancelAbove: number; doNotMatch: boolean; womenOnly: boolean };
+  rideCheck: RideCheckRules;
   alerts: { id: AlertId; on: boolean; limit: number; panel: boolean; email: boolean; sms: boolean }[];
 };
 
@@ -260,6 +289,7 @@ export function defaultZone(zone: Pick<MarketZone, "id" | "kind">): ZoneDispatch
     fairness: { idleBoost: true, idlePoints: 10, hourCap: false, hourRides: 4, skipPause: true, skips: 3, pauseMin: 5 },
     decline: { on: true, countsAcceptance: true, pauseAfter: 3, pauseMin: 5, longTripFree: true, farPickupFree: true, farPickupKm: 5 },
     safety: { minRating: true, ratingBelow: 4.3, maxCancel: true, cancelAbove: 20, doNotMatch: true, womenOnly: true },
+    rideCheck: rideCheckDefault(),
     alerts: [
       { id: "long_wait", on: true, limit: 5, panel: true, email: false, sms: false },
       { id: "few_drivers", on: true, limit: 2, panel: true, email: false, sms: false },
@@ -387,6 +417,30 @@ export function completeReservation(base: ReservationRules, stored: unknown): Re
   return next;
 }
 
+/** Ride check settings from an older save: missing or broken values come from the defaults. */
+export function completeRideCheck(base: RideCheckRules, stored: unknown): RideCheckRules {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return { ...base };
+  const raw = stored as Record<string, unknown>;
+  const next = { ...base } as Record<string, boolean | number>;
+  for (const [key, fallback] of Object.entries(base)) {
+    const value = raw[key];
+    if (typeof fallback === "boolean" && typeof value === "boolean") next[key] = value;
+    if (typeof fallback === "number" && typeof value === "number" && Number.isFinite(value)) next[key] = value;
+  }
+  return next as RideCheckRules;
+}
+
+/** Only triggers that are on are checked. */
+export function rideCheckIssues(check: RideCheckRules): string[] {
+  const issues: string[] = [];
+  const out = (value: number, limit: { min: number; max: number }) => !Number.isFinite(value) || value < limit.min || value > limit.max;
+  if (check.farOn && out(check.farM, RIDE_CHECK_LIMITS.farM)) issues.push(`Ride check: dropped far away must be ${RIDE_CHECK_LIMITS.farM.min} to ${RIDE_CHECK_LIMITS.farM.max} m from the drop-off.`);
+  if (check.stopOn && out(check.stopMin, RIDE_CHECK_LIMITS.stopMin)) issues.push(`Ride check: a long stop must be ${RIDE_CHECK_LIMITS.stopMin.min} to ${RIDE_CHECK_LIMITS.stopMin.max} minutes.`);
+  if (check.routeOn && out(check.routeKm, RIDE_CHECK_LIMITS.routeKm)) issues.push(`Ride check: off the route must be ${RIDE_CHECK_LIMITS.routeKm.min} to ${RIDE_CHECK_LIMITS.routeKm.max} km.`);
+  if (check.longerOn && out(check.longerPct, RIDE_CHECK_LIMITS.longerPct)) issues.push(`Ride check: longer than expected must be ${RIDE_CHECK_LIMITS.longerPct.min} to ${RIDE_CHECK_LIMITS.longerPct.max}%.`);
+  return issues;
+}
+
 /** Fill anything missing (older saves, new settings) from the zone's defaults. */
 function complete(zoneId: string, stored: Partial<ZoneDispatch> | undefined): ZoneDispatch {
   const base = zoneDefault(zoneId);
@@ -397,6 +451,7 @@ function complete(zoneId: string, stored: Partial<ZoneDispatch> | undefined): Zo
     merged[key] = value && typeof value === "object" && !Array.isArray(value) && fallback && typeof fallback === "object" && !Array.isArray(fallback) ? { ...fallback, ...value } : value;
   }
   merged.reservation = completeReservation(base.reservation, stored.reservation);
+  merged.rideCheck = completeRideCheck(base.rideCheck, stored.rideCheck);
   return { ...(merged as ZoneDispatch), zoneId };
 }
 
@@ -453,6 +508,7 @@ export function zoneIssues(zone: ZoneDispatch): string[] {
   if (zone.stops.on && (zone.stops.max < 1 || zone.stops.max > 5)) issues.push("Stops: max stops must be 1 to 5.");
   if (zone.longTripKm < 10 || zone.longTripKm > 500) issues.push("Long trip must be 10 to 500 km.");
   if (zone.safety.minRating && (zone.safety.ratingBelow < 1 || zone.safety.ratingBelow > 5)) issues.push("Safety: lowest rating must be 1 to 5.");
+  issues.push(...rideCheckIssues(zone.rideCheck));
   if (zone.alerts.some((alert) => alert.on && !alert.panel && !alert.email && !alert.sms)) issues.push("Alerts: each alert that is on needs a place to show (panel, email or SMS).");
   return issues;
 }
@@ -579,6 +635,11 @@ export function modeLabel(mode: OfferMode | "none"): string {
 
 /** Readable labels for the settings, used in change lists and the history. */
 const LABELS: Record<string, string> = {
+  "rideCheck.farOn": "Ride check when dropped far away", "rideCheck.farM": "Dropped far away from (m)",
+  "rideCheck.stopOn": "Ride check on a long stop", "rideCheck.stopMin": "Long stop from (min)",
+  "rideCheck.routeOn": "Ride check off the route", "rideCheck.routeKm": "Off the route from (km)",
+  "rideCheck.longerOn": "Ride check when longer than expected", "rideCheck.longerPct": "Longer than expected from (%)",
+  "rideCheck.crashOn": "Ride check on a possible crash",
   "radar.on": "Radar", "radar.drivers": "Radar drivers", "radar.seconds": "Radar time", "radar.then": "After Radar",
   "exclusive.on": "Exclusive", "exclusive.seconds": "Exclusive time to accept", "exclusive.drivers": "Exclusive drivers to try", "exclusive.then": "After Exclusive",
   "radarApp.fullOn": "Radar full screen", "radarApp.full": "Offers on full-screen radar", "radarApp.popupOn": "Radar popup", "radarApp.popup": "Offers in the popup",
@@ -793,7 +854,7 @@ const PART_KEYS: Record<TabId, (keyof ZoneDispatch)[]> = {
   waiting: ["waiting"],
   rides: ["extras", "longTripKm", "stops", "driverCancel", "riderCancel", "airport"],
   drivers: ["goingHome", "fairness", "decline", "autoOffline"],
-  safety: ["safety"],
+  safety: ["safety", "rideCheck"],
   alerts: ["alerts"],
 };
 
@@ -1068,6 +1129,7 @@ export function rulesFile(book: DispatchBook, country: MarketId, at: string) {
     revision: book.draftRev,
     country: { id: country, name: info.name, currency: info.currency, timeZone: info.timeZone, ...liveCountry(book, country) },
     glossary: {
+      rideCheck: "When the driver and rider apps show \"Is everything OK?\". farM: the trip ended this many metres from the drop-off. stopMin: no movement this many minutes mid-trip, not at a planned stop and not in traffic. routeKm: this many km off the route; longerPct: the trip this much longer than expected. crashOn: a very hard stop or impact opens the card at once with Call 112 on top. Each part works only when its switch is on.",
       radar: "One request shown to the N nearest suitable drivers at once. The first to accept gets it.",
       exclusive: "One request offered to one driver at a time, best first, for a few seconds each.",
       busy: "Waiting requests divided by free online drivers in the zone.",

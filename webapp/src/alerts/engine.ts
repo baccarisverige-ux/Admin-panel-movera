@@ -7,7 +7,7 @@ export const ALERTS_KEY = "alertOps";
 export type Level = "critical" | "important" | "info";
 export type GroupId = "safety" | "dispatch" | "drivers" | "money" | "riders" | "system";
 export type KindId =
-  | "sos" | "sos_slow"
+  | "sos" | "sos_slow" | "ride_check"
   | "long_wait" | "few_drivers" | "no_driver" | "late_reservation"
   | "doc_expiring" | "low_rating" | "auto_offline"
   | "payment_failed" | "refund_approval" | "payout_big"
@@ -46,11 +46,14 @@ export type KindDef = {
   limits?: Limits;
   /** Settings that live in Dispatch, per zone. */
   fromDispatch?: boolean;
+  /** Who may see it, when not only the group's permission: any one of these is enough. */
+  anyOf?: string[];
   path: string;
 };
 
 export const KINDS: KindDef[] = [
   { id: "sos", group: "safety", label: "SOS from a rider or driver", help: "Taken and solved in Incidents too: one owner for both.", mode: "fixed", level: "critical", path: "/incidents" },
+  { id: "ride_check", group: "safety", label: "Ride check", help: "The driver or rider tapped Accident, Someone hurt or I feel unsafe. A later Yes or Not sure updates it. A red banner shows on every page until an admin opens it. Taken and solved in Incidents.", mode: "fixed", level: "critical", anyOf: ["incidents.read", "trips.intervene"], path: "/incidents" },
   { id: "sos_slow", group: "safety", label: "SOS taken but not solved", help: "Minutes since the SOS was taken. The SOS alert says it is not solved yet.", mode: "limits", direction: "up", unit: "min", limits: { info: null, important: 15, critical: 30 }, path: "/incidents" },
   { id: "long_wait", group: "dispatch", label: "A rider waits too long", help: "Important from the limit set per zone in Dispatch → Alerts. Critical from the number here.", mode: "limits", direction: "up", unit: "min", limits: { info: null, important: null, critical: 15 }, fromDispatch: true, path: "/dispatch?view=live" },
   { id: "few_drivers", group: "dispatch", label: "Few free drivers in a zone", help: "The limit is set per zone in Dispatch → Alerts.", mode: "fixed", level: "important", fromDispatch: true, path: "/dispatch?view=live" },
@@ -193,7 +196,9 @@ export type Facts = {
   now: number;
   day: string;
   zones: { id: string; name: string }[];
-  incidents: { id: string; zoneId: string; who: string; status: string; owner: string | null; takenAt: string | null; createdAt: string | null; late?: string | null }[];
+  incidents: { id: string; zoneId: string; who: string; status: string; owner: string | null; takenAt: string | null; createdAt: string | null; late?: string | null; kind?: string }[];
+  /** Ride checks that sent an alert, with their incident's status and opening time. */
+  rideChecks: { id: string; incidentId: string; zoneId: string; status: string; title: string; detail: string; since: number }[];
   requests: { tripId: string; rider: string; zoneId: string; waitingMin: number; searching: boolean }[];
   freeByZone: Record<string, number>;
   dispatch: (zoneId: string) => { long_wait: { on: boolean; limit: number }; few_drivers: { on: boolean; limit: number }; no_driver: { on: boolean; limit: number } };
@@ -220,10 +225,16 @@ export type Alert = {
   zoneId: string | null;
   since: number;
   path: string;
-  /** For SOS: the incident, so Take uses the same command as Incidents. */
+  /** For SOS and Ride check: the incident, so Take uses the same command as Incidents. */
   incidentId?: string;
+  rideCheckId?: string;
   ruleId?: string;
 };
+
+/** SOS and Ride check alerts follow their incident: one owner, taken and solved in Incidents. */
+export function followsIncident(kind: KindId): boolean {
+  return kind === "sos" || kind === "sos_slow" || kind === "ride_check";
+}
 
 function hash(text: string): number {
   let value = 2166136261;
@@ -255,10 +266,17 @@ export function computeAlerts(facts: Facts, settings: AlertSettings, rules: read
 
   // An SOS stays in the list from the moment it comes in until it is solved, with who works on it.
   if (k("sos").on) {
-    for (const row of facts.incidents.filter((item) => (item.status === "queued" || item.status === "taken") && inZones.has(item.zoneId))) {
+    for (const row of facts.incidents.filter((item) => item.kind !== "ride_check" && (item.status === "queued" || item.status === "taken") && inZones.has(item.zoneId))) {
       const minutes = row.takenAt ? Math.round((facts.now - Date.parse(row.takenAt)) / 60_000) : 0;
       const slow = row.status === "taken" && k("sos_slow").on && levelFor(minutes, k("sos_slow").limits, "up");
       push({ id: `sos:${row.id}`, kind: "sos", level: k("sos").level, title: slow ? `SOS from ${row.who} not solved after ${minutes} min` : row.late ? `SOS from ${row.who} ${row.late}` : `SOS from ${row.who}`, detail: `${zoneName(row.zoneId)} · ${row.id}`, zoneId: row.zoneId, since: row.createdAt ? Date.parse(row.createdAt) : row.takenAt ? Date.parse(row.takenAt) - 2 * 60_000 : seeded(row.id, 8), incidentId: row.id });
+    }
+  }
+
+  // A ride check alert stays until its incident is solved; the banner goes once an admin opens it.
+  if (k("ride_check").on) {
+    for (const row of facts.rideChecks.filter((item) => (item.status === "queued" || item.status === "taken") && inZones.has(item.zoneId))) {
+      push({ id: `ride_check:${row.id}`, kind: "ride_check", level: k("ride_check").level, title: row.title, detail: row.detail, zoneId: row.zoneId, since: row.since, incidentId: row.incidentId, rideCheckId: row.id, path: `/incidents?case=${row.incidentId}` });
     }
   }
 
@@ -351,7 +369,7 @@ export function metricValue(facts: Facts, metric: Metric, zoneId: string): numbe
   if (metric === "riders_waiting") return waiting.length;
   if (metric === "longest_wait") return waiting.reduce((max, request) => Math.max(max, request.waitingMin), 0);
   if (metric === "failed_payments") return facts.payments.filter((row) => row.zoneId === zoneId).length;
-  if (metric === "open_sos") return facts.incidents.filter((row) => row.zoneId === zoneId && row.status === "queued").length;
+  if (metric === "open_sos") return facts.incidents.filter((row) => row.zoneId === zoneId && row.status === "queued" && row.kind !== "ride_check").length;
   return facts.tickets.filter((row) => row.zoneId === zoneId).length;
 }
 
@@ -415,8 +433,10 @@ export type Viewer = { id: string; role: Role; can?: (permission: string) => boo
 /** Who sees an alert: everyone by default, or the roles set for its kind; after the wait, the next person too. */
 export function visibleTo(alert: Alert, book: AlertBook, viewer: Viewer, now: number): boolean {
   // Never show an alert about data the role cannot open, whatever the routing says.
+  const anyOf = kindDef(alert.kind)?.anyOf;
   const need = GROUPS.find((group) => group.id === alert.group)?.permission;
-  if (need && viewer.can && !viewer.can(need)) return false;
+  if (anyOf && viewer.can && !anyOf.some((permission) => viewer.can!(permission))) return false;
+  if (!anyOf && need && viewer.can && !viewer.can(need)) return false;
   if (viewer.role === "super") return true;
   const record = book.records[alert.id];
   if (record?.owner === viewer.id) return true;
@@ -437,7 +457,7 @@ export function openAlerts(alerts: readonly Alert[], book: AlertBook, now: numbe
     .map((alert): OpenAlert | null => {
       const record = book.records[alert.id] ?? null;
       const muted = Boolean(book.mutes[alert.kind] && Date.parse(book.mutes[alert.kind].until) > now);
-      if (alert.kind === "sos" && alert.incidentId) {
+      if ((alert.kind === "sos" || alert.kind === "ride_check") && alert.incidentId) {
         const owner = sosOwner(alert.incidentId);
         return { ...alert, status: owner ? "taken" : "new", owner, record, muted: false };
       }
@@ -460,6 +480,7 @@ function save(book: AlertBook, record: AlertRecord): AlertBook {
 /** "Nora is working on it". Nobody else can take it while it is taken. */
 export function takeAlert(book: AlertBook, alert: Alert, actor: string, at: string): { book: AlertBook; error?: string } {
   if (alert.kind === "sos") return { book, error: "Take an SOS with the Incidents take, so there is one owner." };
+  if (alert.kind === "ride_check") return { book, error: "Take a ride check with the Incidents take, so there is one owner." };
   const record = base(alert, book.records[alert.id]);
   if (record.owner && record.owner !== actor && record.status !== "done") return { book, error: `${record.owner} is already working on it.` };
   return { book: save(book, { ...record, level: alert.level, title: alert.title, status: "taken", owner: actor, snoozeUntil: undefined, events: [...record.events, { at, by: actor, kind: "take", text: "Working on it" }] }) };
@@ -468,6 +489,7 @@ export function takeAlert(book: AlertBook, alert: Alert, actor: string, at: stri
 /** "Solved by Nora". Only the person working on it can close it; an alert nobody took can be closed directly. */
 export function doneAlert(book: AlertBook, alert: Alert, actor: string, note: string, at: string): { book: AlertBook; error?: string } {
   if (alert.kind === "sos") return { book, error: "Solve an SOS in Incidents, so there is one owner." };
+  if (alert.kind === "ride_check") return { book, error: "Solve a ride check in Incidents, so there is one owner." };
   const record = base(alert, book.records[alert.id]);
   if (record.owner && record.owner !== actor) return { book, error: `Only ${record.owner} can mark it solved, or they pass it to you.` };
   const events = record.owner ? record.events : [...record.events, { at, by: actor, kind: "take" as const, text: "Working on it" }];
@@ -475,7 +497,7 @@ export function doneAlert(book: AlertBook, alert: Alert, actor: string, note: st
 }
 
 export function snoozeAlert(book: AlertBook, alert: Alert, actor: string, minutes: number, at: string): { book: AlertBook; error?: string } {
-  if (alert.kind === "sos") return { book, error: "An SOS cannot be snoozed." };
+  if (alert.kind === "sos" || alert.kind === "ride_check") return { book, error: "An SOS or a ride check cannot be snoozed." };
   const record = base(alert, book.records[alert.id]);
   if (record.owner && record.owner !== actor) return { book, error: `${record.owner} is working on it.` };
   const until = new Date(Date.parse(at) + minutes * 60_000).toISOString();
@@ -483,7 +505,7 @@ export function snoozeAlert(book: AlertBook, alert: Alert, actor: string, minute
 }
 
 export function passAlert(book: AlertBook, alert: Alert, actor: string, to: string, at: string): { book: AlertBook; error?: string } {
-  if (alert.kind === "sos") return { book, error: "Pass an SOS in Incidents." };
+  if (alert.kind === "sos" || alert.kind === "ride_check") return { book, error: "Pass an SOS or a ride check in Incidents." };
   if (to === actor) return { book, error: "Pick another admin." };
   const record = base(alert, book.records[alert.id]);
   if (record.owner && record.owner !== actor) return { book, error: `${record.owner} is working on it.` };

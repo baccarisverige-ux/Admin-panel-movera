@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { AlertOctagon, ArrowLeft, Clock3, FileDown, History, MapPin, Phone, PhoneCall, Settings2, ShieldAlert, Siren, UserRound, Users } from "lucide-react";
-import { emptySafety, safetyAction, useRecords, useSlice, type SafetyBook } from "../api/hooks";
+import { AlertOctagon, ArrowLeft, Car, Clock3, FileDown, History, ListChecks, MapPin, Phone, PhoneCall, Settings2, ShieldAlert, ShieldCheck, Siren, UserRound, Users } from "lucide-react";
+import { useAdminApi } from "../api/AdminApiContext";
+import { emptySafety, safetyAction, useCommands, useRecords, useSlice, type SafetyBook } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
 import { can } from "../auth/permissions";
+import { demoShift } from "../dashboard/scheduled";
 import { MapPanel } from "../dispatch/maps";
 import { market, zoneById } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
@@ -32,6 +34,29 @@ import {
 } from "../safety/cases";
 import { IncidentSettingsView } from "../safety/IncidentSettings";
 import { DEFAULT_SAFETY } from "../safety/ops";
+import { RideCheckLog } from "../safety/RideCheckLog";
+import {
+  QUESTIONS,
+  RIDE_CHECK_KEY,
+  alertBy,
+  answerKind,
+  answerLabel,
+  asRideChecks,
+  emptyRideCheckOps,
+  followText,
+  normalizeRideCheckOps,
+  openCheck,
+  reasonText,
+  shiftOf,
+  shifted,
+  triggerLabel,
+  worrying,
+  type Answer,
+  type Person,
+  type RideCheck,
+  type RideCheckOps,
+} from "../safety/rideCheck";
+import { routeOf } from "../trips/file";
 import { agentName } from "../trips/TripParts";
 import { RouteMap } from "../trips/RouteMap";
 import { CommandButton } from "../ui/CommandButton";
@@ -48,6 +73,12 @@ export function SafetyPage() {
   const trips = useRecords("trips");
   const drivers = useRecords("drivers");
   const riders = useRecords("riders");
+  const vehicles = useRecords("vehicles");
+  const rideCheckRows = useRecords("rideChecks", undefined, { refetchMs: 10_000 });
+  const rideChecks = useMemo(() => asRideChecks(rideCheckRows.data), [rideCheckRows.data]);
+  const rideSlice = useSlice<RideCheckOps>(RIDE_CHECK_KEY, emptyRideCheckOps());
+  const rideOps = normalizeRideCheckOps(rideSlice.value);
+  const api = useAdminApi();
   const store = useSlice<SafetyBook>("safetyOps", emptySafety());
   const opsSlice = useSlice<IncidentOps>(INCIDENT_OPS_KEY, emptyIncidentOps(), { enabled: Boolean(agent && can(agent.role, "incidents.read")) });
   const ops = normalizeIncidentOps(opsSlice.value);
@@ -61,7 +92,10 @@ export function SafetyPage() {
   const cases = useMemo(() => sortCases((rows.data ?? []).map((row) => caseOf(row, store.value, ops, now))), [rows.data, store.value, ops, now]);
   const shown = cases.filter((item) => (show === "all" ? true : show === "open" ? item.state !== "solved" : item.state === "solved") && (!levelFilter || item.level === levelFilter));
   const selectedId = params.get("case");
-  const item = shown.find((row) => row.id === selectedId) ?? shown[0] ?? null;
+  // Keep the case on screen while the list reorders (for example right after Take), instead of jumping to the new first one.
+  const lastShown = useRef<string | null>(null);
+  const item = shown.find((row) => row.id === selectedId) ?? shown.find((row) => row.id === lastShown.current) ?? shown[0] ?? null;
+  lastShown.current = item?.id ?? null;
   const record = item ? rows.data?.find((row) => row.id === item.id) : undefined;
   const open = cases.filter((row) => row.state !== "solved");
   const late = open.filter((row) => lateText(row, ops.settings, now));
@@ -69,6 +103,20 @@ export function SafetyPage() {
   const takeTimes = cases.filter((row) => row.takenAt).map((row) => ((row.takenAt as number) - row.openedAt) / 60_000);
   const editable = Boolean(agent && can(agent.role, "safety.edit"));
   const time = (ms: number) => new Intl.DateTimeFormat(place.locale, { timeZone: place.timeZone, dateStyle: "medium", timeStyle: "short" }).format(new Date(ms));
+  const view = params.get("view") === "ridechecks" ? "ridechecks" : "cases";
+  const shiftMs = demoShift(now, api.demo);
+  // When a ride check happened: live ones move with their incident, like an open SOS.
+  const checkTime = (check: RideCheck) => shifted(check.at, shiftOf(check, cases.find((row) => row.id === check.incidentId)?.openedAt ?? null, shiftMs));
+  const sections = (
+    <div className="dash-tabs dx-views" role="tablist" aria-label="Incident sections">
+      {([["cases", "Cases"], ["ridechecks", "Ride checks"]] as const).map(([id, label]) => (
+        <button data-command="admin.incident.view" key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? "active" : undefined} onClick={() => set({ view: id === "cases" ? null : id, case: null })}>
+          {id === "cases" ? <Siren size={15} aria-hidden="true" /> : <ListChecks size={15} aria-hidden="true" />} {label}
+          {id === "ridechecks" && rideChecks.length ? <span className="tab-count muted">{rideChecks.length}</span> : null}
+        </button>
+      ))}
+    </div>
+  );
 
   function set(patch: Record<string, string | null>) {
     setParams(() => {
@@ -96,16 +144,43 @@ export function SafetyPage() {
     );
   }
 
+  if (view === "ridechecks") {
+    return (
+      <div className="dx-page op-page">
+        <header className="dx-head">
+          <button data-command="admin.incident.view" type="button" className="dash-btn ghost dx-back" onClick={() => set({ view: null })}><ArrowLeft size={16} aria-hidden="true" /> Back</button>
+          <div className="dx-head-text">
+            <h2>Ride checks in {place.name}</h2>
+            <p>Every time the apps asked &quot;Is everything OK?&quot;, with both answers. Spot drivers and areas that keep triggering it.</p>
+          </div>
+        </header>
+        {sections}
+        {rideCheckRows.error ? <p role="alert">{rideCheckRows.error.message}</p> : null}
+        {rideCheckRows.isLoading ? <p className="state-line">Loading ride checks.</p> : (
+          <RideCheckLog
+            checks={rideChecks}
+            timeOf={checkTime}
+            incidentState={(id) => rows.data?.find((row) => row.id === id)?.status ?? null}
+            drivers={drivers.data ?? []}
+            zones={place.zones.filter((zone) => !scope.zones.length || scope.zones.includes(zone.id))}
+            market={place}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="dx-page op-page">
       <header className="dx-head">
         <button data-command="admin.incident.view" type="button" className="dash-btn ghost dx-back" onClick={() => (globalThis.history.length > 1 ? navigate(-1) : navigate("/"))}><ArrowLeft size={16} aria-hidden="true" /> Back</button>
         <div className="dx-head-text">
           <h2>Incidents in {place.name}</h2>
-          <p>SOS and safety cases. One owner per case, shared with Alerts. Location must be checked before acting.</p>
+          <p>SOS, Ride check and safety cases. One owner per case, shared with Alerts. Location must be checked before acting.</p>
         </div>
         {editable ? <button data-command="admin.incident.view" type="button" className="dash-btn small ghost" onClick={() => set({ view: "settings" })}><Settings2 size={14} aria-hidden="true" /> Settings</button> : null}
       </header>
+      {sections}
       {rows.error ? <p role="alert">{rows.error.message}</p> : null}
 
       <Cards
@@ -120,7 +195,7 @@ export function SafetyPage() {
           { id: "take", label: "Average time to take", value: takeTimes.length ? Math.round(takeTimes.reduce((sum, value) => sum + value, 0) / takeTimes.length) : 0, previous: null, format: "min", info: "Minutes from the moment a case came in until someone took it.", goodDown: true },
         ]}
       />
-      <p className="state-line op-help">{rows.data?.filter((row) => row.status === "queued").length ?? "…"} unclaimed SOS incidents</p>
+      <p className="state-line op-help">{rows.data?.filter((row) => row.status === "queued" && row.kind !== "ride_check").length ?? "…"} unclaimed SOS incidents{rows.data?.some((row) => row.status === "queued" && row.kind === "ride_check") ? ` · ${rows.data.filter((row) => row.status === "queued" && row.kind === "ride_check").length} Ride check not taken` : ""}</p>
 
       <div className="op-case-grid">
         <aside className="op-case-list" aria-label="Cases">
@@ -164,6 +239,12 @@ export function SafetyPage() {
             trips={trips.data ?? []}
             drivers={drivers.data ?? []}
             riders={riders.data ?? []}
+            vehicles={vehicles.data ?? []}
+            check={rideChecks.find((row) => row.incidentId === item.id) ?? null}
+            chosen={selectedId === item.id}
+            rideOps={rideOps}
+            rideLoading={rideSlice.loading}
+            checkTime={checkTime}
             onOpen={(id) => set({ case: id, show: null, level: null })}
           />
         ) : <p className="dx-calm">{rows.isLoading ? "Loading incidents…" : "No incidents in this scope."}</p>}
@@ -184,12 +265,21 @@ type CaseProps = {
   trips: NonNullable<ReturnType<typeof useRecords>["data"]>;
   drivers: NonNullable<ReturnType<typeof useRecords>["data"]>;
   riders: NonNullable<ReturnType<typeof useRecords>["data"]>;
+  vehicles: NonNullable<ReturnType<typeof useRecords>["data"]>;
+  /** The ride check behind a "Ride check" incident. */
+  check: RideCheck | null;
+  /** The admin opened this case (a link, the banner or a click in the list), so its alert counts as opened. */
+  chosen: boolean;
+  rideOps: RideCheckOps;
+  rideLoading: boolean;
+  checkTime: (check: RideCheck) => number;
   onOpen: (id: string) => void;
 };
 
-function CaseView({ item, record, all, ops, store, storeLoading, now, time, trips, drivers, riders, onOpen }: CaseProps) {
+function CaseView({ item, record, all, ops, store, storeLoading, now, time, trips, drivers, riders, vehicles, check, chosen, rideOps, rideLoading, checkTime, onOpen }: CaseProps) {
   const { agent } = useSession();
   const me = agent?.id ?? "";
+  const commands = useCommands();
   const editable = Boolean(agent && can(agent.role, "safety.edit"));
   const [text, setText] = useState("");
   const [notice, setNotice] = useState("");
@@ -208,8 +298,42 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
   const place = market(item.country);
   const emergency = settings.emergency[item.country] ?? [];
   const lateLine = lateText(item, settings, now);
+  const vehicle = vehicles.find((row) => row.driverId === (driver?.id ?? item.driverId)) ?? (check?.vehicleId ? vehicles.find((row) => row.id === check.vehicleId) : undefined);
+  // Ride check: the shift puts a live check's answers at the time the incident opened.
+  const shift = check ? checkTime(check) - Date.parse(check.at) : 0;
+  const clock = (iso: string) => shifted(iso, shift);
+  const raisedBy: Person = (check ? alertBy(check)?.who : null) ?? item.raisedBy;
+  const opened = check ? rideOps.opened[check.id] : undefined;
+  const route = check && trip ? routeOf(trip) : null;
+  const carAt = route?.path.length ? route.path[Math.round((route.path.length - 1) * (check?.trigger === "far" ? 0.94 : check?.trigger === "crash" ? 0.45 : 0.58))] : where.driver ?? where.rider;
+  const carPoint = check?.trigger === "route" ? [carAt[0] + 0.006, carAt[1] + 0.009] as [number, number] : carAt;
+
+  // Opening a ride check case acknowledges its alert, so the red banner goes for everyone.
+  const acking = useRef({ busy: false, tries: 0 });
+  useEffect(() => {
+    if (!check || !chosen || opened || rideLoading || acking.current.busy || acking.current.tries >= 3 || commands.busy || !me || item.state === "solved") return;
+    acking.current = { busy: true, tries: acking.current.tries + 1 };
+    void commands.run("admin.rideCheck.open", { targetId: check.id, scope: check.zoneId, before: "new", after: "opened", sliceKey: RIDE_CHECK_KEY, value: openCheck(rideOps, check.id, me, new Date().toISOString()), expectedSliceRev: rideOps.draftRev }).finally(() => {
+      acking.current = { ...acking.current, busy: false };
+    });
+  }, [check, chosen, opened, rideLoading, commands.busy, me, item.state, rideOps]);
+
+  const rideEvents = check ? [
+    { at: clock(check.at), text: `Ride check opened in both apps: ${triggerLabel(check.trigger)} (${reasonText(check)})`, who: "" },
+    ...(["driver", "rider"] as const).flatMap((who) => {
+      const answer = check[who];
+      if (!answer) return [];
+      const name = who === "driver" ? "The driver" : "The rider";
+      return [
+        { at: clock(answer.at), text: `${name} answered: ${answerLabel(who, answer)}${answer.text ? ` (“${answer.text}”)` : ""}`, who: "" },
+        ...(answer.follow ?? []).map((follow) => ({ at: clock(follow.at), text: `${name}: ${followText(follow)}`, who: "" })),
+      ];
+    }),
+    ...(opened ? [{ at: Date.parse(opened.at), text: "Opened the alert", who: agentName(opened.by) }] : []),
+  ] : [];
   const events = [
-    { at: item.openedAt, text: `${item.raisedBy === "rider" ? "The rider" : "The driver"} raised the case (${KINDS.find((kind) => kind.id === item.kind)?.label})`, who: "" },
+    ...rideEvents,
+    { at: item.openedAt, text: check ? `Alert sent by the ${raisedBy}. Ride check incident opened.` : `${item.raisedBy === "rider" ? "The rider" : "The driver"} raised the case (${KINDS.find((kind) => kind.id === item.kind)?.label})`, who: "" },
     ...item.events.map((event) => ({ at: Date.parse(event.at), text: event.kind === "take" ? "Took the case" : event.kind === "resolve" ? `Solved: ${event.text}` : `Contact: ${event.text}`, who: agentName(event.actor) })),
     ...(caseInfo?.levelAt ? [{ at: Date.parse(caseInfo.levelAt), text: `Level set to ${LEVELS.find((row) => row.id === caseInfo.level)?.label}${caseInfo.levelWhy ? `: ${caseInfo.levelWhy}` : ""}`, who: agentName(caseInfo.levelBy ?? "") }] : []),
     ...calls.map((call) => ({ at: Date.parse(call.at), text: `Called ${call.to}`, who: agentName(call.actorId) })),
@@ -242,9 +366,9 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
     setNotice("Case report downloaded.");
   }
 
-  const callButton = (to: string, number: string, key: string, primary = false) => (
-    <CommandButton key={key} command="admin.incident.call" className={primary ? "dash-btn small danger" : "dash-btn small ghost"} sliceKey={INCIDENT_OPS_KEY} value={logCall(ops, item.id, to, me, new Date().toISOString())} expectedSliceRev={ops.draftRev} targetId={item.id} scope={item.zoneId} confirmTarget={false} before="" after={`called ${to}`} disabled={!editable} onDone={() => call(to, number)}>
-      <PhoneCall size={13} aria-hidden="true" /> {to} <small>{number}</small>
+  const callButton = (to: string, number: string, key: string, primary = false, label?: string) => (
+    <CommandButton key={key} command="admin.incident.call" className={primary ? "dash-btn small danger" : "dash-btn small ghost"} sliceKey={INCIDENT_OPS_KEY} value={logCall(ops, item.id, to, me, new Date().toISOString())} expectedSliceRev={ops.draftRev} targetId={item.id} scope={item.zoneId} confirmTarget={false} before="" after={`called ${to}`} disabled={!editable} title={!editable ? "Only the safety team can call from a case." : undefined} onDone={() => call(to, number)}>
+      <PhoneCall size={13} aria-hidden="true" /> {label ?? to} <small>{number}</small>
     </CommandButton>
   );
 
@@ -253,7 +377,7 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
       <header className="op-case-head">
         <span className={`op-level ${item.level}`}><AlertOctagon size={12} aria-hidden="true" /> {LEVELS.find((row) => row.id === item.level)?.label}</span>
         <h3>{record.id} · {record.status}</h3>
-        <p>{KINDS.find((kind) => kind.id === item.kind)?.label} · raised by the {item.raisedBy} · rider {item.who}{driver ? ` · driver ${driver.name}` : ""} · {zoneById(item.zoneId)?.name ?? item.zoneId} · opened {time(item.openedAt)}</p>
+        <p>{KINDS.find((kind) => kind.id === item.kind)?.label} · raised by the {raisedBy} · rider {item.who}{driver ? ` · driver ${driver.name}` : ""} · {zoneById(item.zoneId)?.name ?? item.zoneId} · opened {time(item.openedAt)}</p>
         <p className="op-owner"><UserRound size={13} aria-hidden="true" /> Owner {item.owner ? agentName(item.owner) : "Unassigned"}{item.owner === me ? " (you)" : ""}</p>
       </header>
       {notice ? <p className="dx-note" role="status">{notice}</p> : null}
@@ -263,6 +387,20 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
         <ClockBar clock={time2.take} />
         <ClockBar clock={time2.solve} />
       </div>
+
+      {check ? (
+        <section className="op-section rc-answers" aria-label="Ride check answers">
+          <header className="op-section-head">
+            <h3><span aria-hidden="true"><ShieldCheck size={16} /></span> Ride check · {triggerLabel(check.trigger)}</h3>
+            <span className="rc-chip">{reasonText(check)}</span>
+          </header>
+          <p className="op-help">Card opened {time(clock(check.at))} in both apps. {opened ? `Alert opened by ${agentName(opened.by)} at ${time(Date.parse(opened.at))}.` : "Alert not opened yet."}</p>
+          <div className="rc-answer-grid">
+            <RideAnswer who="driver" name={driver?.name ?? "Driver"} answer={check.driver} clock={(iso) => time(clock(iso))} />
+            <RideAnswer who="rider" name={rider?.name ?? item.who} answer={check.rider} clock={(iso) => time(clock(iso))} />
+          </div>
+        </section>
+      ) : null}
 
       <section className="op-case-actions" aria-label="Work on the case">
         <label className="op-field"><span>Contact or outcome</span><textarea aria-label="Contact or outcome" rows={2} value={text} placeholder="Who you called, what they said, what you did" onChange={(event) => setText(event.target.value)} /></label>
@@ -290,15 +428,28 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
         <section className="op-calls-bar" aria-label="Call">
           <h4 className="op-sub"><Phone size={13} aria-hidden="true" /> Call</h4>
           <div className="op-inline wrap">
-            {callButton("the rider", item.phone, "rider")}
-            {driver ? callButton("the driver", driver.phone, "driver") : null}
+            {check ? (
+              <>
+                {driver ? callButton("the driver", driver.phone, "driver", false, "Call driver") : null}
+                {callButton("the rider", rider?.phone ?? item.phone, "rider", false, "Call rider")}
+              </>
+            ) : (
+              <>
+                {callButton("the rider", item.phone, "rider")}
+                {driver ? callButton("the driver", driver.phone, "driver") : null}
+              </>
+            )}
             {emergency.map((row, index) => callButton(row.label, row.number, `e-${index}`, index === 0))}
           </div>
         </section>
       ) : null}
 
       <div className="op-case-split">
-        {settings.liveMap ? (
+        {settings.liveMap && check && carPoint ? (
+          <MapPanel title={item.state === "solved" ? "Where the car was" : "Where the car is now"} note={<span className={stale ? "op-late" : "op-help"}><MapPin size={12} aria-hidden="true" /> {item.state === "solved" ? `At the ride check, ${time(clock(check.at))}.` : `Location updated ${where.secondsAgo} s ago${stale ? `, older than ${policy.staleSeconds} s: call to check` : ""}.`} Demo location until the apps send it.</span>}>
+            <RouteMap key={trip?.id ?? "no-trip"} stops={route?.stops ?? []} path={route?.path ?? []} points={[{ id: "car", label: `${vehicle?.plate ?? "Car"} · ${driver?.name ?? "Driver"}`, at: carPoint, tone: "alert" }]} label={`Where the car of ${item.id} is`} />
+          </MapPanel>
+        ) : settings.liveMap ? (
           <MapPanel title="Where they are now" note={<span className={stale ? "op-late" : "op-help"}><MapPin size={12} aria-hidden="true" /> Location updated {where.secondsAgo} s ago{stale ? `, older than ${policy.staleSeconds} s: call to check` : ""}. Demo location until the apps send it.</span>}>
             <RouteMap stops={[]} path={[]} points={[{ id: "rider", label: item.who, at: where.rider, tone: item.raisedBy === "rider" ? "alert" : "rider" }, ...(where.driver ? [{ id: "driver", label: driver?.name ?? "Driver", at: where.driver, tone: item.raisedBy === "driver" ? "alert" as const : "driver" as const }] : [])]} label={`Where the people of ${item.id} are`} />
           </MapPanel>
@@ -308,6 +459,7 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
           <div className="op-facts-list">
             <p><UserRound size={13} aria-hidden="true" /> Rider {rider ? <Link to={`/riders/${rider.id}`}>{rider.name}</Link> : item.who}</p>
             <p><UserRound size={13} aria-hidden="true" /> Driver {driver ? <Link to={`/drivers/${driver.id}`}>{driver.name}</Link> : "not known"}</p>
+            {check ? <p><Car size={13} aria-hidden="true" /> Car {vehicle ? <Link to={`/vehicles/${vehicle.id}`}>{vehicle.plate}</Link> : "not known"}{vehicle ? ` · ${vehicle.make ?? ""} ${vehicle.model ?? ""}`.trimEnd() : ""}</p> : null}
             <p><Siren size={13} aria-hidden="true" /> Trip {trip ? <Link to={`/trips/${trip.id}`}>{trip.id}</Link> : "not linked"}</p>
             <p className="op-help">{place.name} · {zoneById(item.zoneId)?.city ?? ""}</p>
           </div>
@@ -340,6 +492,25 @@ function CaseView({ item, record, all, ops, store, storeLoading, now, time, trip
         ) : null}
       </section>
     </article>
+  );
+}
+
+/** One person's answer on the Ride check card, with the follow-up questions. */
+function RideAnswer({ who, name, answer, clock }: { who: Person; name: string; answer: Answer | null; clock: (iso: string) => string }) {
+  return (
+    <div className={`rc-answer ${answerKind(answer)}`} aria-label={`${who === "driver" ? "Driver" : "Rider"} answer`}>
+      <small>{who === "driver" ? "Driver" : "Rider"} · {name}</small>
+      <b>{answerLabel(who, answer)}</b>
+      {answer ? <time>{clock(answer.at)}</time> : <span className="op-help">The card stays open until they answer.</span>}
+      {answer?.follow?.length ? (
+        <ul>
+          {answer.follow.map((follow) => (
+            <li key={follow.q} className={worrying(follow) ? "worry" : undefined}><span>{QUESTIONS[follow.q]}</span> <b>{follow.a}</b> <time>{clock(follow.at)}</time></li>
+          ))}
+        </ul>
+      ) : null}
+      {answer?.text ? <p>“{answer.text}”</p> : null}
+    </div>
   );
 }
 

@@ -269,7 +269,8 @@ export function DashboardPage() {
   const upcoming = rides.filter((ride) => ride.pickupAt >= now && ride.pickupAt < now + 7 * DAY_MS);
   const past = rides.filter((ride) => ride.pickupAt < now && ride.pickupAt >= span.start).reverse();
 
-  const sos = (incidents.data ?? []).filter((row) => row.status === "queued");
+  // Ride check incidents have their own red banner; the SOS counts stay SOS only.
+  const sos = (incidents.data ?? []).filter((row) => row.status === "queued" && row.kind !== "ride_check");
   const openTickets = (tickets.data ?? []).filter((row) => row.status === "open");
   const pendingDrivers = (drivers.data ?? []).filter((row) => row.status === "pending");
   const scheduledPayouts = (payouts.data ?? []).filter((row) => row.status === "scheduled");

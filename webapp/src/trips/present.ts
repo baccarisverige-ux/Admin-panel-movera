@@ -3,6 +3,9 @@ import { ZONES } from "../api/seed.ts";
 import { CATEGORIES, TRIP_STATUSES, formatOre, type TripStatus } from "../domain/contract.ts";
 import { statusLabel } from "../domain/labels.ts";
 import { canAdjustFare, canOffer, canReassign, canRefundTrip, canSetWaiting, cancelTrip, eligibleDrivers, type OfferDriver, type Trip } from "./rules.ts";
+import { STEP_MS, startedAt, tripIndex } from "./clock.ts";
+
+export { startedAt, tripIndex };
 
 export const PAYMENT_STATES = ["pending", "authorized", "captured", "failed", "refunded"] as const;
 export type PaymentState = (typeof PAYMENT_STATES)[number];
@@ -36,11 +39,6 @@ const ZONE_CENTER: Record<string, [number, number]> = {
 
 export const MAP_BOUNDS = { north: 59.42, south: 59.29, west: 17.9, east: 18.15 };
 
-export function tripIndex(id: string): number {
-  const value = Number(id.replace(/\D/g, ""));
-  return Number.isFinite(value) ? Math.max(0, value - 1) : 0;
-}
-
 export function zoneName(zoneId: string): string {
   return ZONES.find(([id]) => id === zoneId)?.[1] ?? zoneId;
 }
@@ -53,14 +51,6 @@ export function paymentOf(trip: DemoRecord): PaymentState {
   const kind = trip.kind ?? "";
   if ((PAYMENT_STATES as readonly string[]).includes(kind)) return kind as PaymentState;
   return PAYMENT_STATES[tripIndex(trip.id) % PAYMENT_STATES.length];
-}
-
-export function startedAt(id: string): string {
-  const index = tripIndex(id);
-  const day = index % 14;
-  const date = new Date(Date.UTC(2026, 9, 5, 6 + (index % 12), index % 60, 0));
-  date.setUTCDate(date.getUTCDate() - day);
-  return date.toISOString();
 }
 
 export function stockholmDate(iso: string): string {
@@ -119,7 +109,7 @@ export function timelineOf(trip: DemoRecord): { at: string; label: string; code:
   return codes.map((code, step) => ({
     code,
     label: statusLabel(code),
-    at: new Date(start + step * 90_000).toISOString(),
+    at: new Date(start + step * STEP_MS).toISOString(),
   }));
 }
 

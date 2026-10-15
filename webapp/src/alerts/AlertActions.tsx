@@ -7,7 +7,8 @@ import { useSession } from "../auth/SessionContext";
 import { safetyAction } from "../safety/ops";
 import { CommandButton } from "../ui/CommandButton";
 import { useAlertsData } from "./AlertsContext";
-import { ALERTS_KEY, doneAlert, muteKind, passAlert, snoozeAlert, takeAlert, type OpenAlert } from "./engine";
+import { ALERTS_KEY, doneAlert, followsIncident, muteKind, passAlert, snoozeAlert, takeAlert, type OpenAlert } from "./engine";
+import { OpenRideCheck } from "./OpenRideCheck";
 
 export function agentName(id: string | null | undefined): string {
   if (!id) return "";
@@ -37,21 +38,24 @@ export function AlertActions({ alert, compact = false, onDone }: { alert: OpenAl
   const extras = book.settings.extras;
   const say = (text: string) => onDone?.(text);
 
-  if (alert.kind === "sos" || alert.kind === "sos_slow") {
+  if (followsIncident(alert.kind)) {
     if (!alert.incidentId) return null;
     const incident = data.facts.incidents.find((row) => row.id === alert.incidentId);
     if (!incident) return null;
     const row = { id: incident.id, name: incident.who, phone: "", zoneId: incident.zoneId, status: incident.status } as DemoRecord;
     const canSafety = Boolean(agent && can(agent.role, "safety.edit"));
     const owner = data.sosOwner(incident.id);
+    const ride = alert.kind === "ride_check";
+    const what = ride ? "ride check" : "SOS";
+    const open = ride ? <OpenRideCheck alert={alert} label="Open case" className="dash-btn small ghost" /> : <Link className="dash-btn small ghost" to="/incidents">Open Incidents</Link>;
     if (incident.status === "queued") {
       const prepared = safetyAction(data.safety.value, row, me, "take", "Responder accepted incident");
       return (
         <div className={compact ? "al-actions compact" : "al-actions"}>
-          <CommandButton command="admin.safety.take" className="dash-btn small danger" targetId={row.id} scope={row.zoneId} collection="incidents" patch={{ status: prepared.status }} entityState={row.status} sliceKey="safetyOps" value={prepared.book} expectedSliceRev={data.safety.value.draftRev} confirmTarget={false} disabled={!canSafety || Boolean(prepared.error)} title={!canSafety ? "Only the safety team can take an SOS." : prepared.error} onDone={() => say(`You are working on the SOS from ${incident.who}.`)}>
-            <Hand size={13} aria-hidden="true" /> Take SOS
+          <CommandButton command="admin.safety.take" className="dash-btn small danger" targetId={row.id} scope={row.zoneId} collection="incidents" patch={{ status: prepared.status }} entityState={row.status} sliceKey="safetyOps" value={prepared.book} expectedSliceRev={data.safety.value.draftRev} confirmTarget={false} disabled={!canSafety || Boolean(prepared.error)} title={!canSafety ? (ride ? "Only the safety team can take the case." : "Only the safety team can take an SOS.") : prepared.error} onDone={() => say(`You are working on the ${what} from ${incident.who}.`)}>
+            <Hand size={13} aria-hidden="true" /> {ride ? "Take case" : "Take SOS"}
           </CommandButton>
-          <Link className="dash-btn small ghost" to="/incidents">Open Incidents</Link>
+          {open}
         </div>
       );
     }
@@ -61,11 +65,11 @@ export function AlertActions({ alert, compact = false, onDone }: { alert: OpenAl
       <div className={compact ? "al-actions compact" : "al-actions"}>
         {mine && !compact ? <input className="al-note" aria-label="Solved note" maxLength={140} value={note} onChange={(event) => setNote(event.target.value)} placeholder="What was done (optional)" /> : null}
         {mine ? (
-          <CommandButton command="admin.safety.resolve" className="dash-btn small" targetId={row.id} scope={row.zoneId} collection="incidents" patch={{ status: prepared.status }} entityState={row.status} sliceKey="safetyOps" value={prepared.book} expectedSliceRev={data.safety.value.draftRev} confirmTarget={false} disabled={Boolean(prepared.error)} title={prepared.error} onDone={() => { setNote(""); say(`SOS from ${incident.who} solved by ${agentName(me)}.`); }}>
+          <CommandButton command="admin.safety.resolve" className="dash-btn small" targetId={row.id} scope={row.zoneId} collection="incidents" patch={{ status: prepared.status }} entityState={row.status} sliceKey="safetyOps" value={prepared.book} expectedSliceRev={data.safety.value.draftRev} confirmTarget={false} disabled={Boolean(prepared.error)} title={prepared.error} onDone={() => { setNote(""); say(`${ride ? "Ride check" : "SOS"} from ${incident.who} solved by ${agentName(me)}.`); }}>
             <CheckCircle2 size={13} aria-hidden="true" /> Solved
           </CommandButton>
         ) : <span className="al-locked">Only {agentName(owner)} can solve it</span>}
-        <Link className="dash-btn small ghost" to="/incidents">Open Incidents</Link>
+        {open}
       </div>
     );
   }

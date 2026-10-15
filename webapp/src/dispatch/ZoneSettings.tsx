@@ -1,3 +1,4 @@
+import { RideCheckCard } from "./RideCheckCard";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import {
@@ -418,6 +419,7 @@ function Safety({ zone, onChange, disabled }: Props) {
         <Row label="Do not match list" help="A rider and a driver who reported each other never meet again." on={safety.doNotMatch} disabled={disabled} onToggle={(doNotMatch) => set({ doNotMatch })} />
         <Row label="Women-only rides" help="A female rider can ask for a female driver." on={safety.womenOnly} disabled={disabled} onToggle={(womenOnly) => set({ womenOnly })} />
       </Card>
+      <RideCheckCard zone={zone} onChange={onChange} disabled={disabled} />
     </div>
   );
 }
