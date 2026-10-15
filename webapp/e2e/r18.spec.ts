@@ -19,6 +19,6 @@ test("R18 unavailable graphics preserve operational controls", async ({ page }) 
   await page.goto("/live");
   await expect(page.getByRole("heading", { name: "Live map", level: 2 })).toBeVisible();
   await expect(page.getByText(/Map unavailable. WebGL/)).toBeVisible();
-  await expect(page.getByLabel("Norrmalm offer time")).toBeVisible();
+  await expect(page.getByTestId("dispatch-link")).toContainText("Norrmalm");
   expect(errors).toEqual([]);
 });

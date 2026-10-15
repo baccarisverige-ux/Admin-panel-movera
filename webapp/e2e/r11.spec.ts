@@ -18,15 +18,21 @@ async function confirm(page: Page, target?: string) {
 
 test("R11 policy changes create a new version without rewriting existing reservation snapshots", async ({ page }) => {
   await session(page);
-  await page.goto("/reservations");
-  await expect(page.getByRole("heading", { level: 2, name: "Reservations" })).toBeVisible();
-
-  await expect(page.getByTestId("reservation-policy")).toContainText("res-2");
-  await page.getByLabel("Booking horizon").fill("10");
-  await page.getByRole("button", { name: "Save reservation policy" }).click();
+  await page.goto("/dispatch?zone=Z001&tab=reservations");
+  const policy = page.getByTestId("reservation-policy");
+  await expect(policy).toContainText("res-2");
+  await policy.getByLabel("Give-up time").fill("40");
+  await expect(policy.getByRole("alert")).toContainText("Give-up time cannot exceed assignment lead time.");
+  await expect(policy.getByRole("button", { name: "Save reservation policy" })).toBeDisabled();
+  await policy.getByLabel("Give-up time").fill("5");
+  await policy.getByLabel("Booking horizon").fill("10");
+  await policy.getByRole("button", { name: "Save reservation policy" }).click();
   await confirm(page);
-  await expect(page.getByText(/Reservation policy published as res-3/)).toBeVisible();
+  await expect(page.getByText(/Reservation policy saved as res-3/)).toBeVisible();
+  await expect(policy).toContainText("res-3");
 
+  await page.goto("/reservations");
+  await expect(page.getByTestId("reservation-settings-link")).toContainText("res-3");
   await page.getByRole("cell", { name: "B021" }).click();
   await expect(page).toHaveURL(/\/reservations\/B021$/);
   await expect(page.getByTestId("reservation-policy-snapshot")).toContainText("Policy snapshot · res-1");
@@ -41,17 +47,32 @@ test("R11 assignment contact return unassign and cancel lifecycle persists", asy
   await page.goto("/reservations/B021");
 
   await expect(page.getByRole("button", { name: "Assign driver" })).toBeEnabled();
-  const chosen = await page.getByLabel("Reservation driver").inputValue();
+  await expect(page.getByTestId("reservation-dispatch")).toContainText("The driver must accept.");
+  const first = await page.getByLabel("Reservation driver").inputValue();
 
-  await page.getByRole("button", { name: "Offer to driver" }).click();
+  // Assigned by Movera: the driver must accept. A no lets the admin pick someone else.
+  await page.getByRole("button", { name: "Assign driver" }).click();
   await confirm(page);
-  await expect(page.getByText(`Offer logged for ${chosen}.`)).toBeVisible();
-  await expect(page.getByRole("list", { name: "Reservation offer history" })).toContainText("offered");
+  await expect(page.getByText(`Sent to ${first} as “Assigned by Movera”. Waiting for the driver to accept.`)).toBeVisible();
+  await expect(page.getByTestId("reservation-ask")).toContainText(`waiting for`);
+  await expect(page.getByTestId("reservation-ask")).toContainText("30 s left");
+  await expect(page.getByRole("button", { name: "Assign driver" })).toBeDisabled();
+  await expect(page.getByTestId("reservation-summary")).toContainText("Driver Unassigned");
+  await page.getByRole("button", { name: "Driver said no (demo)" }).click();
+  await confirm(page);
+  await expect(page.getByTestId("reservation-ask")).toContainText("said no. Pick someone else.");
+  await expect(page.getByLabel("Reservation driver").locator("option", { hasText: "did not accept" })).toHaveCount(1);
+  // Another eligible driver is picked first when there is one; here the admin may also ask the same driver again.
+  const chosen = await page.getByLabel("Reservation driver").inputValue();
 
   await page.getByRole("button", { name: "Assign driver" }).click();
   await confirm(page);
-  await expect(page.getByText(`Assigned ${chosen}.`)).toBeVisible();
+  await page.getByRole("button", { name: "Driver accepted (demo)" }).click();
+  await confirm(page);
+  await expect(page.getByText(/accepted. The ride is theirs./)).toBeVisible();
   await expect(page.getByTestId("reservation-summary")).toContainText(`Driver ${chosen}`);
+  await expect(page.getByRole("list", { name: "Reservation offer history" })).toContainText("accepted");
+  await expect(page.getByRole("list", { name: "Reservation offer history" })).toContainText("declined");
 
   await page.getByLabel("Contact note").fill("Rider confirmed pickup");
   await page.getByRole("button", { name: "Log contact" }).click();
@@ -99,13 +120,13 @@ test("R11 Stockholm DST validation rejects spring gap and disambiguates fall ove
 
 test("R11 viewer can inspect but cannot mutate reservation policy or dispatch", async ({ page }) => {
   await session(page, "anna");
-  await page.goto("/reservations");
-  await expect(page.getByLabel("Booking horizon")).toBeDisabled();
+  await page.goto("/dispatch?zone=Z001&tab=reservations");
+  await expect(page.getByTestId("reservation-policy").getByLabel("Booking horizon")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Save reservation policy" })).toBeDisabled();
 
   await page.goto("/reservations/B021");
-  await expect(page.getByRole("button", { name: "Offer to driver" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Assign driver" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Raise the fare" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Cancel reservation" })).toBeDisabled();
   await expect(page.getByLabel("Return pickup")).toBeDisabled();
 });

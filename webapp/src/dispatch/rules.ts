@@ -1,4 +1,5 @@
 import { market, MARKETS, zoneById, type MarketId, type MarketZone } from "../markets/markets.ts";
+import { currencySymbol, fromSek } from "../pricing/zonePricing.ts";
 
 /** Dispatch rules: how a ride request finds its driver. One set per zone, plus country rules, events and driver groups. */
 
@@ -9,10 +10,11 @@ export type FactorId = "eta" | "rating" | "acceptance" | "cancel" | "idle" | "fi
 export type ExtraId = "child_seat" | "pet" | "wheelchair" | "luggage" | "long_trip";
 export type WaitKind = "raise_price" | "upgrade" | "alert_admin" | "keep_waiting" | "busy";
 export type AlertId = "long_wait" | "few_drivers" | "no_driver";
-export type TabId = "modes" | "best" | "waiting" | "rides" | "drivers" | "safety" | "alerts";
+export type TabId = "modes" | "reservations" | "best" | "waiting" | "rides" | "drivers" | "safety" | "alerts";
 
 export const TABS: { id: TabId; label: string }[] = [
   { id: "modes", label: "Modes" },
+  { id: "reservations", label: "Reservations" },
   { id: "best", label: "Best driver" },
   { id: "waiting", label: "Rider waiting" },
   { id: "rides", label: "Rides & stops" },
@@ -54,7 +56,12 @@ export const ALERTS: { id: AlertId; label: string; unit: string; help: string }[
 ];
 
 /** Who gets a new reservation in the driver app's Scheduled rides list. */
-export type ReservationListTo = "all" | "category" | "rating" | "random" | "homeNear" | "nearNow" | "favourites" | "areaRegulars";
+export type ReservationListTo = "all" | "category" | "rating" | "random" | "homeNear" | "nearNow" | "favourites" | "areaRegulars" | "group";
+/** Who sees the Home popup: the same drivers as the Scheduled rides list, or every online driver in the zone. */
+export type HomePopupTo = "list" | "zone";
+/** Kinds of scheduled ride, each with its own times before pickup. */
+export type RideTypeId = "normal" | "airport" | "long" | "premium" | "event";
+export type RideTypeRule = { onlineBeforeMin: number; spareMin: number; remindFirstMin: number; remindLastMin: number };
 /** Where a reservation goes back to when the driver who took it cancels. */
 export type ReservationCancelTo = "byTime" | "list" | "home" | "exclusive";
 /** The steps an untaken reservation goes through, in this order. */
@@ -69,7 +76,39 @@ export const RESERVATION_LIST_TO: { id: ReservationListTo; label: string; help: 
   { id: "nearNow", label: "Near pickup now", help: "Drivers who are near the pickup when the rider books, within the distance you set." },
   { id: "favourites", label: "Rider's favourites", help: "Drivers this rider marked as favourite or rated 5 stars before." },
   { id: "areaRegulars", label: "Often in the area", help: "Drivers who did at least the number of trips you set from the pickup area in the last 30 days." },
+  { id: "group", label: "A driver group", help: "Only the drivers in one saved group. Groups are made in Events & groups." },
 ];
+
+export const HOME_POPUP_TO: { id: HomePopupTo; label: string; help: string }[] = [
+  { id: "list", label: "Same drivers as the list", help: "Only the drivers who can see it in Scheduled rides." },
+  { id: "zone", label: "All drivers in the zone", help: "Every online driver in the zone, even outside the list's group." },
+];
+
+export const RIDE_TYPES: { id: RideTypeId; label: string; help: string }[] = [
+  { id: "normal", label: "Normal", help: "Every scheduled ride that is none of the kinds below." },
+  { id: "airport", label: "Airport", help: "Pickup or drop-off at an airport." },
+  { id: "long", label: "Long trip", help: "Trips longer than the long-trip distance." },
+  { id: "premium", label: "Comfort and Premium", help: "Rides in Comfort or Premium." },
+  { id: "event", label: "Events", help: "Pickup in an event area while the event runs." },
+];
+
+/** Highest fare raise for a ride nobody takes, in Sweden. Other countries get the same value in their own money. */
+export const RAISE_CAP_SEK = 500;
+/** Longest free-cancel window the rider app accepts: one week. */
+export const RIDER_FREE_CANCEL_MAX_MIN = 7 * 24 * 60;
+
+/** The rider app's scheduled-ride rules, as GET /api/v1/rider/scheduled-rides/rules answers them. */
+export type RiderScheduledRules = { freeCancelMinutesBeforePickup: number; lateCancelFeeMinor: number; currency: string; showDriverOnAccept: boolean };
+
+export function riderScheduledRules(resv: Pick<ReservationRules, "freeCancelMinutesBeforePickup" | "lateCancelFee" | "showDriverOnAccept">, country: MarketId): RiderScheduledRules {
+  const info = market(country);
+  return {
+    freeCancelMinutesBeforePickup: resv.freeCancelMinutesBeforePickup,
+    lateCancelFeeMinor: Math.round(resv.lateCancelFee * info.minorUnits),
+    currency: info.currency,
+    showDriverOnAccept: resv.showDriverOnAccept,
+  };
+}
 
 export const RESERVATION_CANCEL_TO: { id: ReservationCancelTo; label: string; help: string }[] = [
   { id: "byTime", label: "By time left", help: "The step the time before pickup says, as if nobody had taken it." },
@@ -106,6 +145,46 @@ export type ReservationRules = {
   toRadar: boolean;
   radarBeforeMin: number;
   onDriverCancel: ReservationCancelTo;
+  /** With "group": the saved driver group (Events & groups) that sees it in Scheduled rides. */
+  listGroupId: string;
+  homePopupTo: HomePopupTo;
+  /** A driver closed the Home popup with ×: if nobody took it, it can come back to that driver as an Exclusive. */
+  popupClosedExclusive: boolean;
+  /**
+   * Smart gap: the first ride's trip time + the drive to the next pickup + spare minutes must fit before the next pickup.
+   * When a driver takes a ride, the rides that do not fit leave that driver's Scheduled rides list.
+   */
+  hideClashing: boolean;
+  /** Leave now: live drive time to the pickup + spare minutes. Then the ride lands on the driver's screen as the active trip. */
+  leaveNow: boolean;
+  /** Not moving toward the pickup after Leave now: a warning on the island at once, then an admin alert and the backup driver. */
+  lateWarn: boolean;
+  lateBackupAfterMin: number;
+  /** Before the ride, offers head toward the scheduled pickup (like destination mode), from this many minutes before. */
+  towardPickup: boolean;
+  towardPickupBeforeMin: number;
+  /** Be online before, spare minutes and reminders, per kind of ride. */
+  types: Record<RideTypeId, RideTypeRule>;
+  /**
+   * Cancels. Drivers never pay. Riders cancel for free until this many minutes before pickup, then pay lateCancelFee
+   * (major units of the zone's money). The rider app reads these as GET /api/v1/rider/scheduled-rides/rules, see riderScheduledRules.
+   */
+  freeCancelMinutesBeforePickup: number;
+  lateCancelFee: number;
+  /** A driver cancel with less than this many hours to pickup is a late cancel. */
+  driverLateCancelHours: number;
+  /** latePauseAfter late cancels within latePeriodDays: no scheduled rides for latePauseDays. */
+  latePause: boolean;
+  latePauseAfter: number;
+  latePeriodDays: number;
+  latePauseDays: number;
+  /** The rider sees the driver's name, photo and car as soon as a driver accepts, and sees a new driver if it changes. */
+  showDriverOnAccept: boolean;
+  /** Nobody took it near pickup: the admin can raise the driver's fare, paid from Movera's commission, up to raiseMax. */
+  raiseFare: boolean;
+  raiseMax: number;
+  /** An admin gives the ride to a driver: it comes like an Exclusive, "Assigned by Movera", with this long to accept. */
+  assignAcceptSec: number;
 };
 
 export type WaitStep = { id: string; kind: WaitKind; on: boolean; afterMin: number; message: string; extraMin?: number };
@@ -218,6 +297,16 @@ function waitingDefault(): WaitStep[] {
   ];
 }
 
+function rideTypesDefault(): Record<RideTypeId, RideTypeRule> {
+  return {
+    normal: { onlineBeforeMin: 30, spareMin: 15, remindFirstMin: 60, remindLastMin: 15 },
+    airport: { onlineBeforeMin: 60, spareMin: 15, remindFirstMin: 60, remindLastMin: 15 },
+    long: { onlineBeforeMin: 60, spareMin: 15, remindFirstMin: 60, remindLastMin: 15 },
+    premium: { onlineBeforeMin: 45, spareMin: 15, remindFirstMin: 60, remindLastMin: 15 },
+    event: { onlineBeforeMin: 45, spareMin: 15, remindFirstMin: 60, remindLastMin: 15 },
+  };
+}
+
 export function defaultZone(zone: Pick<MarketZone, "id" | "kind">): ZoneDispatch {
   const airport = zone.kind === "airport";
   return {
@@ -233,6 +322,14 @@ export function defaultZone(zone: Pick<MarketZone, "id" | "kind">): ZoneDispatch
       homePopup: true, homePopupAfterMin: 10,
       toExclusive: true, exclusiveBeforeMin: 20, toRadar: true, radarBeforeMin: 15,
       onDriverCancel: "byTime",
+      listGroupId: "", homePopupTo: "list", popupClosedExclusive: true,
+      hideClashing: true, leaveNow: true, lateWarn: true, lateBackupAfterMin: 5, towardPickup: true, towardPickupBeforeMin: 60,
+      types: rideTypesDefault(),
+      freeCancelMinutesBeforePickup: 60, lateCancelFee: 0, driverLateCancelHours: 1,
+      latePause: true, latePauseAfter: 2, latePeriodDays: 7, latePauseDays: 7,
+      showDriverOnAccept: true,
+      raiseFare: true, raiseMax: RAISE_CAP_SEK,
+      assignAcceptSec: 30,
     },
     choose: { how: "auto", radarAbove: 1.5, main: "exclusive", backup: "radar", times: [{ id: "t1", on: false, from: "22:00", to: "04:00", mode: "radar" }] },
     rulesFrom: "driver",
@@ -278,9 +375,23 @@ export function feeDefaults(country: MarketId): { fee: number; perMin: number; p
 export function zoneDefault(zoneId: string): ZoneDispatch {
   const zone = zoneById(zoneId);
   const base = defaultZone({ id: zoneId, kind: zone?.kind ?? "operating" });
-  const country = MARKETS.find((item) => item.zones.some((entry) => entry.id === zoneId))?.id ?? "SE";
+  const country = countryOfZone(zoneId);
   const money = feeDefaults(country);
-  return { ...base, riderCancel: { ...base.riderCancel, fee: money.fee }, stops: { ...base.stops, perMin: money.perMin, perStop: money.perStop } };
+  return {
+    ...base,
+    riderCancel: { ...base.riderCancel, fee: money.fee },
+    stops: { ...base.stops, perMin: money.perMin, perStop: money.perStop },
+    reservation: { ...base.reservation, lateCancelFee: money.fee, raiseMax: raiseCap(country) },
+  };
+}
+
+/** The highest fare raise in a country: 500 kr in Sweden, the same value in local money elsewhere. */
+export function raiseCap(country: MarketId): number {
+  return fromSek(RAISE_CAP_SEK, country);
+}
+
+function countryOfZone(zoneId: string): MarketId {
+  return MARKETS.find((item) => item.zones.some((entry) => entry.id === zoneId))?.id ?? "SE";
 }
 
 export function countryDefault(country: MarketId): CountryDispatch {
@@ -376,6 +487,14 @@ export function completeReservation(base: ReservationRules, stored: unknown): Re
   const next: ReservationRules = { ...base, ...raw };
   if (!RESERVATION_LIST_TO.some((item) => item.id === next.listTo)) next.listTo = base.listTo;
   if (!RESERVATION_CANCEL_TO.some((item) => item.id === next.onDriverCancel)) next.onDriverCancel = base.onDriverCancel;
+  if (!HOME_POPUP_TO.some((item) => item.id === next.homePopupTo)) next.homePopupTo = base.homePopupTo;
+  if (typeof next.listGroupId !== "string") next.listGroupId = base.listGroupId;
+  // Every kind of ride gets its own times; kinds or times missing from an older save come from the defaults.
+  const storedTypes = raw.types && typeof raw.types === "object" && !Array.isArray(raw.types) ? raw.types as Partial<Record<RideTypeId, Partial<RideTypeRule>>> : {};
+  next.types = Object.fromEntries(RIDE_TYPES.map((type) => {
+    const own = storedTypes[type.id];
+    return [type.id, { ...base.types[type.id], ...(own && typeof own === "object" && !Array.isArray(own) ? own : {}) }];
+  })) as Record<RideTypeId, RideTypeRule>;
   if (raw.radarBeforeMin === undefined) {
     const limit = next.toExclusive ? Math.min(next.exclusiveBeforeMin, next.searchBeforeMin) : next.searchBeforeMin;
     if (next.radarBeforeMin >= limit) {
@@ -447,7 +566,7 @@ export function zoneIssues(zone: ZoneDispatch): string[] {
   if (waits.some((step) => !step.message.trim())) issues.push("Rider waiting: each step that is on needs a message.");
   if (zone.reservation.on && (zone.reservation.searchBeforeMin < 5 || zone.reservation.searchBeforeMin > 240)) issues.push("Reservations: start looking 5 to 240 minutes before pickup.");
   if (zone.reservation.on && zone.reservation.toExclusive && zone.reservation.exclusiveBeforeMin >= zone.reservation.searchBeforeMin) issues.push("Reservations: the switch to Exclusive must come after the search starts (a smaller number of minutes).");
-  issues.push(...reservationIssues(zone.reservation));
+  issues.push(...reservationIssues(zone.reservation, zone.zoneId));
   if (zone.driverCancel.on && (zone.driverCancel.commissionCutPct < 0 || zone.driverCancel.commissionCutPct > 30)) issues.push("Driver cancels: lower commission must be 0 to 30%.");
   if (zone.riderCancel.on && (zone.riderCancel.closerPct < 5 || zone.riderCancel.closerPct > 100)) issues.push("Rider cancels: \"came closer\" must be 5 to 100%.");
   if (zone.stops.on && (zone.stops.max < 1 || zone.stops.max > 5)) issues.push("Stops: max stops must be 1 to 5.");
@@ -458,7 +577,7 @@ export function zoneIssues(zone: ZoneDispatch): string[] {
 }
 
 /** The reservation steps must come in order: Scheduled rides → Home popup → Exclusive → Radar trips. */
-function reservationIssues(resv: ReservationRules): string[] {
+function reservationIssues(resv: ReservationRules, zoneId: string): string[] {
   if (!resv.on) return [];
   const issues: string[] = [];
   if (resv.listTo === "rating" && (resv.listMinRating < 1 || resv.listMinRating > 5)) issues.push("Reservations: the lowest rating for Scheduled rides must be 1 to 5.");
@@ -474,7 +593,54 @@ function reservationIssues(resv: ReservationRules): string[] {
   if (resv.toRadar && resv.toExclusive && resv.radarBeforeMin >= resv.exclusiveBeforeMin) issues.push("Reservations: Radar trips must come after Exclusive (a smaller number of minutes before pickup).");
   if (resv.onDriverCancel === "home" && !resv.homePopup) issues.push("Reservations: after a driver cancels it cannot go to the Home popup, because the Home popup is off.");
   if (resv.onDriverCancel === "exclusive" && !resv.toExclusive) issues.push("Reservations: after a driver cancels it cannot become Exclusive, because \"Becomes an Exclusive trip\" is off.");
+  if (resv.listTo === "group" && !resv.listGroupId) issues.push("Reservations: pick the driver group that gets Scheduled rides.");
+  if (resv.lateWarn && (resv.lateBackupAfterMin < 1 || resv.lateBackupAfterMin > 60)) issues.push("Reservations: the backup driver must come 1 to 60 minutes after the late warning.");
+  if (resv.towardPickup && (resv.towardPickupBeforeMin < 15 || resv.towardPickupBeforeMin > 240)) issues.push("Reservations: trips toward the pickup must start 15 to 240 minutes before pickup.");
+  for (const type of RIDE_TYPES) {
+    const rule = resv.types[type.id];
+    if (rule.onlineBeforeMin < 5 || rule.onlineBeforeMin > 240) issues.push(`Reservations, ${type.label}: be online before must be 5 to 240 minutes.`);
+    if (rule.spareMin < 0 || rule.spareMin > 60) issues.push(`Reservations, ${type.label}: spare minutes must be 0 to 60.`);
+    if (rule.remindFirstMin < 1 || rule.remindFirstMin > 1440 || rule.remindLastMin < 1 || rule.remindLastMin > 1440) issues.push(`Reservations, ${type.label}: reminders must be 1 to 1440 minutes before pickup.`);
+    else if (rule.remindFirstMin <= rule.remindLastMin) issues.push(`Reservations, ${type.label}: the first reminder must come before the second (a larger number of minutes).`);
+  }
+  if (!Number.isInteger(resv.freeCancelMinutesBeforePickup) || resv.freeCancelMinutesBeforePickup < 0 || resv.freeCancelMinutesBeforePickup > RIDER_FREE_CANCEL_MAX_MIN) issues.push("Reservations: free cancel for riders must end 0 to 10080 minutes (7 days) before pickup, in whole minutes.");
+  if (resv.lateCancelFee < 0 || resv.lateCancelFee > 1000) issues.push("Reservations: the rider's late cancel fee must be 0 to 1000.");
+  if (resv.driverLateCancelHours < 0.5 || resv.driverLateCancelHours > 72) issues.push("Reservations: a driver's late cancel must be set 0.5 to 72 hours before pickup.");
+  if (resv.latePause && (resv.latePauseAfter < 1 || resv.latePauseAfter > 20)) issues.push("Reservations: the pause must come after 1 to 20 late cancels.");
+  if (resv.latePause && (resv.latePeriodDays < 1 || resv.latePeriodDays > 90)) issues.push("Reservations: late cancels must be counted over 1 to 90 days.");
+  if (resv.latePause && (resv.latePauseDays < 1 || resv.latePauseDays > 365)) issues.push("Reservations: scheduled rides can be paused for 1 to 365 days.");
+  const country = countryOfZone(zoneId);
+  const cap = raiseCap(country);
+  if (resv.raiseFare && (resv.raiseMax <= 0 || resv.raiseMax > cap)) issues.push(`Reservations: the highest fare raise must be above 0 and at most ${cap} ${currencySymbol(country)}.`);
+  if (resv.assignAcceptSec < 10 || resv.assignAcceptSec > 600) issues.push("Reservations: the time to accept a ride assigned by Movera must be 10 to 600 seconds.");
   return issues;
+}
+
+/** Smart gap in minutes: the first ride's trip time + the drive to the next pickup + spare minutes. */
+export function smartGapMin(tripMin: number, driveMin: number, spareMin: number): number {
+  return Math.max(0, tripMin) + Math.max(0, driveMin) + Math.max(0, spareMin);
+}
+
+/**
+ * Two scheduled rides clash for one driver when the later pickup comes before the smart gap of the earlier one.
+ * Times are minutes from any fixed start. Once a driver takes one, the clashing one leaves that driver's list.
+ */
+export function ridesClash(first: { pickupMin: number; tripMin: number }, second: { pickupMin: number; tripMin: number }, driveMin: number, spareMin: number): boolean {
+  const [a, b] = first.pickupMin <= second.pickupMin ? [first, second] : [second, first];
+  return a.pickupMin + smartGapMin(a.tripMin, driveMin, spareMin) > b.pickupMin;
+}
+
+/** Leave now: how many minutes before pickup the ride lands on the driver's screen as the active trip. */
+export function leaveNowBeforeMin(driveMin: number, spareMin: number): number {
+  return Math.max(0, Math.round(driveMin)) + Math.max(0, spareMin);
+}
+
+/** How a fare raise is paid: from Movera's commission first, and Movera pays anything beyond it. */
+export function raiseSplit(raise: number, fare: number, commissionPct: number): { commission: number; fromCommission: number; beyond: number } {
+  const round = (value: number) => Math.round(value * 100) / 100;
+  const commission = round(Math.max(0, fare) * Math.max(0, commissionPct) / 100);
+  const amount = Math.max(0, raise);
+  return { commission, fromCommission: round(Math.min(amount, commission)), beyond: round(Math.max(0, amount - commission)) };
 }
 
 export type ReservationTimelineStep = {
@@ -488,7 +654,7 @@ export type ReservationTimelineStep = {
   skipped: string | null;
 };
 
-function listWho(resv: ReservationRules): string {
+function listWho(resv: ReservationRules, groups: readonly DriverGroup[]): string {
   if (resv.listTo === "category") return "Only drivers who drive the ride's category";
   if (resv.listTo === "rating") return `Only drivers rated ${resv.listMinRating} or more`;
   if (resv.listTo === "random") return `A random group of ${resv.listGroupSize} drivers`;
@@ -496,6 +662,10 @@ function listWho(resv: ReservationRules): string {
   if (resv.listTo === "nearNow") return `Only drivers within ${resv.listNearKm} km of the pickup when the rider books`;
   if (resv.listTo === "favourites") return "Only the rider's favourite drivers";
   if (resv.listTo === "areaRegulars") return `Only drivers with ${resv.listAreaTrips}+ trips from the pickup area in 30 days`;
+  if (resv.listTo === "group") {
+    const group = groups.find((item) => item.id === resv.listGroupId);
+    return group ? `Only drivers in the group ${group.name}` : "Only drivers in the chosen group";
+  }
   return "All drivers in the zone";
 }
 
@@ -508,7 +678,7 @@ function activeUrgent(zone: ZoneDispatch): { exclusive: boolean; radar: boolean 
  * What happens to a reservation nobody takes, booked this many minutes before pickup:
  * Scheduled rides → Home popup → Exclusive → Radar trips → pickup. Steps that are off or come too late are marked skipped.
  */
-export function reservationTimeline(zone: ZoneDispatch, bookedBeforeMin: number): ReservationTimelineStep[] {
+export function reservationTimeline(zone: ZoneDispatch, bookedBeforeMin: number, groups: readonly DriverGroup[] = []): ReservationTimelineStep[] {
   const resv = zone.reservation;
   const lead = Math.max(0, Math.round(bookedBeforeMin));
   const urgent = activeUrgent(zone);
@@ -525,8 +695,8 @@ export function reservationTimeline(zone: ZoneDispatch, bookedBeforeMin: number)
         : null;
   const modeSkip = (setting: boolean, mode: OfferMode) => (!setting ? "Off." : !zone[mode].on ? `Skipped: ${modeLabel(mode)} is off in this zone.` : null);
   return [
-    step("list", RESERVATION_STEP_LABEL.list, `${listWho(resv)} see it in Scheduled rides.${resv.listTo !== "all" && resv.listOpenAll ? ` Still untaken after ${resv.listOpenAllAfterMin} min: every driver in the zone sees it.` : ""}`, 0, null),
-    step("home", RESERVATION_STEP_LABEL.home, "Nobody took it yet, so it also pops up on Home for online drivers. It stays in Scheduled rides.", resv.homePopupAfterMin, homeSkip),
+    step("list", RESERVATION_STEP_LABEL.list, `${listWho(resv, groups)} see it in Scheduled rides.${resv.listTo !== "all" && resv.listOpenAll ? ` Still untaken after ${resv.listOpenAllAfterMin} min: every driver in the zone sees it.` : ""}`, 0, null),
+    step("home", RESERVATION_STEP_LABEL.home, `Nobody took it yet, so it also pops up on Home for ${resv.homePopupTo === "zone" || resv.listTo === "all" ? "every online driver in the zone" : "the same drivers as the list"}. It stays in Scheduled rides.${resv.popupClosedExclusive && (resv.toExclusive && zone.exclusive.on) ? " A driver who closes it with × can get it back as an Exclusive if nobody took it." : ""}`, resv.homePopupAfterMin, homeSkip),
     step("exclusive", RESERVATION_STEP_LABEL.exclusive, lead <= resv.exclusiveBeforeMin ? "Booked this close to pickup, so it is an Exclusive offer at once." : "Close to pickup it becomes an Exclusive offer, like today's Exclusive.", lead - resv.exclusiveBeforeMin, modeSkip(resv.toExclusive, "exclusive")),
     step("radar", RESERVATION_STEP_LABEL.radar, "It also comes into Radar trips (Home deck and Live list) as a normal trip that needs a driver soon. Never labelled Exclusive there.", lead - resv.radarBeforeMin, modeSkip(resv.toRadar, "radar")),
     step("pickup", "Pickup", "Pickup time.", lead, null),
@@ -610,6 +780,24 @@ const LABELS: Record<string, string> = {
   "safety.doNotMatch": "Do not match list", "safety.womenOnly": "Women-only rides", alerts: "Alerts",
 };
 
+/** Labels for the reservation settings in Dispatch › Reservations. */
+Object.assign(LABELS, {
+  "reservation.listGroupId": "Driver group for Scheduled rides", "reservation.homePopupTo": "Home popup goes to",
+  "reservation.popupClosedExclusive": "Closed popup comes back as Exclusive", "reservation.hideClashing": "Clashing rides leave the list",
+  "reservation.leaveNow": "Leave now", "reservation.lateWarn": "Late warning, then backup", "reservation.lateBackupAfterMin": "Backup driver after the late warning",
+  "reservation.towardPickup": "Trips toward the pickup before the ride", "reservation.towardPickupBeforeMin": "Trips toward the pickup from",
+  "reservation.freeCancelMinutesBeforePickup": "Rider free cancel, minutes before pickup", "reservation.lateCancelFee": "Rider late cancel fee",
+  "reservation.driverLateCancelHours": "Driver late cancel, hours before pickup", "reservation.latePause": "Pause after late cancels",
+  "reservation.latePauseAfter": "Late cancels before a pause", "reservation.latePeriodDays": "Late cancels counted over days", "reservation.latePauseDays": "Scheduled rides paused for days",
+  "reservation.showDriverOnAccept": "Rider sees the driver at once", "reservation.raiseFare": "Raise the driver's fare", "reservation.raiseMax": "Highest fare raise",
+  "reservation.assignAcceptSec": "Time to accept a ride assigned by Movera",
+});
+
+const RIDE_TYPE_FIELDS: Record<keyof RideTypeRule, string> = { onlineBeforeMin: "be online before", spareMin: "spare minutes", remindFirstMin: "first reminder", remindLastMin: "second reminder" };
+for (const type of RIDE_TYPES) {
+  for (const [field, words] of Object.entries(RIDE_TYPE_FIELDS)) LABELS[`reservation.types.${type.id}.${field}`] = `${type.label} rides: ${words}`;
+}
+
 function flat(value: unknown, prefix = ""): Map<string, string> {
   const out = new Map<string, string>();
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -624,7 +812,9 @@ function flat(value: unknown, prefix = ""): Map<string, string> {
 
 /** Words for the reservation choices, by setting, so "list" or "all" read well in change lines. */
 const PATH_WORDS: Record<string, Record<string, string>> = {
-  "reservation.listTo": { all: "all drivers in the zone", category: "drivers of the category", rating: "drivers with a high rating", random: "a random group of drivers", homeNear: "drivers whose home is near the pickup", nearNow: "drivers near the pickup now", favourites: "the rider's favourite drivers", areaRegulars: "drivers often in the area" },
+  "reservation.listTo": { all: "all drivers in the zone", category: "drivers of the category", rating: "drivers with a high rating", random: "a random group of drivers", homeNear: "drivers whose home is near the pickup", nearNow: "drivers near the pickup now", favourites: "the rider's favourite drivers", areaRegulars: "drivers often in the area", group: "a driver group" },
+  "reservation.homePopupTo": { list: "same drivers as the list", zone: "all drivers in the zone" },
+  "reservation.listGroupId": { "": "none" },
   "reservation.onDriverCancel": { byTime: "by time left", list: "Scheduled rides", home: "Home popup", exclusive: "Exclusive" },
 };
 
@@ -788,7 +978,8 @@ export function requestControl(book: DispatchBook, zoneId: string, value: Omit<C
 export type CopyPart = TabId;
 
 const PART_KEYS: Record<TabId, (keyof ZoneDispatch)[]> = {
-  modes: ["radar", "exclusive", "radarApp", "reservation", "choose", "rulesFrom"],
+  modes: ["radar", "exclusive", "radarApp", "choose", "rulesFrom"],
+  reservations: ["reservation"],
   best: ["factors", "radius", "batching", "finishing", "favourite"],
   waiting: ["waiting"],
   rides: ["extras", "longTripKm", "stops", "driverCancel", "riderCancel", "airport"],
@@ -813,6 +1004,7 @@ export function applyPreset(zone: ZoneDispatch, preset: Preset, country: MarketI
     // Built-in presets carry no money, so fees stay in the country's currency.
     riderCancel: preset.builtIn ? { ...values.riderCancel, fee: money.fee } : values.riderCancel,
     stops: preset.builtIn ? { ...values.stops, perMin: money.perMin, perStop: money.perStop } : values.stops,
+    reservation: preset.builtIn ? { ...values.reservation, lateCancelFee: money.fee, raiseMax: raiseCap(country) } : values.reservation,
   };
 }
 
@@ -1074,6 +1266,15 @@ export function rulesFile(book: DispatchBook, country: MarketId, at: string) {
       score: "Each factor gives 0 to its weight; drivers are offered in order of total score.",
       radarApp: "The most Radar offers one driver sees at once: on the full-screen radar, in the popup over the map, and while driving a rider.",
       autoOffline: "After this many offers in a row that the driver did not accept, the driver is set offline.",
+      reservationWho: "listTo group = only the drivers of the saved group listGroupId (groups below). homePopupTo: list = the same drivers as the list, zone = every online driver in the zone. popupClosedExclusive: a driver who closed the Home popup with × can get it back as an Exclusive if nobody took it.",
+      smartGap: "A driver cannot hold two scheduled rides whose times are the same or close. Gap = the first ride's trip time + the drive to the next pickup + types[kind].spareMin. With hideClashing, once a driver takes one, the rides that do not fit leave that driver's list (they still see them all before taking one).",
+      leaveNow: "leaveNow: at live drive time to the pickup + types[kind].spareMin before pickup, the ride lands on the driver's screen as the active trip with Head to pickup. lateWarn: not moving toward the pickup after that, an island warning at once, then after lateBackupAfterMin an admin alert and the backup driver. towardPickup: from towardPickupBeforeMin before pickup, offers head toward the scheduled pickup, each checked with the smart gap.",
+      rideTypes: "types: normal, airport, long (over longTripKm), premium (Comfort and Premium) and event, each with onlineBeforeMin, spareMin and two reminders (remindFirstMin, remindLastMin) before pickup.",
+      reservationCancels: "Drivers never pay. Riders cancel for free until freeCancelMinutesBeforePickup before pickup, then pay lateCancelFee (country money, major units). A driver cancel under driverLateCancelHours before pickup is a late cancel; latePauseAfter late cancels in latePeriodDays = no scheduled rides for latePauseDays. Every driver cancel counts in the cancel rate.",
+      showDriverOnAccept: "true = the rider sees the driver's name, photo and car as soon as a driver accepts, and the new driver if it changes.",
+      raiseFare: "No driver near pickup: an admin can raise the driver's fare up to raiseMax (country money, never over 500 kr or the same value in local money). It is paid from Movera's commission; the admin sees when it goes beyond it. The rider pays the same.",
+      riderApp: "riderApp[zoneId] is what the rider app reads at GET /api/v1/rider/scheduled-rides/rules: {freeCancelMinutesBeforePickup, lateCancelFeeMinor, currency, showDriverOnAccept}.",
+      assignAccept: "An admin gives the ride to one driver: it comes like an Exclusive, labelled Assigned by Movera, with assignAcceptSec seconds to accept. Not accepted: the admin sees it and picks someone else.",
       reservation: "A ride booked for later. Nobody took it yet: first in Scheduled rides (for listTo drivers), then also the Home popup homePopupAfterMin minutes after booking, then Exclusive exclusiveBeforeMin minutes before pickup, then also Radar trips radarBeforeMin minutes before pickup (never labelled Exclusive there). When a driver takes it, it leaves every other driver's app at once.",
       reservationCancel: "onDriverCancel: where it goes back when the driver who took it cancels. byTime = the step the time says; list = Scheduled rides, the Home popup waits again from the cancel; home or exclusive = that step at once. A step closer to pickup always wins.",
       reservationTie: "Several drivers take it at the same time: the first tap wins; at exactly the same moment the server picks one at random. The server decides, never the app.",
@@ -1081,5 +1282,6 @@ export function rulesFile(book: DispatchBook, country: MarketId, at: string) {
     zones: info.zones.map((zone) => ({ id: zone.id, name: zone.name, kind: zone.kind, control: book.control[zone.id] ?? { paused: false, mode: null }, rules: liveRules(book, zone.id) })),
     events: book.events.filter((event) => event.country === country),
     groups: book.groups.filter((group) => group.country === country),
+    riderApp: Object.fromEntries(info.zones.map((zone) => [zone.id, riderScheduledRules(liveRules(book, zone.id).reservation, country)])),
   };
 }

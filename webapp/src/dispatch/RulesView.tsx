@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, Clock, Copy, Gauge, Layers, MapPin, Pause, Plane, Radar, Shield, Smartphone, Star, Target, Timer, TrendingDown, TrendingUp, Users, Wand2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bell, CalendarClock, CheckCircle2, Clock, Copy, Gauge, Layers, MapPin, Pause, Plane, Radar, Shield, Smartphone, Star, Target, Timer, TrendingDown, TrendingUp, Users, Wand2 } from "lucide-react";
 import type { Market, MarketZone } from "../markets/markets";
 import { CommandButton } from "../ui/CommandButton";
 import { Modal } from "../ui/Modal";
 import { beforeAfter, zoneResults } from "./demo";
 import { ZoneSettings } from "./ZoneSettings";
-import { DriverOfferPreview, RiderWaitingPreview } from "./Previews";
+import { DriverOfferPreview, ReservationDriverPreview, ReservationRiderPreview, RiderWaitingPreview } from "./Previews";
 import {
   applyPreset, BUILT_IN_PRESETS, copyParts, DISPATCH_KEY, liveRules, mainMode, modeLabel, modeNow, presetFrom, TABS, zoneIssues,
   type CountryDispatch, type DispatchBook, type TabId, type ZoneDispatch,
@@ -31,9 +31,12 @@ type Props = {
   symbol: string;
   agentId: string;
   onNotice: (text: string) => void;
+  /** Movera's commission for a normal ride in a zone (Pricing), and a sample booked-ride fare there. */
+  commissionOf: (zoneId: string) => number;
+  sampleFareOf: (zoneId: string) => number;
 };
 
-const TAB_ICON: Record<TabId, typeof Radar> = { modes: Radar, best: Star, waiting: Smartphone, rides: MapPin, drivers: Users, safety: Shield, alerts: Bell };
+const TAB_ICON: Record<TabId, typeof Radar> = { modes: Radar, reservations: CalendarClock, best: Star, waiting: Smartphone, rides: MapPin, drivers: Users, safety: Shield, alerts: Bell };
 
 function ModeBadge({ zone, paused }: { zone: ZoneDispatch; paused: boolean }) {
   if (paused) return <span className="dx-mode-tag paused"><Pause size={10} aria-hidden="true" /> Paused</span>;
@@ -87,7 +90,7 @@ export function RulesView(props: Props) {
         <div className="dx-zone dx-zone-empty">
           <Layers size={34} aria-hidden="true" />
           <b>Pick a zone on the left</b>
-          <p>Each zone has its own rules: Radar, Exclusive, reservations, the best driver, what the rider sees while waiting, and more.</p>
+          <p>{tab === "reservations" ? "Each zone has its own reservation rules. The reservation policy for all zones is there too." : "Each zone has its own rules: Radar, Exclusive, reservations, the best driver, what the rider sees while waiting, and more."}</p>
         </div>
       </div>
     );
@@ -164,6 +167,10 @@ export function RulesView(props: Props) {
               symbol={symbol}
               busy={busy}
               disabled={!editable}
+              money={money}
+              groups={book.groups.filter((item) => item.country === market.id)}
+              commissionPct={props.commissionOf(zone.id)}
+              sampleFare={props.sampleFareOf(zone.id)}
             />
           </div>
           <aside className="dx-zone-side" aria-label="Phone preview">
@@ -171,7 +178,9 @@ export function RulesView(props: Props) {
               <button data-command="admin.dispatch.view" type="button" role="tab" aria-selected={shownPhone === "driver"} className={shownPhone === "driver" ? "active" : undefined} onClick={() => setPhone("driver")}>Driver app</button>
               <button data-command="admin.dispatch.view" type="button" role="tab" aria-selected={shownPhone === "rider"} className={shownPhone === "rider" ? "active" : undefined} onClick={() => setPhone("rider")}>Rider app</button>
             </div>
-            {shownPhone === "driver" ? <DriverOfferPreview zone={rules} money={money} country={market.id} /> : <RiderWaitingPreview zone={rules} />}
+            {tab === "reservations"
+              ? (shownPhone === "driver" ? <ReservationDriverPreview zone={rules} money={money} country={market.id} /> : <ReservationRiderPreview zone={rules} money={money} />)
+              : shownPhone === "driver" ? <DriverOfferPreview zone={rules} money={money} country={market.id} /> : <RiderWaitingPreview zone={rules} />}
           </aside>
         </div>
       </div>

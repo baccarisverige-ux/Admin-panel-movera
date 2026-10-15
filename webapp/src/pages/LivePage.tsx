@@ -1,23 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { useCommands, useDrivers, useRecords, useSlice, useTrips } from "../api/hooks";
-import { can } from "../auth/permissions";
-import { useSession } from "../auth/SessionContext";
+import { useDrivers, useRecords, useSlice, useTrips } from "../api/hooks";
+import { DISPATCH_KEY, emptyDispatchBook, liveRules, normalizeDispatchBook, type DispatchBook } from "../dispatch/rules";
+import { market } from "../markets/markets";
 import {
-  emptyDispatchBook,
-  normalizeDispatchBook,
-  restoreDispatchVersion,
-  saveDispatchBook,
-  type DispatchBook,
-} from "../trips/dispatch";
-import {
-  dispatchError,
   liveMarkers,
   moveMarker,
   offerBlock,
   offersFor,
   projectMarker,
-  type DispatchRule,
   type LiveKind,
   type LiveMarker,
 } from "../trips/present";
@@ -54,8 +45,7 @@ export function LivePage() {
         onDrawn={() => undefined}
         onEdited={() => undefined}
       />
-      <p className="dx-note op-moved" role="note">The main dispatch rules are in Dispatch, per zone. <Link to="/dispatch">Open Dispatch</Link></p>
-      <DispatchEditor />
+      <DispatchLink />
     </>
   );
 }
@@ -279,177 +269,27 @@ function LiveBoard() {
   );
 }
 
-function DispatchEditor() {
-  const { agent } = useSession();
-  const commands = useCommands();
-  const store = useSlice<DispatchBook | DispatchRule[]>("dispatch", emptyDispatchBook());
-  const persisted = normalizeDispatchBook(store.value);
-  const [draft, setDraft] = useState<DispatchRule[] | null>(null);
-  const shown = draft ?? persisted.rules;
-  const error = shown.map(dispatchError).find(Boolean) ?? null;
-  const dirty = JSON.stringify(shown) !== JSON.stringify(persisted.rules);
-  const canIntervene = Boolean(agent && can(agent.role, "trips.intervene"));
-  const allZoneScope = Boolean(canIntervene && agent?.scope.zones === "all");
-
-  function canEdit(zoneId: string): boolean {
-    return Boolean(canIntervene && agent && (agent.scope.zones === "all" || agent.scope.zones.includes(zoneId)));
-  }
-
-  function update(zoneId: string, patch: Partial<DispatchRule>) {
-    if (!canEdit(zoneId)) return;
-    setDraft(shown.map((rule) => (rule.zoneId === zoneId ? { ...rule, ...patch } : rule)));
-  }
-
-  const saveAll = agent ? saveDispatchBook(persisted, shown, agent.id, new Date().toISOString()) : { book: persisted, error: "Sign in again." };
-
+/** Dispatch is the one place for offer times and search distance. The Live map only shows what is live there. */
+function DispatchLink() {
+  const store = useSlice<DispatchBook>(DISPATCH_KEY, emptyDispatchBook());
+  const book = normalizeDispatchBook(store.value);
+  const zones = market("SE").zones;
   return (
-    <article className="panel" data-testid="dispatch-rules">
-      <h3>Dispatch rules per zone</h3>
-      <p>
-        Revision {persisted.draftRev}. Offer time defaults to 8.5 seconds and next-trip radius to 30 km.
-        {!canIntervene ? " Your role is read-only for dispatch." : allZoneScope ? " Your scope can publish all zones." : " Your scope can save only the zones assigned to you."}
-      </p>
-      <p className="state-line">
-        {dirty ? "Unsaved dispatch changes." : "Dispatch rules are saved."} {store.message}
-      </p>
-
-      {shown.map((rule) => {
-        const editable = canEdit(rule.zoneId);
-        const persistedRule = persisted.rules.find((item) => item.zoneId === rule.zoneId) ?? rule;
-        const zoneDirty = JSON.stringify(rule) !== JSON.stringify(persistedRule);
-        const oneZoneRules = persisted.rules.map((item) => item.zoneId === rule.zoneId ? rule : item);
-        const zoneSave = agent ? saveDispatchBook(persisted, oneZoneRules, agent.id, new Date().toISOString()) : { book: persisted, error: "Sign in again." };
-        const zoneError = dispatchError(rule);
-
-        return (
-          <fieldset key={rule.zoneId} className="dispatch-zone" disabled={!editable}>
-            <legend>{rule.zoneName} {!editable ? "· read only" : ""}</legend>
-            <div className="field-grid">
-              <label>
-                Offer time (s)
-                <input aria-label={`${rule.zoneName} offer time`} type="number" step="0.5" value={rule.offerSeconds} onChange={(event) => update(rule.zoneId, { offerSeconds: Number(event.target.value) })} />
-              </label>
-              <label>
-                Search radius (km) <span className="badge-amber">To confirm</span>
-                <input aria-label={`${rule.zoneName} search radius`} type="number" step="1" value={rule.searchRadiusKm} onChange={(event) => update(rule.zoneId, { searchRadiusKm: Number(event.target.value) })} />
-              </label>
-              <label>
-                Next-trip radius (km)
-                <input aria-label={`${rule.zoneName} next-trip radius`} type="number" step="1" value={rule.nextTripKm} onChange={(event) => update(rule.zoneId, { nextTripKm: Number(event.target.value) })} />
-              </label>
-              <label>
-                Max wait (min) <span className="badge-amber">To confirm</span>
-                <input aria-label={`${rule.zoneName} max wait`} type="number" step="1" value={rule.maxWaitMin} onChange={(event) => update(rule.zoneId, { maxWaitMin: Number(event.target.value) })} />
-              </label>
-              <label>
-                Cancellation rate (%) <span className="badge-amber">To confirm</span>
-                <input aria-label={`${rule.zoneName} cancellation rate`} type="number" step="1" value={rule.cancelRatePct} onChange={(event) => update(rule.zoneId, { cancelRatePct: Number(event.target.value) })} />
-              </label>
-              <label className="check-row">
-                <input aria-label={`${rule.zoneName} destination mode`} type="checkbox" checked={rule.destinationMode} onChange={(event) => update(rule.zoneId, { destinationMode: event.target.checked })} />
-                Destination mode <span className="badge-amber">To confirm</span>
-              </label>
-            </div>
-
-            {!allZoneScope && editable ? (
-              <CommandButton
-                command="admin.dispatch.save"
-                className="secondary-btn"
-                type="button"
-                targetId={`dispatch-${rule.zoneId}`}
-                confirmTarget={false}
-                scope={rule.zoneId}
-                before={`dispatch rev ${persisted.draftRev}`}
-                after={`${rule.zoneId} rev ${zoneSave.book.draftRev}`}
-                expectedSliceRev={persisted.draftRev}
-                sliceKey="dispatch"
-                value={zoneSave.book}
-                disabled={!zoneDirty || Boolean(zoneError)}
-                title={zoneError ?? (!zoneDirty ? "No unsaved change in this zone." : undefined)}
-                onDone={() => setDraft(null)}
-              >
-                Save {rule.zoneName}
-              </CommandButton>
-            ) : null}
-          </fieldset>
-        );
-      })}
-
-      {error ? <p className="state-line">{error}</p> : null}
-      {commands.message ? <p className="state-line">{commands.message}</p> : null}
-
-      {allZoneScope ? (
-        <div className="actions">
-          <button
-            data-command="admin.dispatch.save"
-            className="primary-btn"
-            type="button"
-            disabled={!dirty || Boolean(error) || commands.busy || commands.phase === "submitting"}
-            title={error ?? (!dirty ? "No unsaved dispatch changes." : undefined)}
-            onClick={() => {
-              void commands.run("admin.dispatch.save", {
-                reason: "Safety review",
-                targetId: "dispatch",
-                scope: "all",
-                before: `dispatch rev ${persisted.draftRev}`,
-                after: `dispatch rev ${saveAll.book.draftRev}`,
-                expectedSliceRev: persisted.draftRev,
-                sliceKey: "dispatch",
-                value: saveAll.book,
-              }).then((result) => {
-                if (result) setDraft(null);
-              });
-            }}
-          >
-            Save dispatch rules
-          </button>
-          <button
-            data-command="admin.card.action"
-            className="secondary-btn"
-            type="button"
-            disabled={!dirty}
-            onClick={() => setDraft(null)}
-          >
-            Discard unsaved
-          </button>
-        </div>
-      ) : null}
-
-      <h4>Dispatch history</h4>
-      {persisted.history.length === 0 ? (
-        <p className="state-line">No dispatch version has been saved yet.</p>
-      ) : (
-        <ol className="version-list" aria-label="Dispatch history">
-          {persisted.history.map((version) => {
-            const restore = agent ? restoreDispatchVersion(persisted, version.rev, agent.id, new Date().toISOString()) : { book: persisted, error: "Sign in again." };
-            return (
-              <li key={version.rev}>
-                Revision {version.rev} · {version.at} · {version.actorId}
-                {allZoneScope ? (
-                  <CommandButton
-                    command="admin.dispatch.restore"
-                    className="link-action"
-                    type="button"
-                    targetId="dispatch"
-                    confirmTarget={false}
-                    scope="all"
-                    before={`dispatch rev ${persisted.draftRev}`}
-                    after={`restore rev ${version.rev} as ${restore.book.draftRev}`}
-                    expectedSliceRev={persisted.draftRev}
-                    sliceKey="dispatch"
-                    value={restore.book}
-                    disabled={Boolean(restore.error)}
-                    title={restore.error}
-                    onDone={() => setDraft(null)}
-                  >
-                    restore
-                  </CommandButton>
-                ) : null}
-              </li>
-            );
-          })}
-        </ol>
-      )}
+    <article className="panel dp-link-panel" data-testid="dispatch-link">
+      <h3>Dispatch rules</h3>
+      <p>Offer times, search distance and every other dispatch rule are set per zone in Dispatch. These are the live values.</p>
+      <ul aria-label="Live dispatch values">
+        {zones.map((zone) => {
+          const rules = liveRules(book, zone.id);
+          return (
+            <li key={zone.id}>
+              <Link to={`/dispatch?zone=${zone.id}`}>{zone.name}</Link>
+              <small>Exclusive {rules.exclusive.on ? `${rules.exclusive.seconds} s` : "off"} · Radar {rules.radar.on ? `${rules.radar.seconds} s` : "off"} · Search {rules.radius.steps.join(" → ")} km</small>
+            </li>
+          );
+        })}
+      </ul>
+      <Link className="dash-btn small" to="/dispatch">Open Dispatch</Link>
     </article>
   );
 }

@@ -36,23 +36,33 @@ test("live map moves drivers and opens a stale position", async ({ page }) => {
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("dispatch values save per zone and survive reload", async ({ page }) => {
+test("the Live map has no second dispatch editor: it shows Dispatch's live values and links there", async ({ page }) => {
   await signIn(page);
   await page.goto("/live");
-  const offer = page.getByLabel("Norrmalm offer time");
-  await offer.scrollIntoViewIfNeeded();
-  await expect(offer).toHaveValue("8.5");
-  await expect(page.getByLabel("Norrmalm next-trip radius")).toHaveValue("30");
-  await offer.fill("9");
-  await page.getByRole("button", { name: "Save dispatch rules" }).click();
-  await expect(page.getByText("Saved in demo.")).toBeVisible();
-  await page.reload();
-  await expect(page.getByLabel("Norrmalm offer time")).toHaveValue("9");
-  await expect(page.getByLabel("Södermalm offer time")).toHaveValue("8.5");
+  const panel = page.getByTestId("dispatch-link");
+  await panel.scrollIntoViewIfNeeded();
+  await expect(panel).toContainText("set per zone in Dispatch");
+  await expect(panel.getByRole("list", { name: "Live dispatch values" }).getByRole("listitem").filter({ hasText: "Norrmalm" })).toContainText("Exclusive 15 s · Radar 15 s · Search 3 → 5 → 8 km");
+  await expect(page.getByText("Dispatch rules per zone")).toHaveCount(0);
+  await expect(page.getByLabel("Norrmalm offer time")).toHaveCount(0);
   if (process.env.SHOTS) {
     for (const width of [390, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.screenshot({ path: `docs/gates/g08/live-${width}.png`, fullPage: true });
     }
   }
+  await panel.getByRole("link", { name: "Norrmalm" }).click();
+  await expect(page).toHaveURL(/\/dispatch\?zone=Z001/);
+  await expect(page.getByLabel("Exclusive time")).toHaveValue("15");
+});
+
+test("To confirm points offer time, search radius and the reservation values to Dispatch", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/confirm");
+  const offer = page.locator("#value-offer-time");
+  await expect(offer.getByRole("textbox")).toHaveValue("Set per zone in Dispatch");
+  await expect(page.locator("#value-horizon").getByRole("link", { name: "Open in Dispatch" })).toHaveAttribute("href", /tab=reservations/);
+  await offer.getByRole("link", { name: "Open in Dispatch" }).click();
+  await expect(page).toHaveURL(/\/dispatch$/);
+  await expect(page.getByRole("heading", { name: "Dispatch in Sweden" })).toBeVisible();
 });

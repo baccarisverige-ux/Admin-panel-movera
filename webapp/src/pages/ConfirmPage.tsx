@@ -103,6 +103,7 @@ export function ConfirmPage() {
                   {item.label}
                   <input readOnly value={item.today} />
                 </label>
+                {item.link ? <Link className="link-action" to={item.link}>{item.link.startsWith("/dispatch") ? "Open in Dispatch" : "Open"}</Link> : null}
                 {decision ? <span className="pl-confirmed">Confirmed: {decision.value} · {decision.by} · {decision.at.slice(0, 10)}{decision.note ? ` · ${decision.note}` : ""}</span> : <span className="badge-amber">To confirm</span>}
                 {editing === item.id ? (
                   <div className="pl-value-edit">

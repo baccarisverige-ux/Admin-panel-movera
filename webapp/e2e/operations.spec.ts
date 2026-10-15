@@ -193,7 +193,7 @@ test("handover: the shift fills itself in, the next admin reads it, past handove
 test("live map says where the dispatch rules are; operations pages fit a phone", async ({ page }) => {
   await session(page);
   await page.goto("/live");
-  await expect(page.getByRole("note").filter({ hasText: "The main dispatch rules are in Dispatch" }).getByRole("link", { name: "Open Dispatch" })).toBeVisible();
+  await expect(page.getByTestId("dispatch-link").getByRole("link", { name: "Open Dispatch" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 860 });
   for (const path of ["/trips", "/trips/T0012", "/incidents", "/risk?tab=flagged", "/handover"]) {
     await page.goto(path);
