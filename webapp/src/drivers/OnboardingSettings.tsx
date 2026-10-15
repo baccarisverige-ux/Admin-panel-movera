@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BellRing, FileCheck2, ListOrdered } from "lucide-react";
+import { BellRing, CalendarX2, FileCheck2, ListOrdered } from "lucide-react";
 import { Card, Check, Num, Row } from "../dispatch/fields";
 import { docLabel } from "../fleet/documents";
 import type { MarketId } from "../markets/markets";
@@ -41,6 +41,14 @@ export function OnboardingSettings({ rules, country, editable }: { rules: Onboar
           <Row label="Stuck after" help="An applicant in the same step this long shows as Stuck on the board.">
             <Num label="Stuck after days" value={current.stuckAfterDays} unit="days" min={2} max={90} onChange={(value) => patch({ stuckAfterDays: value })} />
           </Row>
+        </Card>
+        <Card title="Documents that expire" icon={<CalendarX2 size={18} />} tone="red" help="For drivers who are already driving: warn, then block.">
+          <Row label="Warn before expiry" help="On the island and as a notification, with “Upload new”.">
+            {current.docWarnDays.map((day, index) => (
+              <Num key={index} label={`Document warning ${index + 1}`} before={index === 0 ? undefined : "and"} value={day} unit={index === current.docWarnDays.length - 1 ? "days before" : "days"} min={1} max={90} onChange={(value) => patch({ docWarnDays: current.docWarnDays.map((item, at) => (at === index ? Math.round(value) : item)) })} />
+            ))}
+          </Row>
+          <Row label="Block at expiry" help="On the expiry day the driver can't go online until you approve the new document." on={current.blockAtExpiry} onToggle={(blockAtExpiry) => patch({ blockAtExpiry })} />
         </Card>
       </fieldset>
       {editable ? (

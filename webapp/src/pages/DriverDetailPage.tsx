@@ -293,6 +293,7 @@ export function DriverDetailPage() {
               <div>
                 <h3 id="cats-title">Categories this driver can drive</h3>
                 <p>Switch each category on or off. Ride offers only come in for categories that are on{car ? "" : ", and a vehicle must be linked"}.</p>
+                <p className="fd-sub">The driver sees only these in the app and can switch some of them off, for example drive Comfort but not Movera. Offers follow the driver's choice. The driver can never switch on a category that is off here.</p>
               </div>
             </div>
             <div className="cat-grid">

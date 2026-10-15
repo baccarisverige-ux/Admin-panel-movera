@@ -214,6 +214,11 @@ const SEK_BASE: Omit<CategoryPrice, "enabled"> = {
   babySeatFee: 30, childSeatFee: 30, minimum: 49, maximum: 1500, appFeePct: 10,
 };
 
+/** Waiting at pickup in kronor: per minute after the free wait, and the no-show fee. Other countries get the same value in local money. */
+const WAIT_PER_MIN_SEK = 12.26;
+const WAIT_PER_MIN_PREMIUM_SEK = 16.9;
+const NO_SHOW_FEE_SEK = 65;
+
 const CATEGORY_LIFT: Record<string, number> = { economy: 1, comfort: 1.25, premium: 1.8, priority: 1.35, xl: 1.5, electric: 1.1, pet: 1.15, child_seat: 1.2 };
 
 const MONEY_FIELDS: PriceField[] = ["base", "perKm", "perMin", "waitPerMin", "stopWaitPerMin", "cancelFee", "noShowFee", "longPickupFee", "extraStopFee", "babySeatFee", "childSeatFee", "minimum", "maximum"];
@@ -226,7 +231,11 @@ export function defaultCategoryPrice(categoryId: string, id: MarketId, airport =
     const lifted = field === "babySeatFee" || field === "childSeatFee" ? SEK_BASE[field] * (categoryId === "child_seat" ? 0.5 : 1) : SEK_BASE[field] * lift;
     price[field] = roundTo(lifted * factor * (airport && (field === "base" || field === "minimum") ? 1.3 : 1), step);
   }
-  price.freeWaitMin = categoryId === "premium" ? 5 : airport ? 5 : 2;
+  price.freeWaitMin = categoryId === "premium" ? 5 : airport ? 5 : categoryId === "xl" ? 3 : 2;
+  // Waiting at pickup is the same in every category (Premium waits longer and costs more), and matches the driver app's waiting rules.
+  const waitSek = categoryId === "premium" ? WAIT_PER_MIN_PREMIUM_SEK : WAIT_PER_MIN_SEK;
+  price.waitPerMin = id === "SE" ? waitSek : roundTo(waitSek * factor, step);
+  price.noShowFee = id === "SE" ? NO_SHOW_FEE_SEK : roundTo(NO_SHOW_FEE_SEK * factor, step);
   price.freeCancelMin = categoryId === "premium" ? 3 : 2;
   price.appFeePct = categoryId === "premium" ? 12 : 10;
   return price;

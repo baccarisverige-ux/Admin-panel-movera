@@ -19,8 +19,8 @@ test("test a ride follows the zone price list, in each country's currency", asyn
   // 29 base + 8 km × 12 + 18 min × 4 = 197, plus 10% app fee = 216.70, rounded to 217
   await expect(page.getByTestId("quote-total")).toHaveText("217,00 kr");
   await quote.getByLabel("Quote waiting minutes").fill("5");
-  // 3 paid minutes × 5 kr after 2 free: 212 × 1.1 = 233.2
-  await expect(page.getByTestId("quote-total")).toHaveText("233,00 kr");
+  // 3 paid minutes × 12.26 kr after 2 free: 233.78 × 1.1 = 257.16
+  await expect(page.getByTestId("quote-total")).toHaveText("257,00 kr");
   await quote.getByLabel("Quote baby seats").fill("1");
   await expect(page.getByTestId("quote-lines")).toContainText("1 baby seat");
 

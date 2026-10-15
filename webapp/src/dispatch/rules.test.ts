@@ -1,5 +1,11 @@
 import {
+  cancelReasonsDefault, cancelReasonsFor, completeCancelReasons, driverNoShowShare, exclusiveReasonList, exclusiveReasonText, pickupTerms,
+} from "./offers.ts";
+import {
   approve,
+  completeCountry,
+  countryIssues,
+  countryLines,
   applyPreset,
   BUILT_IN_PRESETS,
   cancelDecision,
@@ -11,6 +17,7 @@ import {
   homePopupSkippedBelowMin,
   inTime,
   leaveNowBeforeMin,
+  liveCountry,
   liveRules,
   modeNow,
   normalizeDispatchBook,
@@ -132,9 +139,11 @@ const offline = rankDrivers(base, country, request, [driver("quiet", { noInRow: 
 assert(offline[0].out?.includes("offline"), "driver goes offline after offers not accepted");
 assert(!rankDrivers({ ...base, autoOffline: { on: false, after: 5 } }, country, request, [driver("quiet", { noInRow: 6 })])[0].out?.includes("offline"), "auto offline can be off");
 const busyDriver = driver("busy", { finishing: { inMin: 2, dropKm: 0.5 } });
-const noDriving = { ...base, radarApp: { ...base.radarApp, drivingOn: false } };
-assert(!simulate(noDriving, rankDrivers(noDriving, country, request, [busyDriver]), "radar")[0].detail.includes("busy"), "no radar offers while driving when off");
-assert(simulate(base, rankDrivers(base, country, request, [busyDriver]), "radar")[0].detail.includes("busy"), "radar offers while driving when on");
+// Q18: a driver with a rider gets Exclusive offers only, never Radar.
+assert(!simulate(base, rankDrivers(base, country, request, [busyDriver]), "radar")[0].detail.includes("busy"), "no Radar offers while driving a rider");
+assert(simulate(base, rankDrivers(base, country, request, [busyDriver]), "exclusive")[0].title === "Exclusive to busy", "Exclusive while driving reaches a driver with a rider");
+const noDriving = { ...base, exclusiveWhileDriving: { on: false, count: 1 } };
+assert(simulate(noDriving, rankDrivers(noDriving, country, request, [busyDriver]), "exclusive")[0].title !== "Exclusive to busy", "no offers while driving when Exclusive while driving is off");
 assert(changeLines(base, { ...base, autoOffline: { on: true, after: 8 } })[0] === "Offline after offers not accepted: 5 → 8", "change line for auto offline");
 
 // Reservations: who gets them, the Home popup, Exclusive, Radar trips and what happens when a driver cancels.
@@ -310,5 +319,73 @@ assert(copyParts(withResv({ leaveNow: false }), zoneDefault("Z002"), ["modes"]).
 const r3File = rulesFile(emptyDispatchBook(), "SE", "now");
 assert(r3File.glossary.smartGap.includes("spareMin") && r3File.glossary.raiseFare.includes("500 kr") && r3File.zones[0].rules.reservation.types.normal.spareMin === 15, "the rules file explains the new settings");
 assert(r3File.riderApp.Z001.lateCancelFeeMinor === 5000 && r3File.glossary.riderApp.includes("/api/v1/rider/scheduled-rides/rules"), "the rules file has what the rider app reads");
+
+// Round 3, A2: offer card, Exclusive reasons, going offline, hidden trips, Exclusive while driving.
+assert(JSON.stringify(base.offerCard) === JSON.stringify({ netFare: false, pickupAddress: true, dropoffAreaOnly: false, stops: true, riderRating: true, tripMinutesKm: true, pickupDistance: true, badges: true }), "the offer card shows the full fare and every detail by default, like the driver app");
+assert(exclusiveReasonList(base.exclusiveReasons).map((item) => item.text).join("|") === "Best match|Rider's favourite|Finishing nearby|Airport queue|Pickup soon|Only for you · nearby", "the Exclusive reasons start with the six short texts");
+assert(exclusiveReasonText({ ...base.exclusiveReasons, favourite: { text: "Your rider", on: false } }, "favourite") === "", "a reason that is off shows no text");
+assert(zoneIssues({ ...base, exclusiveReasons: { ...base.exclusiveReasons, "best-match": { text: " ", on: true } } }).some((line) => line.includes("needs a short text")), "a reason that is on needs a text");
+assert(zoneIssues({ ...base, exclusiveReasons: { ...base.exclusiveReasons, nearby: { text: "Only for you because you are very close", on: true } } }).some((line) => line.includes("too long")), "a reason is short");
+assert(zoneIssues({ ...base, exclusiveReasons: { ...base.exclusiveReasons, nearby: { text: "", on: false } } }).length === 0, "a reason that is off needs no text");
+assert(zoneIssues({ ...base, autoOffline: { on: true, after: 1 } }).length === 0 && zoneIssues({ ...base, autoOffline: { on: true, after: 99 } }).length === 0, "going offline allows 1 to 99 offers");
+assert(zoneIssues({ ...base, autoOffline: { on: true, after: 100 } })[0] === "Go offline automatically: must be after 1 to 99 offers.", "100 is too many");
+assert(base.hiddenComesBackMin === 2 && zoneIssues({ ...base, hiddenComesBackMin: 0 }).some((line) => line.includes("come back after 1 to 60")), "a hidden trip comes back after 2 min by default");
+assert(base.exclusiveWhileDriving.on && base.exclusiveWhileDriving.count === 1 && !("drivingOn" in base.radarApp), "Exclusive while driving replaces Radar offers while driving");
+assert(zoneIssues({ ...base, exclusiveWhileDriving: { on: true, count: 6 } })[0] === "Exclusive while driving: must be 1 to 5 offers at a time.", "while driving has a limit");
+const q18Old = normalizeDispatchBook(JSON.parse(JSON.stringify({ ...emptyDispatchBook(), live: { Z001: { ...base, exclusiveWhileDriving: undefined, radarApp: { fullOn: true, full: 8, popupOn: true, popup: 2, drivingOn: false, driving: 3 }, finishing: { radar: true, exclusive: true, withinMin: 3, withinKm: 1.5 } }, Z002: { ...base, exclusiveWhileDriving: undefined, radarApp: { fullOn: true, full: 8, popupOn: true, popup: 2, drivingOn: true, driving: 9 } } } })));
+const q18Live = liveRules(q18Old, "Z001");
+assert(!q18Live.exclusiveWhileDriving.on && q18Live.exclusiveWhileDriving.count === 3 && !("drivingOn" in q18Live.radarApp) && !q18Live.finishing.radar, "an old save moves Radar offers while driving to Exclusive while driving");
+assert(liveRules(q18Old, "Z002").exclusiveWhileDriving.count === 5 && zoneIssues(liveRules(q18Old, "Z002")).length === 0, "an old count over 5 becomes 5");
+assert(changeLines(q18Live, draftRules(q18Old, "Z001")).length === 0, "the move does not show as a change");
+const a2Change = changeLines(base, { ...base, offerCard: { ...base.offerCard, netFare: true, dropoffAreaOnly: true }, exclusiveReasons: { ...base.exclusiveReasons, "best-match": { text: "Top match", on: true } }, hiddenComesBackMin: 5, exclusiveWhileDriving: { on: false, count: 1 } });
+assert(a2Change.includes("Offer card shows the driver's share: off → on") && a2Change.includes("Offer card: drop-off area only: off → on"), "change lines for the offer card");
+assert(a2Change.includes("Exclusive reason (the best driver by the rules): Best match → Top match"), "change line for a reason text");
+assert(a2Change.includes("Hidden Radar trip comes back after: 2 → 5") && a2Change.includes("Exclusive while driving: on → off"), "change lines for hidden trips and while driving");
+
+// Waiting at pickup: Pricing's values per category, then ride type, then distance.
+const wait = base.pickupWait;
+assert(wait.noShowAfterMin === 5 && wait.driverShareWaitPct === 100 && wait.driverShareNoShowPct === 80 && wait.farPickupKm === 5 && wait.farPickup.noShowFee === 85 && wait.farPickup.freeWaitMin === 1, "waiting defaults like the driver app");
+assert(zoneDefault("FR-PC").pickupWait.farPickup.noShowFee === 8.05 && zoneDefault("TN-TC").pickupWait.farPickup.noShowFee === 25.5, "the far-pickup fee is in the country's money");
+const pricingBase = { freeWaitMin: 2, perMin: 5, noShowFee: 50 };
+const normalTerms = pickupTerms(pricingBase, wait, { type: "normal", pickupKm: 2, includedWaitingMin: 5 });
+assert(normalTerms.freeWaitMin === 2 && normalTerms.perMin === 5 && normalTerms.noShowAfterMin === 5 && normalTerms.noShowFee === 50 && normalTerms.rule === "", "a normal pickup uses Pricing's values");
+assert(driverNoShowShare(normalTerms) === 40, "the driver gets 80% of the no-show fee");
+const airportTerms = pickupTerms(pricingBase, wait, { type: "airport", pickupKm: 2, includedWaitingMin: 5 });
+assert(airportTerms.freeWaitMin === 15 && airportTerms.noShowAfterMin === 20 && airportTerms.perMin === 5 && airportTerms.rule === "Airport pickup", "an airport pickup waits longer");
+assert(pickupTerms(pricingBase, wait, { type: "scheduled", pickupKm: 2, includedWaitingMin: 7 }).freeWaitMin === 7, "a scheduled ride's free wait is the reservation policy's included waiting");
+const farAirport = pickupTerms(pricingBase, wait, { type: "airport", pickupKm: 9, includedWaitingMin: 5 });
+assert(farAirport.freeWaitMin === 1 && farAirport.noShowFee === 85 && farAirport.noShowAfterMin === 20 && farAirport.rule === "Airport pickup · Pickup over 5 km", "the distance rule comes last and wins where it sets a value");
+assert(pickupTerms(pricingBase, { ...wait, farPickupOn: false }, { type: "normal", pickupKm: 9, includedWaitingMin: 5 }).freeWaitMin === 2, "the far rule can be off");
+assert(zoneIssues({ ...base, pickupWait: { ...wait, driverShareNoShowPct: 120 } }).includes("Waiting at pickup: the driver's share must be 0 to 100%."), "shares are 0 to 100%");
+assert(zoneIssues({ ...base, pickupWait: { ...wait, rideTypes: { ...wait.rideTypes, airport: { ...wait.rideTypes.airport, noShowAfterMin: 10 } } } }).includes("Waiting at pickup, airport pickup: no-show must come after the free wait."), "no-show comes after the free wait");
+const waitChange = changeLines(base, { ...base, pickupWait: { ...wait, noShowAfterMin: 6, farPickup: { ...wait.farPickup, perMin: 8 }, rideTypes: { ...wait.rideTypes, event: { ...wait.rideTypes.event, freeWaitMin: null } } } });
+assert(waitChange.includes("No-show after: 5 → 6") && waitChange.includes("Far pickup: price per minute: same as the zone → 8") && waitChange.includes("Event pickup: free wait: 3 → same as the zone"), "change lines for waiting at pickup");
+assert(copyParts({ ...base, pickupWait: { ...wait, noShowAfterMin: 9 } }, zoneDefault("Z002"), ["rides"]).pickupWait.noShowAfterMin === 9, "waiting copies with Rides & stops");
+
+// Country rules: driving limit warnings, cancel rate, cancel reasons.
+const se = countryDefault("SE");
+assert(se.rest.warnFirstMin === 30 && se.rest.warnLastMin === 10 && se.rest.blockOnline && se.cancelRateLimitPct === 30, "warnings at 30 and 10 min, block at the limit, cancel rate limit 30%");
+assert(countryIssues({ ...se, rest: { ...se.rest, warnFirstMin: 10, warnLastMin: 30 } })[0] === "Driving limit: the first warning must come before the second (a larger number of minutes).", "warnings come in order");
+assert(countryIssues({ ...se, cancelRateLimitPct: 0 })[0] === "Cancel rate limit must be 1 to 100%.", "the cancel rate limit has a range");
+const oldCountry = completeCountry("SE", { country: "SE", rest: { on: true, workHours: 10, restHours: 8 } } as never);
+assert(oldCountry.rest.workHours === 10 && oldCountry.rest.warnFirstMin === 30 && oldCountry.cancelRateLimitPct === 30 && oldCountry.cancelReasons.groups.driverDuringTrip.length === 7, "an old country save gets the new rules");
+assert(liveCountry({ ...emptyDispatchBook(), liveCountries: { SE: { country: "SE", rest: { on: false, workHours: 12, restHours: 6 } } as never } }, "SE").rest.blockOnline, "old live country rules are completed");
+const reasons = cancelReasonsDefault();
+assert(reasons.groups.driverBeforeTrip.length === 6 && reasons.groups.driverDuringTrip.length === 7 && reasons.groups.scheduled.length === 6 && reasons.groups.rider.length === 8, "the apps' reasons today: 6 before, 7 during, 6 scheduled, 8 rider");
+assert(!reasons.noShow.counts && !reasons.groups.driverDuringTrip.find((item) => item.code === "safety_concern_on_trip")!.counts && !reasons.groups.driverBeforeTrip.find((item) => item.code === "vehicle_issue_before_start")!.counts, "no-show, safety and car problems don't count");
+const svReasons = { ...reasons, groups: { ...reasons.groups, scheduled: reasons.groups.scheduled.map((item) => (item.code === "scheduled_other" ? { ...item, title: { ...item.title, sv: "Annat skäl" } } : item)) } };
+assert(cancelReasonsFor(svReasons, "sv").groups.scheduled.at(-1)!.title === "Annat skäl" && cancelReasonsFor(svReasons, "sv").groups.scheduled[0].title === "I can no longer make the pickup time", "an empty language shows the English text");
+assert(countryIssues({ ...se, cancelReasons: { ...reasons, groups: { ...reasons.groups, rider: [] } } }).includes("Cancel reasons, rider: keep at least one reason."), "every group keeps a reason");
+assert(countryIssues({ ...se, cancelReasons: { ...reasons, groups: { ...reasons.groups, rider: [...reasons.groups.rider, { code: "rider_new", title: {}, subtitle: {}, counts: true }] } } }).includes("Cancel reasons, rider: each reason needs an English text."), "a new reason needs an English text");
+const reasonChange = countryLines(se, { ...se, cancelReasons: { ...svReasons, groups: { ...svReasons.groups, rider: [...reasons.groups.rider.slice(1), { code: "rider_new", title: { en: "Found another ride" }, subtitle: {}, counts: false }], driverBeforeTrip: reasons.groups.driverBeforeTrip.map((item) => (item.code === "rider_not_at_pickup" ? { ...item, counts: false } : item)) } } });
+assert(reasonChange.includes("Cancel reasons, driver, scheduled rides: “Other reason” Swedish text changed"), "change line for a language");
+assert(reasonChange.includes("Cancel reasons, rider: added “Found another ride”") && reasonChange.includes("Cancel reasons, rider: removed “Pickup point is incorrect”"), "change lines for added and removed reasons");
+assert(reasonChange.includes("Cancel reasons, driver, before the trip: “Rider not at pickup” counts → doesn't count"), "change line for Doesn't count");
+assert(completeCancelReasons({ groups: { rider: [{ code: "x", title: { en: "X", de: "Y" } }] } }).groups.rider[0].title.en === "X" && completeCancelReasons({}).groups.scheduled.length === 6, "stored reasons are cleaned and missing groups come from the defaults");
+const publishedCountry = publish(emptyDispatchBook(), {}, { SE: { ...se, cancelRateLimitPct: 25 } }, ["Z001"], "nora", "2026-10-15T10:00", "");
+assert(!publishedCountry.error && liveCountry(publishedCountry.book, "SE").cancelRateLimitPct === 25 && publishedCountry.book.versions[0].lines.includes("Sweden: Cancel rate limit: 30% → 25%"), "country rules publish with a version line");
+const a2File = rulesFile(emptyDispatchBook(), "SE", "now");
+assert(a2File.driverApp.cancelReasons.sv.groups.rider.length === 8 && a2File.driverApp.exclusiveReasons.Z001[0].id === "best-match", "the rules file has the driver app's shapes");
+assert(a2File.country.cancelRateLimitPct === 30 && a2File.glossary.pickupWait.includes("Pricing") && a2File.zones[0].rules.offerCard.badges, "the rules file has the new settings");
 
 console.log("dispatch rules ok");

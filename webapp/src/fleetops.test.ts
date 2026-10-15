@@ -1,5 +1,5 @@
 import { DRIVER_DOCUMENTS, type DocStatus } from "./drivers/gate.ts";
-import { countryActivationIssue, demoLeads, docProgress, driverMessage, emptyOnboardingRules, funnel, neededDocs, remind, reminderDue, rulesError as onboardingError, stepOf, type Applicant } from "./drivers/onboarding.ts";
+import { countryActivationIssue, demoLeads, docProgress, driverMessage, emptyOnboardingRules, funnel, neededDocs, normalizeOnboardingRules, remind, reminderDue, rulesError as onboardingError, stepOf, type Applicant } from "./drivers/onboarding.ts";
 import { carDocs, carEarnings, categoryProblem, checks, emptyVehicleRules, fits, photosOf, rulesError, rulesImpact, setPhoto, shouldHold } from "./vehicles/rules.ts";
 
 const assert = (ok: unknown, message: string) => {
@@ -57,5 +57,12 @@ assert(!reminderDue(lead, "signup", { ...reminded, countries: { ...reminded.coun
 const flow = funnel([applicant, lead], 2, onboarding.countries.SE);
 assert(flow[0].pct === 100 && flow.every((row, index) => index === 0 || row.reached <= flow[index - 1].reached), "the funnel only goes down");
 assert(driverMessage("Elin Berg", "Driving licence", "rejected", "Too dark").startsWith("Hi Elin, your driving licence could not be approved. Reason: Too dark"), "message to the driver");
+
+// Q26: documents that expire: warn 30, 7 and 1 days before, then block until an admin approves the new one.
+assert(onboarding.countries.SE.docWarnDays.join() === "30,7,1" && onboarding.countries.SE.blockAtExpiry, "warnings 30, 7 and 1 days before, then block");
+assert(onboardingError({ ...onboarding.countries.SE, docWarnDays: [7, 30, 1] }) === "Document warnings: each warning must come after the one before (fewer days).", "warnings come in order");
+assert(onboardingError({ ...onboarding.countries.SE, docWarnDays: [120, 7, 1] }) === "Document warnings: 1 to 90 days before expiry.", "warnings have a range");
+const oldOnboarding = normalizeOnboardingRules({ draftRev: 3, countries: { SE: { ...onboarding.countries.SE, docWarnDays: undefined, blockAtExpiry: undefined } } });
+assert(oldOnboarding.countries.SE.docWarnDays.join() === "30,7,1" && oldOnboarding.countries.SE.blockAtExpiry && oldOnboarding.draftRev === 3, "old saves get the document rules");
 
 console.log("fleet ops ok");

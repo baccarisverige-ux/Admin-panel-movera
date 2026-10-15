@@ -94,9 +94,13 @@ assert(stopped.stopped.join() === "Z003" && !zoneLive(stopped.store, "Z003").man
 // Quote: waiting after the free minutes, stops, seats, app fee, min fare, split.
 const input: QuoteInput = { categoryId: "economy", km: 10, minutes: 20, waitMin: 5, stops: 1, stopWaitMin: 2, babySeats: 1, childSeats: 0, longPickup: false, airportPickup: false, airportDropoff: false, reservation: false, surge: 1 };
 const quote = quoteRide(norrmalm, input);
-// 29 + 120 + 80 = 229; waiting 3 × 5 = 15; stop 15; stop wait 10; baby seat 30 → 299; app fee 10% → 328.9 → 329
-assert(quote.total === 329, `quote total ${quote.total}`);
-assert(quote.driverGets === 239.2, `driver gets 80% of 299, got ${quote.driverGets}`);
+// 29 + 120 + 80 = 229; waiting 3 × 12.26 = 36.78; stop 15; stop wait 10; baby seat 30 → 320.78; app fee 10% → 352.86 → 353
+assert(quote.total === 353, `quote total ${quote.total}`);
+assert(quote.driverGets === 256.62, `driver gets 80% of 320.78, got ${quote.driverGets}`);
+// Waiting matches the driver app: 12.26 kr/min (Premium 16.90), 65 kr no-show fee, Premium 5 and XL 3 free minutes.
+assert(norrmalm.prices.economy.waitPerMin === 12.26 && norrmalm.prices.premium.waitPerMin === 16.9 && norrmalm.prices.comfort.waitPerMin === 12.26, "waiting per minute");
+assert(norrmalm.prices.economy.noShowFee === 65 && norrmalm.prices.premium.noShowFee === 65, "no-show fee");
+assert(norrmalm.prices.economy.freeWaitMin === 2 && norrmalm.prices.premium.freeWaitMin === 5 && norrmalm.prices.xl.freeWaitMin === 3, "free wait");
 const surgedQuote = quoteRide(norrmalm, { ...input, waitMin: 0, stops: 0, stopWaitMin: 0, babySeats: 0, surge: 1.5 });
 assert(surgedQuote.lines.some((line) => line.kind === "surge" && line.amount === 114.5), "surge applies to the trip part");
 assert(quoteRide(norrmalm, { ...input, km: 0.5, minutes: 1, waitMin: 0, stops: 0, stopWaitMin: 0, babySeats: 0 }).lines.some((line) => line.kind === "limit"), "minimum fare applies");

@@ -22,7 +22,11 @@ export const STEPS: { id: StepId; label: string; help: string }[] = [
 export const TRAINING_DOCS: DocId[] = ["terms", "virtual_session"];
 
 export type StepRule = { id: StepId; on: boolean; days: number };
-export type CountryOnboarding = { steps: StepRule[]; docs: DocId[]; reminders: boolean; remindEveryDays: number; stuckAfterDays: number };
+/**
+ * docWarnDays: before a document expires the driver gets a warning on the island and in the app, with "Upload new", this many days before
+ * (largest first). blockAtExpiry: on the expiry day the driver can't go online until an admin approves the new document.
+ */
+export type CountryOnboarding = { steps: StepRule[]; docs: DocId[]; reminders: boolean; remindEveryDays: number; stuckAfterDays: number; docWarnDays: number[]; blockAtExpiry: boolean };
 export type Reminder = { driverId: string; at: string; by: string; step: StepId };
 export type OnboardingRules = { draftRev: number; countries: Record<MarketId, CountryOnboarding>; reminders: Reminder[] };
 
@@ -34,6 +38,8 @@ function defaults(country: MarketId): CountryOnboarding {
     reminders: true,
     remindEveryDays: 2,
     stuckAfterDays: 10,
+    docWarnDays: [30, 7, 1],
+    blockAtExpiry: true,
   };
 }
 
@@ -48,7 +54,7 @@ export function normalizeOnboardingRules(value: unknown): OnboardingRules {
   const countries = { ...base.countries };
   for (const id of Object.keys(base.countries) as MarketId[]) {
     const saved = raw.countries?.[id];
-    if (saved) countries[id] = { ...base.countries[id], ...saved, steps: base.countries[id].steps.map((step) => ({ ...step, ...(saved.steps?.find((row) => row.id === step.id) ?? {}) })) };
+    if (saved) countries[id] = { ...base.countries[id], ...saved, steps: base.countries[id].steps.map((step) => ({ ...step, ...(saved.steps?.find((row) => row.id === step.id) ?? {}) })), docWarnDays: Array.isArray(saved.docWarnDays) && saved.docWarnDays.every((day) => typeof day === "number") ? saved.docWarnDays : base.countries[id].docWarnDays, blockAtExpiry: typeof saved.blockAtExpiry === "boolean" ? saved.blockAtExpiry : base.countries[id].blockAtExpiry };
   }
   return { draftRev: typeof raw.draftRev === "number" ? raw.draftRev : 1, countries, reminders: Array.isArray(raw.reminders) ? raw.reminders : [] };
 }
@@ -168,6 +174,8 @@ export function rulesError(rules: CountryOnboarding): string | null {
   if (!rules.docs.includes("driver_license")) return "The driving licence is always needed.";
   if (rules.reminders && (rules.remindEveryDays < 1 || rules.remindEveryDays > 30)) return "Remind every 1 to 30 days.";
   if (rules.stuckAfterDays < 2 || rules.stuckAfterDays > 90) return "Stuck after 2 to 90 days.";
+  if (!rules.docWarnDays.length || rules.docWarnDays.some((day) => !Number.isInteger(day) || day < 1 || day > 90)) return "Document warnings: 1 to 90 days before expiry.";
+  if (rules.docWarnDays.some((day, index) => index > 0 && day >= rules.docWarnDays[index - 1])) return "Document warnings: each warning must come after the one before (fewer days).";
   return null;
 }
 

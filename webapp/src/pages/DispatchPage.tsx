@@ -1,13 +1,13 @@
 import { logExport } from "../reports/activityLog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { AlertTriangle, ArrowLeft, CalendarDays, Download, FlaskConical, History, Radio, Save, Scale, ScrollText, Send, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarDays, Download, FlaskConical, History, ListX, Radio, Save, Scale, ScrollText, Send, Undo2 } from "lucide-react";
 import { useRecords, useSlice } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { liveDrivers } from "../dashboard/live";
 import { reservationFareMinor } from "../dashboard/scheduled";
-import { emptyPricingStore, normalizeStore, SLICE_KEY as PRICING_KEY, zoneBook, type PricingStore } from "../pricing/zonePricing";
+import { activeCategories, emptyPricingStore, normalizeStore, SLICE_KEY as PRICING_KEY, zoneBook, type PricingStore } from "../pricing/zonePricing";
 import { candidatesFor, rideRequests, type RideRequest } from "../dashboard/riders";
 import { CATEGORIES } from "../domain/contract";
 import { driverOps, emptyDriverOpsBook, type DriverOpsBook } from "../drivers/ops";
@@ -19,6 +19,7 @@ import { useAlertsMaybe } from "../alerts/AlertsContext";
 import { DispatchAlerts } from "../alerts/DispatchAlerts";
 import { cancelRecords, driverFacts, onlyFinishingNearby } from "../dispatch/demo";
 import { CancelView } from "../dispatch/CancelView";
+import { CancelReasonsView } from "../dispatch/CancelReasonsView";
 import { EventsView } from "../dispatch/EventsView";
 import { Approvals, HistoryView } from "../dispatch/HistoryView";
 import { LiveView } from "../dispatch/LiveView";
@@ -35,6 +36,7 @@ const VIEWS = [
   { id: "test", label: "Test a ride", icon: FlaskConical },
   { id: "events", label: "Events & groups", icon: CalendarDays },
   { id: "cancels", label: "Cancel checks", icon: Scale },
+  { id: "reasons", label: "Cancel reasons", icon: ListX },
   { id: "history", label: "History", icon: History },
 ] as const;
 
@@ -156,6 +158,10 @@ export function DispatchPage() {
   const say = (text: string) => setNotice(text);
   const commissionOf = (id: string) => zoneBook(pricing, id).commission.economy ?? 20;
   const sampleFareOf = (id: string) => reservationFareMinor({ zoneId: id, category: "economy" }).minor / market.minorUnits;
+  const waitBasesOf = (id: string) => {
+    const prices = zoneBook(pricing, id).prices;
+    return activeCategories(pricing).filter((category) => prices[category.id]?.enabled).map((category) => ({ id: category.id, label: category.label, base: { freeWaitMin: prices[category.id].freeWaitMin, perMin: prices[category.id].waitPerMin, noShowFee: prices[category.id].noShowFee } }));
+  };
   const scopeLabel = (ids: string[]) => (ids.length === 1 ? ids[0] : "all");
 
   return (
@@ -183,7 +189,7 @@ export function DispatchPage() {
 
       {view !== "history" ? <Approvals book={book} agentId={agent?.id ?? ""} canApprove={canApprove} onNotice={say} compact /> : null}
 
-      {view === "rules" || view === "test" ? (
+      {view === "rules" || view === "test" || view === "reasons" ? (
         <section className={changes.length || countryChanged.length ? "dx-publish has-changes" : "dx-publish"} aria-label="Publish">
           <div className="dx-publish-text">
             {changes.length || countryChanged.length ? (
@@ -265,11 +271,13 @@ export function DispatchPage() {
           onNotice={say}
           commissionOf={commissionOf}
           sampleFareOf={sampleFareOf}
+          waitBasesOf={waitBasesOf}
         />
       ) : null}
       {!slice.loading && view === "live" ? <LiveView book={book} market={market} zones={zones} drivers={live.filter((driver) => zones.some((zone) => zone.id === driver.zoneId))} requests={requests} candidatesOf={candidatesOf} rulesOf={liveOf} busyOf={busyOf} hhmm={hhmm} canControl={canControl} agentId={agent?.id ?? ""} withScope={(path) => path} onNotice={say} sharedAlerts={ownAlerts ? undefined : <DispatchAlerts zoneIds={zones.map((zone) => zone.id)} />} /> : null}
       {!slice.loading && view === "test" ? <TestView market={market} zones={zones} zoneId={zoneId || zones[0]?.id || ""} onZone={(id) => go({ zone: id })} draftOf={rulesOf} liveOf={liveOf} countryDraft={countryRules} countryLive={liveCountry(book, country)} controlOf={(id) => book.control[id]} factsFor={factsFor} busyOf={busyOf} hhmm={hhmm} hasChanges={changes.length > 0 || countryChanged.length > 0} events={book.events.filter((event) => event.country === country)} /> : null}
       {!slice.loading && view === "events" ? <EventsView book={book} market={market} drivers={countryLive.map((driver) => ({ id: driver.id, name: driver.name, zoneName: driver.zoneName }))} canEdit={canEditRole} canBonus={Boolean(agent && can(agent.role, "drivers.bonuses"))} onNotice={say} /> : null}
+      {!slice.loading && view === "reasons" ? <CancelReasonsView market={market} country={countryRules} onCountry={(next) => setWorkingCountry((current) => ({ ...current, [country]: next }))} canEdit={canEditRole} /> : null}
       {!slice.loading && view === "cancels" ? <CancelView book={book} market={market} records={records} rulesOf={liveOf} canDecide={canControl} agentId={agent?.id ?? ""} money={money} onNotice={say} /> : null}
       {!slice.loading && view === "history" ? <HistoryView book={book} market={market} agentId={agent?.id ?? ""} canEdit={canEditRole} canApprove={canApprove} rulesOf={liveOf} onNotice={say} /> : null}
     </div>
