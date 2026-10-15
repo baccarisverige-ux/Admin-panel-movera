@@ -160,6 +160,17 @@ assert(flow[0].detail.startsWith("All drivers in the zone"), "the list step says
 const radarStep = flow.find((step) => step.id === "radar")!;
 assert(!radarStep.title.includes("Exclusive") && radarStep.detail.includes("Never labelled Exclusive"), "Radar trips are never labelled Exclusive");
 assert(reservationTimeline(withResv({ listTo: "rating", listMinRating: 4.8 }), 180)[0].detail.startsWith("Only drivers rated 4.8"), "list step with a rating");
+// More ways to pick who gets it in Scheduled rides, and opening it to everyone later.
+assert(resv.listGroupSize === 10 && resv.listHomeKm === 5 && resv.listNearKm === 5 && resv.listAreaTrips === 5 && resv.listOpenAll && resv.listOpenAllAfterMin === 30, "defaults for the group choices");
+assert(resvIssues({ listTo: "random", listGroupSize: 0 })[0] === "Reservations: the random group must be 1 to 500 drivers.", "random group size has a limit");
+assert(resvIssues({ listTo: "homeNear", listHomeKm: 80 })[0] === "Reservations: home near pickup must be 0.5 to 50 km.", "home distance has a limit");
+assert(resvIssues({ listTo: "nearNow", listNearKm: 0 })[0] === "Reservations: near pickup now must be 0.5 to 50 km.", "near-now distance has a limit");
+assert(resvIssues({ listTo: "areaRegulars", listAreaTrips: 0 })[0] === "Reservations: trips from the area must be 1 to 200.", "area trips have a limit");
+assert(resvIssues({ listTo: "favourites", listOpenAllAfterMin: 0 })[0] === "Reservations: opening to all drivers must be 1 to 1440 minutes after booking.", "opening to all has a limit");
+assert(resvIssues({ listTo: "all", listOpenAllAfterMin: 0, listGroupSize: 0 }).length === 0, "group settings only count with their choice");
+assert(reservationTimeline(withResv({ listTo: "random", listGroupSize: 12 }), 180)[0].detail === "A random group of 12 drivers see it in Scheduled rides. Still untaken after 30 min: every driver in the zone sees it.", "list step with a random group");
+assert(reservationTimeline(withResv({ listTo: "homeNear", listHomeKm: 3, listOpenAll: false }), 180)[0].detail === "Only drivers whose home is within 3 km of the pickup see it in Scheduled rides.", "list step with home near pickup, not opened to all");
+assert(changeLines(base, withResv({ listTo: "homeNear" }))[0] === "Scheduled rides go to: all drivers in the zone → drivers whose home is near the pickup", "change line for home near pickup");
 const late = reservationTimeline(base, 25);
 assert(late.find((step) => step.id === "home")?.skipped?.includes("already Exclusive"), "booked 25 min ahead: Exclusive comes before the popup");
 assert(late.find((step) => step.id === "exclusive")?.afterBookedMin === 5, "booked 25 min ahead: Exclusive after 5 min");

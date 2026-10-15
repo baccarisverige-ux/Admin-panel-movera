@@ -236,6 +236,13 @@ test("reservations: who gets them, the Home popup, Exclusive, Radar trips and a 
   await expect(steps.nth(3)).toContainText("Never labelled Exclusive");
   await card.getByLabel("Home popup after booking").fill("15");
   await expect(steps.nth(1)).toContainText("+15 min");
+  await card.getByRole("radiogroup", { name: "Scheduled rides go to" }).getByText("Home near pickup").click();
+  await expect(card.getByLabel("Home distance from pickup")).toHaveValue("5");
+  await expect(steps.nth(0)).toContainText("home is within 5 km of the pickup");
+  await expect(steps.nth(0)).toContainText("Still untaken after 30 min: every driver in the zone sees it.");
+  await card.getByRole("radiogroup", { name: "Scheduled rides go to" }).getByText("Random group").click();
+  await expect(card.getByLabel("Random group size")).toHaveValue("10");
+  await expect(steps.nth(0)).toContainText("A random group of 10 drivers");
   await card.getByRole("radiogroup", { name: "Scheduled rides go to" }).getByText("High rating only").click();
   await expect(card.getByLabel("Lowest rating for Scheduled rides")).toHaveValue("4.5");
   await expect(steps.nth(0)).toContainText("Only drivers rated 4.5 or more");

@@ -54,7 +54,7 @@ export const ALERTS: { id: AlertId; label: string; unit: string; help: string }[
 ];
 
 /** Who gets a new reservation in the driver app's Scheduled rides list. */
-export type ReservationListTo = "all" | "category" | "rating";
+export type ReservationListTo = "all" | "category" | "rating" | "random" | "homeNear" | "nearNow" | "favourites" | "areaRegulars";
 /** Where a reservation goes back to when the driver who took it cancels. */
 export type ReservationCancelTo = "byTime" | "list" | "home" | "exclusive";
 /** The steps an untaken reservation goes through, in this order. */
@@ -64,6 +64,11 @@ export const RESERVATION_LIST_TO: { id: ReservationListTo; label: string; help: 
   { id: "all", label: "All drivers", help: "Every driver in the zone sees it in Scheduled rides." },
   { id: "category", label: "Drivers of the category", help: "Only drivers who drive the ride's category, for example Comfort." },
   { id: "rating", label: "High rating only", help: "Only drivers with at least the rating you set." },
+  { id: "random", label: "Random group", help: "A random group of drivers in the zone, as many as you set. A new group is picked for each reservation." },
+  { id: "homeNear", label: "Home near pickup", help: "Drivers whose home address is near the pickup, within the distance you set. Good for early-morning rides." },
+  { id: "nearNow", label: "Near pickup now", help: "Drivers who are near the pickup when the rider books, within the distance you set." },
+  { id: "favourites", label: "Rider's favourites", help: "Drivers this rider marked as favourite or rated 5 stars before." },
+  { id: "areaRegulars", label: "Often in the area", help: "Drivers who did at least the number of trips you set from the pickup area in the last 30 days." },
 ];
 
 export const RESERVATION_CANCEL_TO: { id: ReservationCancelTo; label: string; help: string }[] = [
@@ -84,6 +89,14 @@ export type ReservationRules = {
   /** L1: who sees a new reservation in Scheduled rides; with "rating", only drivers rated at least listMinRating. */
   listTo: ReservationListTo;
   listMinRating: number;
+  /** With "random": how many drivers get it. With "homeNear" / "nearNow": how close to the pickup. With "areaRegulars": trips from the area in 30 days. */
+  listGroupSize: number;
+  listHomeKm: number;
+  listNearKm: number;
+  listAreaTrips: number;
+  /** When the list goes to a smaller group: after this many minutes untaken it opens to every driver in the zone. */
+  listOpenAll: boolean;
+  listOpenAllAfterMin: number;
   /** L2: nobody took it yet, so it also pops up on Home this many minutes after the rider booked. */
   homePopup: boolean;
   homePopupAfterMin: number;
@@ -215,7 +228,8 @@ export function defaultZone(zone: Pick<MarketZone, "id" | "kind">): ZoneDispatch
     autoOffline: { on: true, after: 5 },
     reservation: {
       on: true, searchBeforeMin: 30, assignEarly: true, assignHoursBefore: 12, backup: true,
-      listTo: "all", listMinRating: 4.5,
+      listTo: "all", listMinRating: 4.5, listGroupSize: 10, listHomeKm: 5, listNearKm: 5, listAreaTrips: 5,
+      listOpenAll: true, listOpenAllAfterMin: 30,
       homePopup: true, homePopupAfterMin: 10,
       toExclusive: true, exclusiveBeforeMin: 20, toRadar: true, radarBeforeMin: 15,
       onDriverCancel: "byTime",
@@ -448,6 +462,11 @@ function reservationIssues(resv: ReservationRules): string[] {
   if (!resv.on) return [];
   const issues: string[] = [];
   if (resv.listTo === "rating" && (resv.listMinRating < 1 || resv.listMinRating > 5)) issues.push("Reservations: the lowest rating for Scheduled rides must be 1 to 5.");
+  if (resv.listTo === "random" && (resv.listGroupSize < 1 || resv.listGroupSize > 500)) issues.push("Reservations: the random group must be 1 to 500 drivers.");
+  if (resv.listTo === "homeNear" && (resv.listHomeKm < 0.5 || resv.listHomeKm > 50)) issues.push("Reservations: home near pickup must be 0.5 to 50 km.");
+  if (resv.listTo === "nearNow" && (resv.listNearKm < 0.5 || resv.listNearKm > 50)) issues.push("Reservations: near pickup now must be 0.5 to 50 km.");
+  if (resv.listTo === "areaRegulars" && (resv.listAreaTrips < 1 || resv.listAreaTrips > 200)) issues.push("Reservations: trips from the area must be 1 to 200.");
+  if (resv.listTo !== "all" && resv.listOpenAll && (resv.listOpenAllAfterMin < 1 || resv.listOpenAllAfterMin > 1440)) issues.push("Reservations: opening to all drivers must be 1 to 1440 minutes after booking.");
   if (resv.homePopup && (resv.homePopupAfterMin < 1 || resv.homePopupAfterMin > 1440)) issues.push("Reservations: the Home popup must start 1 to 1440 minutes (24 h) after the rider booked.");
   if (resv.toExclusive && (resv.exclusiveBeforeMin < 1 || resv.exclusiveBeforeMin > 180)) issues.push("Reservations: Exclusive must start 1 to 180 minutes before pickup.");
   if (resv.toRadar && (resv.radarBeforeMin < 1 || resv.radarBeforeMin > 180)) issues.push("Reservations: Radar trips must start 1 to 180 minutes before pickup.");
@@ -472,6 +491,11 @@ export type ReservationTimelineStep = {
 function listWho(resv: ReservationRules): string {
   if (resv.listTo === "category") return "Only drivers who drive the ride's category";
   if (resv.listTo === "rating") return `Only drivers rated ${resv.listMinRating} or more`;
+  if (resv.listTo === "random") return `A random group of ${resv.listGroupSize} drivers`;
+  if (resv.listTo === "homeNear") return `Only drivers whose home is within ${resv.listHomeKm} km of the pickup`;
+  if (resv.listTo === "nearNow") return `Only drivers within ${resv.listNearKm} km of the pickup when the rider books`;
+  if (resv.listTo === "favourites") return "Only the rider's favourite drivers";
+  if (resv.listTo === "areaRegulars") return `Only drivers with ${resv.listAreaTrips}+ trips from the pickup area in 30 days`;
   return "All drivers in the zone";
 }
 
@@ -501,7 +525,7 @@ export function reservationTimeline(zone: ZoneDispatch, bookedBeforeMin: number)
         : null;
   const modeSkip = (setting: boolean, mode: OfferMode) => (!setting ? "Off." : !zone[mode].on ? `Skipped: ${modeLabel(mode)} is off in this zone.` : null);
   return [
-    step("list", RESERVATION_STEP_LABEL.list, `${listWho(resv)} see it in Scheduled rides.`, 0, null),
+    step("list", RESERVATION_STEP_LABEL.list, `${listWho(resv)} see it in Scheduled rides.${resv.listTo !== "all" && resv.listOpenAll ? ` Still untaken after ${resv.listOpenAllAfterMin} min: every driver in the zone sees it.` : ""}`, 0, null),
     step("home", RESERVATION_STEP_LABEL.home, "Nobody took it yet, so it also pops up on Home for online drivers. It stays in Scheduled rides.", resv.homePopupAfterMin, homeSkip),
     step("exclusive", RESERVATION_STEP_LABEL.exclusive, lead <= resv.exclusiveBeforeMin ? "Booked this close to pickup, so it is an Exclusive offer at once." : "Close to pickup it becomes an Exclusive offer, like today's Exclusive.", lead - resv.exclusiveBeforeMin, modeSkip(resv.toExclusive, "exclusive")),
     step("radar", RESERVATION_STEP_LABEL.radar, "It also comes into Radar trips (Home deck and Live list) as a normal trip that needs a driver soon. Never labelled Exclusive there.", lead - resv.radarBeforeMin, modeSkip(resv.toRadar, "radar")),
@@ -562,6 +586,8 @@ const LABELS: Record<string, string> = {
   "reservation.on": "Reservations", "reservation.searchBeforeMin": "Reservation search starts", "reservation.assignEarly": "Assign early", "reservation.assignHoursBefore": "Assign hours before",
   "reservation.backup": "Backup driver", "reservation.toExclusive": "Reservation to Exclusive", "reservation.exclusiveBeforeMin": "Exclusive before pickup",
   "reservation.listTo": "Scheduled rides go to", "reservation.listMinRating": "Lowest rating for Scheduled rides",
+  "reservation.listGroupSize": "Random group size", "reservation.listHomeKm": "Home distance from pickup", "reservation.listNearKm": "Distance from pickup now",
+  "reservation.listAreaTrips": "Trips from the area", "reservation.listOpenAll": "Open to all drivers", "reservation.listOpenAllAfterMin": "Open to all drivers after",
   "reservation.homePopup": "Reservation Home popup", "reservation.homePopupAfterMin": "Home popup after booking",
   "reservation.toRadar": "Reservation to Radar trips", "reservation.radarBeforeMin": "Radar trips before pickup", "reservation.onDriverCancel": "After a driver cancels",
   "choose.how": "How the mode is chosen", "choose.radarAbove": "Busy level for Radar", "choose.main": "Main mode", "choose.backup": "Backup mode", "choose.times": "Time rules",
@@ -598,7 +624,7 @@ function flat(value: unknown, prefix = ""): Map<string, string> {
 
 /** Words for the reservation choices, by setting, so "list" or "all" read well in change lines. */
 const PATH_WORDS: Record<string, Record<string, string>> = {
-  "reservation.listTo": { all: "all drivers in the zone", category: "drivers of the category", rating: "drivers with a high rating" },
+  "reservation.listTo": { all: "all drivers in the zone", category: "drivers of the category", rating: "drivers with a high rating", random: "a random group of drivers", homeNear: "drivers whose home is near the pickup", nearNow: "drivers near the pickup now", favourites: "the rider's favourite drivers", areaRegulars: "drivers often in the area" },
   "reservation.onDriverCancel": { byTime: "by time left", list: "Scheduled rides", home: "Home popup", exclusive: "Exclusive" },
 };
 

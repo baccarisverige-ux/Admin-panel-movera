@@ -145,7 +145,16 @@ function Modes({ zone, onChange, busy, disabled }: Props) {
         <Row label="Who gets it in Scheduled rides" help={RESERVATION_LIST_TO.find((item) => item.id === resv.listTo)?.help}>
           <Choice label="Scheduled rides go to" value={resv.listTo} disabled={disabled || !resv.on} onChange={(listTo) => setResv({ listTo })} options={RESERVATION_LIST_TO.map((item) => ({ id: item.id, label: item.label, hint: item.help }))} />
           {resv.listTo === "rating" ? <Num label="Lowest rating for Scheduled rides" before="at least" value={resv.listMinRating} unit="stars" step={0.1} min={1} max={5} disabled={disabled || !resv.on} onChange={(listMinRating) => setResv({ listMinRating })} /> : null}
+          {resv.listTo === "random" ? <Num label="Random group size" value={resv.listGroupSize} unit="drivers" min={1} max={500} disabled={disabled || !resv.on} onChange={(listGroupSize) => setResv({ listGroupSize })} /> : null}
+          {resv.listTo === "homeNear" ? <Num label="Home distance from pickup" before="within" value={resv.listHomeKm} unit="km of pickup" step={0.5} min={0.5} max={50} disabled={disabled || !resv.on} onChange={(listHomeKm) => setResv({ listHomeKm })} /> : null}
+          {resv.listTo === "nearNow" ? <Num label="Distance from pickup now" before="within" value={resv.listNearKm} unit="km of pickup" step={0.5} min={0.5} max={50} disabled={disabled || !resv.on} onChange={(listNearKm) => setResv({ listNearKm })} /> : null}
+          {resv.listTo === "areaRegulars" ? <Num label="Trips from the area" before="at least" value={resv.listAreaTrips} unit="trips in 30 days" min={1} max={200} disabled={disabled || !resv.on} onChange={(listAreaTrips) => setResv({ listAreaTrips })} /> : null}
         </Row>
+        {resv.listTo !== "all" ? (
+          <Row label="Open to all drivers" help="If nobody in the group took it, every driver in the zone sees it in Scheduled rides. Counted from when the rider booked." on={resv.listOpenAll} disabled={disabled || !resv.on} onToggle={(listOpenAll) => setResv({ listOpenAll })}>
+            <Num label="Open to all drivers after" value={resv.listOpenAllAfterMin} unit="min after booking" min={1} max={1440} disabled={disabled} onChange={(listOpenAllAfterMin) => setResv({ listOpenAllAfterMin })} />
+          </Row>
+        ) : null}
         <Row label="Also show as the Home popup" help="If nobody took it from Scheduled rides yet. Counted from when the rider booked. It stays in the list too." on={resv.homePopup} disabled={disabled || !resv.on} onToggle={(homePopup) => setResv({ homePopup })}>
           <Num label="Home popup after booking" value={resv.homePopupAfterMin} unit="min after booking" min={1} max={1440} disabled={disabled} onChange={(homePopupAfterMin) => setResv({ homePopupAfterMin })} />
         </Row>
