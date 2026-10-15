@@ -1,4 +1,9 @@
 import {
+  answerAsk,
+  askDriver,
+  currentAsk,
+  notAccepted,
+  raiseFare,
   DEFAULT_RESERVATION_POLICY,
   GIVE_UP_MINUTES,
   assignReservation,
@@ -90,6 +95,37 @@ assert(Boolean(fallEarlier.iso && fallLater.iso), "both repeated-hour choices re
 assert(Math.abs(Date.parse(fallLater.iso!) - Date.parse(fallEarlier.iso!)) === 60 * 60_000, "repeated-hour choices are one hour apart");
 
 assert(normalizeReservationBook({}).currentPolicy.version === "res-2", "empty legacy slice normalizes safely");
+
+// Movera gives a ride to a driver: the driver must accept, like an Exclusive with a timer.
+const t0 = "2026-10-06T10:00:00.000Z";
+const asked = askDriver(book, record, "D1", "daniel", 60, t0);
+assert(!asked.error, "a driver can be asked");
+const waiting = currentAsk(reservationOps(asked.book, record), "2026-10-06T10:00:20.000Z");
+assert(waiting?.state === "waiting" && waiting.secondsLeft === 40 && waiting.ask.driverId === "D1", "the timer counts down");
+assert(reservationOps(asked.book, record).offers[0]?.result === "offered", "the offer history shows the request");
+assert(askDriver(asked.book, record, "D3", "daniel", 60, "2026-10-06T10:00:30.000Z").error === "Waiting for D1 to accept.", "one request at a time");
+const accepted = answerAsk(asked.book, record, "accepted", "2026-10-06T10:00:30.000Z");
+assert(!accepted.error && accepted.patch.driverId === "D1" && accepted.patch.status === "assigned", "accepting gives the ride to the driver");
+assert(currentAsk(reservationOps(accepted.book, record), "2026-10-06T10:00:31.000Z")?.state === "accepted", "the request shows as accepted");
+const declined = answerAsk(asked.book, record, "declined", "2026-10-06T10:00:30.000Z");
+assert(!declined.error && Object.keys(declined.patch).length === 0 && notAccepted(reservationOps(declined.book, record), "2026-10-06T10:00:31.000Z").has("D1"), "a no keeps the ride open and marks the driver");
+const late = currentAsk(reservationOps(asked.book, record), "2026-10-06T10:01:01.000Z");
+assert(late?.state === "expired" && notAccepted(reservationOps(asked.book, record), "2026-10-06T10:01:01.000Z").has("D1"), "time runs out: the admin sees it");
+assert(answerAsk(asked.book, record, "accepted", "2026-10-06T10:01:01.000Z").error?.includes("run out"), "a late accept is refused");
+assert(!askDriver(asked.book, record, "D3", "daniel", 60, "2026-10-06T10:01:01.000Z").error, "after the time runs out the admin can pick someone else");
+assert(askDriver(book, { ...record, status: "assigned", driverId: "D9" }, "D1", "daniel", 60, t0).error, "a ride with a driver cannot be asked again");
+
+// Raise the driver's fare for a ride nobody takes.
+const raised = raiseFare(book, record, 120, 500, "daniel", t0, "kr");
+assert(!raised.error && reservationOps(raised.book, record).raise?.amount === 120, "the raise is saved");
+assert(raiseFare(book, record, 600, 500, "daniel", t0, "kr").error === "The raise can be at most 500 kr.", "never over the highest raise");
+assert(raiseFare(book, record, 0, 500, "daniel", t0).error === "Write a raise above 0.", "a raise must be above 0");
+assert(raiseFare(book, { ...record, driverId: "D1", status: "assigned" }, 50, 500, "daniel", t0).error, "a ride with a driver gets no raise");
+
+// Saves from before these steps still open.
+const oldStored = normalizeReservationBook(JSON.parse(JSON.stringify({ ...book, reservations: { B021: { ...reservationOps(book, record), asks: undefined, raise: undefined } } })));
+const oldStoredOps = reservationOps(oldStored, record);
+assert(Array.isArray(oldStoredOps.asks) && oldStoredOps.asks.length === 0 && oldStoredOps.raise === null && currentAsk(oldStoredOps, t0) === null, "an old save has no request and no raise");
 
 console.log("reservations ok");
 

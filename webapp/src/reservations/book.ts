@@ -40,6 +40,23 @@ export type ReservationOffer = {
   result: "offered" | "accepted" | "declined" | "expired";
 };
 
+/**
+ * An admin gave the ride to one driver. It reaches the driver like an Exclusive ("Assigned by Movera")
+ * with a timer, and the driver must accept. Not accepted in time or declined: the admin picks someone else.
+ */
+export type ReservationAsk = {
+  id: string;
+  driverId: string;
+  at: string;
+  by: string;
+  expiresAt: string;
+  answer: "waiting" | "accepted" | "declined";
+  answeredAt: string | null;
+};
+
+/** A raise of the driver's fare for a ride nobody takes, paid from Movera's commission. In the zone's money. */
+export type ReservationRaise = { amount: number; by: string; at: string };
+
 export type ReservationOps = {
   reservationId: string;
   pickupAt: string;
@@ -49,6 +66,9 @@ export type ReservationOps = {
   contacts: ReservationContact[];
   offers: ReservationOffer[];
   activity: string[];
+  /** Newest first. Saves from before this have none. */
+  asks: ReservationAsk[];
+  raise: ReservationRaise | null;
 };
 
 export type ReservationBook = {
@@ -125,8 +145,8 @@ function fallbackCategory(record: Pick<DemoRecord, "id" | "category">): DemoReco
 }
 
 export function reservationOps(book: ReservationBook, record: DemoRecord): ReservationOps {
-  const stored = book.reservations[record.id];
-  if (stored) return stored;
+  const stored = book.reservations[record.id] as (Omit<ReservationOps, "asks" | "raise"> & Partial<Pick<ReservationOps, "asks" | "raise">>) | undefined;
+  if (stored) return { ...stored, asks: Array.isArray(stored.asks) ? stored.asks : [], raise: stored.raise ?? null };
   const pickupAt = record.pickupAt ?? fallbackPickupAt(record);
   const returnPickupAt = record.returnAt ?? (reservationIndex(record.id) % 8 === 0
     ? new Date(Date.parse(pickupAt) + 8 * 60 * 60_000).toISOString()
@@ -143,6 +163,8 @@ export function reservationOps(book: ReservationBook, record: DemoRecord): Reser
     contacts: [],
     offers: [],
     activity: [`Reservation ${record.id} opened with policy ${record.policyVersion ?? book.currentPolicy.version}`],
+    asks: [],
+    raise: null,
   };
 }
 
@@ -260,6 +282,108 @@ export function recordReservationOffer(
     offers: [offer, ...current.offers],
     activity: [`Offer ${result} for ${driverId} by ${actorId}`, ...current.activity].slice(0, 40),
   });
+}
+
+export type AskState = { ask: ReservationAsk; state: "waiting" | "accepted" | "declined" | "expired"; secondsLeft: number };
+
+/** The newest "Assigned by Movera" request and where it stands now. Null when none was sent. */
+export function currentAsk(ops: ReservationOps, nowIso: string): AskState | null {
+  const ask = ops.asks[0];
+  if (!ask) return null;
+  const left = Math.max(0, Math.ceil((Date.parse(ask.expiresAt) - Date.parse(nowIso)) / 1000));
+  if (ask.answer !== "waiting") return { ask, state: ask.answer, secondsLeft: 0 };
+  return { ask, state: left > 0 ? "waiting" : "expired", secondsLeft: left };
+}
+
+/** Drivers who were asked for this ride and did not accept: declined or let the timer run out. */
+export function notAccepted(ops: ReservationOps, nowIso: string): Set<string> {
+  const out = new Set<string>();
+  for (const ask of ops.asks) {
+    const expired = ask.answer === "waiting" && Date.parse(ask.expiresAt) <= Date.parse(nowIso);
+    if (ask.answer === "declined" || expired) out.add(ask.driverId);
+  }
+  return out;
+}
+
+/** Send the ride to one driver as "Assigned by Movera". The driver has acceptSec seconds to accept. */
+export function askDriver(
+  book: ReservationBook,
+  record: DemoRecord,
+  driverId: string,
+  actorId: string,
+  acceptSec: number,
+  nowIso: string,
+): { book: ReservationBook; error?: string } {
+  const current = reservationOps(book, record);
+  if (!driverId) return { book, error: "Pick a driver first." };
+  if (reservationClosed(record.status) || record.status === "assigned") return { book, error: "This ride already has a driver or is closed." };
+  const open = currentAsk(current, nowIso);
+  if (open?.state === "waiting") return { book, error: `Waiting for ${open.ask.driverId} to accept.` };
+  const ask: ReservationAsk = {
+    id: `${record.id}-ask-${current.asks.length + 1}`,
+    driverId,
+    at: nowIso,
+    by: actorId,
+    expiresAt: new Date(Date.parse(nowIso) + Math.max(1, acceptSec) * 1000).toISOString(),
+    answer: "waiting",
+    answeredAt: null,
+  };
+  const offer: ReservationOffer = { id: `${record.id}-offer-${current.offers.length + 1}`, at: nowIso, actorId, driverId, result: "offered" };
+  return {
+    book: withOps(book, record, {
+      ...current,
+      asks: [ask, ...current.asks],
+      offers: [offer, ...current.offers],
+      activity: [`Assigned by Movera to ${driverId} by ${actorId}: ${acceptSec} s to accept`, ...current.activity].slice(0, 40),
+    }),
+  };
+}
+
+/** The driver's answer to "Assigned by Movera". Accepted: the ride is theirs. Declined: the admin picks someone else. */
+export function answerAsk(
+  book: ReservationBook,
+  record: DemoRecord,
+  answer: "accepted" | "declined",
+  nowIso: string,
+): { book: ReservationBook; patch: Partial<DemoRecord>; error?: string } {
+  const current = reservationOps(book, record);
+  const open = currentAsk(current, nowIso);
+  if (!open || open.state !== "waiting") return { book, patch: {}, error: open?.state === "expired" ? "Time to accept has run out. Pick a driver again." : "No driver is being asked right now." };
+  const asks = current.asks.map((item, index) => (index === 0 ? { ...item, answer, answeredAt: nowIso } : item));
+  const result: ReservationOffer["result"] = answer === "accepted" ? "accepted" : "declined";
+  const offer: ReservationOffer = { id: `${record.id}-offer-${current.offers.length + 1}`, at: nowIso, actorId: open.ask.driverId, driverId: open.ask.driverId, result };
+  return {
+    book: withOps(book, record, {
+      ...current,
+      asks,
+      offers: [offer, ...current.offers],
+      activity: [answer === "accepted" ? `${open.ask.driverId} accepted the ride assigned by Movera` : `${open.ask.driverId} did not accept the ride assigned by Movera`, ...current.activity].slice(0, 40),
+    }),
+    patch: answer === "accepted" ? { driverId: open.ask.driverId, status: "assigned" } : {},
+  };
+}
+
+/** Raise the driver's fare so someone takes the ride. Paid from Movera's commission, never above the zone's highest raise. */
+export function raiseFare(
+  book: ReservationBook,
+  record: DemoRecord,
+  amount: number,
+  max: number,
+  actorId: string,
+  nowIso: string,
+  unit = "",
+): { book: ReservationBook; error?: string } {
+  const current = reservationOps(book, record);
+  if (reservationClosed(record.status) || record.driverId) return { book, error: "Only a ride without a driver can get a higher fare." };
+  if (!Number.isFinite(amount) || amount <= 0) return { book, error: "Write a raise above 0." };
+  if (amount > max) return { book, error: `The raise can be at most ${max}${unit ? ` ${unit}` : ""}.` };
+  return {
+    book: withOps(book, record, {
+      ...current,
+      raise: { amount, by: actorId, at: nowIso },
+      activity: [`Driver fare raised by ${amount}${unit ? ` ${unit}` : ""} by ${actorId}`, ...current.activity].slice(0, 40),
+    }),
+  };
 }
 
 export function scheduleReturnRide(

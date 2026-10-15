@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import {
+  answerAsk,
+  askDriver,
+  currentAsk,
   emptyReservationBook,
   normalizeReservationBook,
+  notAccepted,
+  raiseFare,
   recordReservationContact,
-  recordReservationOffer,
   reservationCandidates,
   reservationOps,
   reservationWarning,
@@ -21,7 +25,11 @@ import {
 } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
+import { reservationFareMinor } from "../dashboard/scheduled";
+import { DISPATCH_KEY, emptyDispatchBook, liveRules, normalizeDispatchBook, raiseCap, raiseSplit, type DispatchBook } from "../dispatch/rules";
 import { statusLabel } from "../domain/labels";
+import { market, marketOfZone } from "../markets/markets";
+import { currencySymbol, emptyPricingStore, money as formatMajor, normalizeStore, SLICE_KEY as PRICING_KEY, zoneBook, type PricingStore } from "../pricing/zonePricing";
 import { CommandButton } from "../ui/CommandButton";
 import { SensitiveValue } from "../ui/SensitiveValue";
 
@@ -35,13 +43,24 @@ export function ReservationDetailPage() {
   const audit = useAudit();
   const store = useSlice<ReservationBook>("reservationOps", emptyReservationBook());
   const book = useMemo(() => normalizeReservationBook(store.value), [store.value]);
+  const dispatchSlice = useSlice<DispatchBook>(DISPATCH_KEY, emptyDispatchBook());
+  const pricingSlice = useSlice<PricingStore>(PRICING_KEY, emptyPricingStore());
   const record = reservations.data?.find((item) => item.id === id);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  // While a driver is being asked, count the seconds down.
+  const asking = Boolean(record && reservationOps(book, record).asks[0]?.answer === "waiting");
+  useEffect(() => {
+    if (!asking) return undefined;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [asking]);
   const [driverId, setDriverId] = useState("");
   const [contactChannel, setContactChannel] = useState<"call" | "sms">("sms");
   const [contactNote, setContactNote] = useState("");
   const [returnLocal, setReturnLocal] = useState("");
   const [returnDisambiguation, setReturnDisambiguation] = useState<"earlier" | "later">("earlier");
   const [notice, setNotice] = useState("");
+  const [raiseText, setRaiseText] = useState("");
 
   if (reservations.isLoading || drivers.isLoading || vehicles.isLoading || store.loading) {
     return <p className="state-line">Loading reservation.</p>;
@@ -59,16 +78,30 @@ export function ReservationDetailPage() {
   }
 
   const ops = reservationOps(book, record);
+  const nowIso = new Date(Math.max(nowMs, Date.now())).toISOString();
+  const said = notAccepted(ops, nowIso);
   const candidates = reservationCandidates(record, ops, drivers.data ?? [], vehicles.data ?? []);
-  const chosen = candidates.some((item) => item.id === driverId) ? driverId : candidates[0]?.id ?? "";
+  const fresh = candidates.filter((item) => !said.has(item.id));
+  const chosen = candidates.some((item) => item.id === driverId) ? driverId : fresh[0]?.id ?? candidates[0]?.id ?? "";
   const rider = (riders.data ?? []).find((item) => item.phone === record.phone);
-  const nowIso = new Date().toISOString();
+  const zoneRules = liveRules(normalizeDispatchBook(dispatchSlice.value), record.zoneId).reservation;
+  const ask = currentAsk(ops, nowIso);
+  const askName = ask ? (drivers.data ?? []).find((item) => item.id === ask.ask.driverId)?.name ?? ask.ask.driverId : "";
+  const country = marketOfZone(record.zoneId)?.id ?? "SE";
+  const unit = currencySymbol(country);
+  const fare = reservationFareMinor(record);
+  const fareMajor = fare.minor / market(country).minorUnits;
+  const commissionPct = zoneBook(normalizeStore(pricingSlice.value), record.zoneId).commission[ops.category ?? "economy"] ?? 20;
+  const raiseMax = Math.min(zoneRules.raiseMax, raiseCap(country));
+  const raiseAmount = raiseText.trim() === "" ? 0 : Number(raiseText.replace(",", "."));
+  const split = raiseSplit(raiseAmount, fareMajor, commissionPct);
   const warning = reservationWarning(record, ops, nowIso);
   const canIntervene = Boolean(agent && can(agent.role, "trips.intervene"));
   const pickupFuture = Date.parse(ops.pickupAt) > Date.parse(nowIso);
   const isOpen = ["waiting", "booked", "assigned"].includes(record.status);
-  const canOffer = canIntervene && pickupFuture && ["waiting", "booked"].includes(record.status) && candidates.length > 0;
-  const canAssign = canIntervene && pickupFuture && ["waiting", "booked"].includes(record.status) && candidates.length > 0;
+  const canAssign = canIntervene && pickupFuture && ["waiting", "booked"].includes(record.status) && candidates.length > 0 && ask?.state !== "waiting";
+  const canAnswer = canIntervene && ask?.state === "waiting" && ["waiting", "booked"].includes(record.status);
+  const canRaise = canIntervene && zoneRules.raiseFare && pickupFuture && ["waiting", "booked"].includes(record.status) && !record.driverId;
   const canUnassign = canIntervene && record.status === "assigned" && Boolean(record.driverId);
   const canCancel = canIntervene && ["waiting", "booked", "assigned"].includes(record.status);
   const canNoShow = canCancel && !pickupFuture;
@@ -81,12 +114,11 @@ export function ReservationDetailPage() {
     contactNote,
     new Date().toISOString(),
   );
-  const offerPrepared = chosen
-    ? recordReservationOffer(book, record, chosen, agent?.id ?? "", "offered", new Date().toISOString())
-    : book;
-  const assignPrepared = chosen
-    ? recordReservationOffer(book, record, chosen, agent?.id ?? "", "accepted", new Date().toISOString())
-    : book;
+  const askPrepared = askDriver(book, record, chosen, agent?.id ?? "", zoneRules.assignAcceptSec, nowIso);
+  const acceptPrepared = answerAsk(book, record, "accepted", nowIso);
+  const declinePrepared = answerAsk(book, record, "declined", nowIso);
+  const raisePrepared = raiseFare(book, record, raiseAmount, raiseMax, agent?.id ?? "", nowIso, unit);
+  const show = (value: number) => formatMajor(value, country);
   const unassignPrepared = touchReservation(book, record, agent?.id ?? "", `Driver ${record.driverId ?? "none"} unassigned`);
   const cancelPrepared = touchReservation(book, record, agent?.id ?? "", "Reservation cancelled");
   const noShowPrepared = touchReservation(book, record, agent?.id ?? "", "Rider did not show up");
@@ -144,6 +176,61 @@ export function ReservationDetailPage() {
 
       <article className="panel" data-testid="reservation-dispatch">
         <h3>Driver assignment</h3>
+        <p className="state-line">
+          The driver must accept. The ride reaches them like an Exclusive, “Assigned by Movera”, with {zoneRules.assignAcceptSec} s to accept. If they do not accept, pick someone else.
+        </p>
+        {ask && ask.state !== "accepted" ? (
+          <div className={`resv-ask ${ask.state}`} data-testid="reservation-ask" role="status">
+            {ask.state === "waiting" ? <p><b>Assigned by Movera</b> · waiting for {askName} ({ask.ask.driverId}) to accept · <b>{ask.secondsLeft} s</b> left</p> : null}
+            {ask.state === "expired" ? <p><b>{askName} did not accept in time.</b> Pick someone else.</p> : null}
+            {ask.state === "declined" ? <p><b>{askName} said no.</b> Pick someone else.</p> : null}
+            {ask.state === "waiting" ? (
+              <div className="actions">
+                <CommandButton
+                  command="admin.reservation.answer"
+                  className="secondary-btn"
+                  type="button"
+                  targetId={record.id}
+                  confirmTarget={false}
+                  entityState={record.status}
+                  scope={record.zoneId}
+                  collection="reservations"
+                  patch={{ driverId: ask.ask.driverId, status: "assigned" }}
+                  before="waiting for the driver"
+                  after={`accepted by ${ask.ask.driverId}`}
+                  expectedSliceRev={book.draftRev}
+                  sliceKey="reservationOps"
+                  value={acceptPrepared.book}
+                  disabled={!canAnswer || Boolean(acceptPrepared.error)}
+                  title={acceptPrepared.error}
+                  onDone={() => setNotice(`${askName} accepted. The ride is theirs.`)}
+                >
+                  Driver accepted (demo)
+                </CommandButton>
+                <CommandButton
+                  command="admin.reservation.answer"
+                  className="secondary-btn"
+                  type="button"
+                  targetId={record.id}
+                  confirmTarget={false}
+                  entityState={record.status}
+                  scope={record.zoneId}
+                  before="waiting for the driver"
+                  after={`declined by ${ask.ask.driverId}`}
+                  expectedSliceRev={book.draftRev}
+                  sliceKey="reservationOps"
+                  value={declinePrepared.book}
+                  disabled={!canAnswer || Boolean(declinePrepared.error)}
+                  title={declinePrepared.error}
+                  onDone={() => setNotice(`${askName} said no. Pick someone else.`)}
+                >
+                  Driver said no (demo)
+                </CommandButton>
+              </div>
+            ) : null}
+            {ask.state === "waiting" ? <p className="fine-print">Demo: in the live system the answer comes from the driver app.</p> : null}
+          </div>
+        ) : null}
         <label>
           Eligible driver
           <select
@@ -155,7 +242,7 @@ export function ReservationDetailPage() {
             {candidates.length === 0 ? <option value="">No eligible driver</option> : null}
             {candidates.map((driver) => {
               const vehicle = (vehicles.data ?? []).find((item) => item.driverId === driver.id);
-              return <option key={driver.id} value={driver.id}>{driver.name} · {driver.id} · {vehicle?.plate ?? "vehicle"}</option>;
+              return <option key={driver.id} value={driver.id}>{driver.name} · {driver.id} · {vehicle?.plate ?? "vehicle"}{said.has(driver.id) ? " · did not accept" : ""}</option>;
             })}
           </select>
         </label>
@@ -164,26 +251,6 @@ export function ReservationDetailPage() {
         </p>
         <div className="actions">
           <CommandButton
-            command="admin.reservation.offer"
-            className="secondary-btn"
-            type="button"
-            targetId={record.id}
-            confirmTarget={false}
-            entityState={record.status}
-            scope={record.zoneId}
-            before={record.driverId ?? "unassigned"}
-            after={chosen ? `offered to ${chosen}` : "no driver"}
-            expectedSliceRev={book.draftRev}
-            sliceKey="reservationOps"
-            value={offerPrepared}
-            disabled={!canOffer}
-            title={!canOffer ? (!canIntervene ? "Your role is read-only." : !pickupFuture ? "Pickup time has already passed." : candidates.length === 0 ? "No eligible driver." : "Reservation cannot be offered in this state.") : undefined}
-            onDone={() => setNotice(`Offer logged for ${chosen}.`)}
-          >
-            Offer to driver
-          </CommandButton>
-
-          <CommandButton
             command="admin.reservation.assign"
             className="primary-btn"
             type="button"
@@ -191,16 +258,14 @@ export function ReservationDetailPage() {
             confirmTarget={false}
             entityState={record.status}
             scope={record.zoneId}
-            collection="reservations"
-            patch={{ driverId: chosen, status: "assigned" }}
             before={record.driverId ?? "unassigned"}
-            after={chosen}
+            after={chosen ? `assigned by Movera to ${chosen}, waiting to accept` : "no driver"}
             expectedSliceRev={book.draftRev}
             sliceKey="reservationOps"
-            value={assignPrepared}
-            disabled={!canAssign}
-            title={!canAssign ? (!canIntervene ? "Your role is read-only." : !pickupFuture ? "Pickup time has already passed." : candidates.length === 0 ? "No eligible driver." : "Reservation cannot be assigned in this state.") : undefined}
-            onDone={() => setNotice(`Assigned ${chosen}.`)}
+            value={askPrepared.book}
+            disabled={!canAssign || Boolean(askPrepared.error)}
+            title={!canAssign ? (!canIntervene ? "Your role is read-only." : !pickupFuture ? "Pickup time has already passed." : ask?.state === "waiting" ? `Waiting for ${askName} to accept.` : candidates.length === 0 ? "No eligible driver." : "Reservation cannot be assigned in this state.") : askPrepared.error}
+            onDone={() => setNotice(`Sent to ${chosen} as “Assigned by Movera”. Waiting for the driver to accept.`)}
           >
             Assign driver
           </CommandButton>
@@ -235,6 +300,52 @@ export function ReservationDetailPage() {
           </ol>
         )}
       </article>
+
+      {isOpen && !record.driverId ? (
+        <article className="panel" data-testid="reservation-raise">
+          <h3>Raise the driver's fare</h3>
+          {!zoneRules.raiseFare ? <p>Raising the fare is off in this zone. Change it in <Link to={`/dispatch?zone=${record.zoneId}&tab=reservations`}>Dispatch › Reservations</Link>.</p> : (
+            <>
+              <p>Nobody has taken it yet. A higher fare helps a driver take it. It is paid from Movera's commission; the rider pays the same.</p>
+              <p className="state-line">
+                Fare {show(fareMajor)}{fare.estimated ? " (estimate)" : ""} · Movera's commission {commissionPct}% = {show(split.commission)} · highest raise {show(raiseMax)}.
+              </p>
+              <label>
+                Raise by ({unit})
+                <input aria-label="Fare raise" inputMode="decimal" value={raiseText} disabled={!canRaise} onChange={(event) => setRaiseText(event.target.value.replace(/[^\d.,]/g, ""))} placeholder={`For example ${Math.round(raiseMax / 5)}`} />
+              </label>
+              {raiseAmount > 0 && split.beyond > 0 ? <p className="resv-raise over" role="status">Goes {show(split.beyond)} beyond Movera's commission. Movera pays the difference.</p> : null}
+              {raiseAmount > 0 && split.beyond === 0 ? <p className="resv-raise" role="status">All from Movera's commission. {show(split.commission - split.fromCommission)} of it is left.</p> : null}
+              {raiseText && raisePrepared.error ? <p className="state-line" role="alert">{raisePrepared.error}</p> : null}
+              <div className="actions">
+                <CommandButton
+                  command="admin.reservation.raise"
+                  className="primary-btn"
+                  type="button"
+                  targetId={record.id}
+                  confirmTarget={false}
+                  entityState={record.status}
+                  scope={record.zoneId}
+                  before={ops.raise ? `+${ops.raise.amount} ${unit}` : "no raise"}
+                  after={`+${raiseAmount} ${unit}`}
+                  expectedSliceRev={book.draftRev}
+                  sliceKey="reservationOps"
+                  value={raisePrepared.book}
+                  disabled={!canRaise || !raiseText || Boolean(raisePrepared.error)}
+                  title={!canRaise ? (!canIntervene ? "Your role is read-only." : "Only a future ride without a driver can get a higher fare.") : raisePrepared.error}
+                  onDone={() => {
+                    setNotice(`Driver fare raised by ${show(raiseAmount)}. Drivers see the new fare.`);
+                    setRaiseText("");
+                  }}
+                >
+                  Raise the fare
+                </CommandButton>
+              </div>
+            </>
+          )}
+          {ops.raise ? <p className="state-line" data-testid="reservation-raise-now">Raised by {show(ops.raise.amount)} · {ops.raise.by} · {ops.raise.at.slice(0, 16).replace("T", " ")}. Drivers see +{show(ops.raise.amount)} on the offer.</p> : null}
+        </article>
+      ) : null}
 
       <article className="panel" data-testid="reservation-contact">
         <h3>Contact rider</h3>

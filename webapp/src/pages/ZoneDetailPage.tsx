@@ -330,6 +330,7 @@ export function ZoneDetailPage() {
 
         {tab === "dispatch" ? (
           <div className="zd-stack">
+            <p className="fine">Live offer times, search distance and every other dispatch rule are set per zone in Dispatch, the one place to change them. The values here are the starting values of a new zone.{zone.marketZoneId ? <> <Link to={`/dispatch?country=${zone.country}&zone=${zone.marketZoneId}`}>Open this zone in Dispatch</Link></> : null}</p>
             <div className="zd-fields">
               <NumberBox label="Search radius" unit="km" value={zone.searchRadiusKm} disabled={!canEdit} onCommit={(searchRadiusKm) => save({ searchRadiusKm })} />
               <NumberBox label="Offer seconds" unit="s" value={zone.offerSeconds} disabled={!canEdit} onCommit={(offerSeconds) => save({ offerSeconds })} />

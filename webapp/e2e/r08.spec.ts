@@ -81,38 +81,41 @@ test("R8 trip actions follow lifecycle state", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Refund" })).toBeEnabled();
 });
 
-test("R8 dispatch rules are versioned and restorable", async ({ page }) => {
+test("R8 dispatch rules are versioned and restorable in Dispatch, the one place to change them", async ({ page }) => {
   await session(page);
   await page.goto("/live");
+  await expect(page.getByTestId("dispatch-link")).toContainText("Norrmalm");
+  await expect(page.getByLabel("Norrmalm offer time")).toHaveCount(0);
 
-  await page.getByLabel("Norrmalm offer time").fill("9.5");
-  await page.getByRole("button", { name: "Save dispatch rules" }).click();
-  await expect(page.getByText("Saved in demo.")).toBeVisible();
-  await expect(page.getByTestId("dispatch-rules")).toContainText("Revision 2");
-
-  await page.getByLabel("Norrmalm offer time").fill("10.5");
-  await page.getByRole("button", { name: "Save dispatch rules" }).click();
-  await expect(page.getByText("Saved in demo.")).toBeVisible();
-  await expect(page.getByTestId("dispatch-rules")).toContainText("Revision 3");
-
-  const versionTwo = page.getByRole("list", { name: "Dispatch history" }).getByRole("listitem").filter({ hasText: "Revision 2" });
-  await versionTwo.getByRole("button", { name: "restore" }).click();
+  await page.goto("/dispatch?zone=Z001");
+  await page.getByLabel("Exclusive time").fill("20");
+  const bar = page.getByRole("region", { name: "Publish" });
+  await bar.getByRole("button", { name: "Publish now" }).click();
   await confirm(page);
-  await expect(page.getByTestId("dispatch-rules")).toContainText("Revision 4");
-  await expect(page.getByLabel("Norrmalm offer time")).toHaveValue("9.5");
+  await expect(page.getByText("Live now: Norrmalm.")).toBeVisible();
+
+  await page.goto("/live");
+  await expect(page.getByRole("list", { name: "Live dispatch values" }).getByRole("listitem").filter({ hasText: "Norrmalm" })).toContainText("Exclusive 20 s");
+
+  await page.goto("/dispatch?view=history");
+  const versions = page.getByRole("list", { name: "Versions" });
+  await expect(versions).toContainText("Norrmalm: Exclusive time to accept: 15 → 20");
+  await versions.getByRole("button", { name: "Undo this version" }).first().click();
+  await confirm(page);
+  await expect(page.getByText(/undone/)).toBeVisible();
+  await page.goto("/live");
+  await expect(page.getByRole("list", { name: "Live dispatch values" }).getByRole("listitem").filter({ hasText: "Norrmalm" })).toContainText("Exclusive 15 s");
 });
 
-test("R8 scoped dispatcher can edit only assigned dispatch zones", async ({ page }) => {
+test("R8 scoped dispatcher sees only assigned zones in Dispatch and cannot change the rules", async ({ page }) => {
   await session(page, "daniel");
-  await page.goto("/live");
-
-  await expect(page.getByLabel("Norrmalm offer time")).toBeEnabled();
-  await expect(page.getByLabel("Kista offer time")).toBeDisabled();
-
-  await page.getByLabel("Norrmalm offer time").fill("9");
-  await page.getByRole("button", { name: "Save Norrmalm" }).click();
-  await confirm(page);
-  await expect(page.getByTestId("dispatch-rules")).toContainText("Revision 2");
+  await page.goto("/dispatch");
+  const rail = page.getByRole("navigation", { name: "Zones" });
+  await expect(rail.getByRole("button", { name: /^Norrmalm/ })).toBeVisible();
+  await expect(rail.getByRole("button", { name: /^Kista/ })).toHaveCount(0);
+  await rail.getByRole("button", { name: /^Norrmalm/ }).click();
+  await expect(page.getByText("You can view these rules.")).toBeVisible();
+  await expect(page.getByLabel("Exclusive time")).toBeDisabled();
 });
 
 test("R8 trip page remains usable at 390px", async ({ page }) => {

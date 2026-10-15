@@ -6,6 +6,8 @@ import { useRecords, useSlice } from "../api/hooks";
 import { can } from "../auth/permissions";
 import { useSession } from "../auth/SessionContext";
 import { liveDrivers } from "../dashboard/live";
+import { reservationFareMinor } from "../dashboard/scheduled";
+import { emptyPricingStore, normalizeStore, SLICE_KEY as PRICING_KEY, zoneBook, type PricingStore } from "../pricing/zonePricing";
 import { candidatesFor, rideRequests, type RideRequest } from "../dashboard/riders";
 import { CATEGORIES } from "../domain/contract";
 import { driverOps, emptyDriverOpsBook, type DriverOpsBook } from "../drivers/ops";
@@ -52,6 +54,8 @@ export function DispatchPage() {
   const slice = useSlice<DispatchBook>(DISPATCH_KEY, emptyDispatchBook());
   const book = useMemo(() => normalizeDispatchBook(slice.value), [slice.value]);
   const driverStore = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
+  const pricingSlice = useSlice<PricingStore>(PRICING_KEY, emptyPricingStore());
+  const pricing = useMemo(() => normalizeStore(pricingSlice.value), [pricingSlice.value]);
   const drivers = useRecords("drivers", undefined, { refetchMs: 10_000 });
   const trips = useRecords("trips", undefined, { refetchMs: 10_000 });
   const vehicles = useRecords("vehicles");
@@ -150,6 +154,8 @@ export function DispatchPage() {
   }
 
   const say = (text: string) => setNotice(text);
+  const commissionOf = (id: string) => zoneBook(pricing, id).commission.economy ?? 20;
+  const sampleFareOf = (id: string) => reservationFareMinor({ zoneId: id, category: "economy" }).minor / market.minorUnits;
   const scopeLabel = (ids: string[]) => (ids.length === 1 ? ids[0] : "all");
 
   return (
@@ -257,6 +263,8 @@ export function DispatchPage() {
           symbol={symbol}
           agentId={agent?.id ?? ""}
           onNotice={say}
+          commissionOf={commissionOf}
+          sampleFareOf={sampleFareOf}
         />
       ) : null}
       {!slice.loading && view === "live" ? <LiveView book={book} market={market} zones={zones} drivers={live.filter((driver) => zones.some((zone) => zone.id === driver.zoneId))} requests={requests} candidatesOf={candidatesOf} rulesOf={liveOf} busyOf={busyOf} hhmm={hhmm} canControl={canControl} agentId={agent?.id ?? ""} withScope={(path) => path} onNotice={say} sharedAlerts={ownAlerts ? undefined : <DispatchAlerts zoneIds={zones.map((zone) => zone.id)} />} /> : null}
