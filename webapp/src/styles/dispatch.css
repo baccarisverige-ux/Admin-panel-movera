@@ -257,6 +257,40 @@ body.dx-no-scroll { overflow: hidden; }
 .dp-link-panel li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 13px; }
 .dp-link-panel li small { color: var(--muted); }
 
+/* Offer card, Exclusive reasons, waiting at pickup, cancel reasons (Round 3) */
+.dx-text { height: 34px; width: 100%; min-width: 0; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font: inherit; font-size: 13px; }
+.dx-text.soft { height: 30px; font-size: 12px; color: var(--dash-ink-2); }
+.dx-text.invalid { border-color: #e34948; background: #fff6f6; }
+.dx-text:disabled { background: #f6f8f9; }
+.dx-reasons { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dx-reasons li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(160px, 1.2fr) auto; gap: 8px 12px; align-items: center; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+.dx-reasons li.off { opacity: .6; }
+.dx-reason-when small { font-size: 12px; color: var(--dash-ink-2); }
+.dx-reason-tools { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+.dx-reason-tools > span { display: inline-flex; gap: 2px; }
+.dx-offer-net { font-size: 10px; font-weight: 700; color: #4a535a; }
+.dx-sub-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.dx-sub-head > b { font-size: 13px; }
+.dx-overrides { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.dx-override { display: inline-flex; align-items: center; gap: 6px; }
+.dx-override > small { font-size: 11.5px; color: var(--muted); }
+.dx-wait-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 12.5px; }
+.dx-wait-table th { background: transparent; text-align: left; font-size: 11px; font-weight: 700; color: var(--muted); padding: 4px 8px 4px 0; border-bottom: 0; white-space: normal; }
+.dx-wait-table td { padding: 5px 8px 5px 0; border-bottom: 0; border-top: 1px solid #f0f2f4; font-size: 12.5px; color: var(--text); white-space: normal; font-variant-numeric: tabular-nums; }
+.dx-sub { min-width: 0; }
+.dx-reason-tools { min-width: 96px; }
+.dx-wait-examples { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; }
+.dx-wait-examples li { display: grid; gap: 1px; padding: 6px 10px; border-radius: 10px; background: #fff; border: 1px solid #f0f2f4; }
+.dx-wait-examples span { color: var(--dash-ink-2); }
+.dx-reasons-view { display: grid; gap: 14px; }
+.dx-reasons-view > .dx-cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); align-items: start; }
+.dx-lang { display: inline-flex; align-items: center; gap: 6px; color: var(--dash-ink-2); }
+.dx-reason-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.dx-reason { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: start; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+.dx-reason.free { border-color: #cfe9d9; background: #f6fbf8; }
+.dx-reason-texts { display: grid; gap: 4px; min-width: 0; }
+.dx-reason-texts small { font-size: 11px; color: var(--muted); }
+
 /* Phones */
 .dx-phone .dp-screen { width: 250px; height: 500px; }
 .dx-offer { position: absolute; left: 10px; right: 10px; bottom: 12px; display: grid; gap: 5px; padding: 12px 12px 14px; border-radius: 20px; background: #fff; color: #1d252c; box-shadow: 0 -6px 20px rgba(0, 0, 0, .3); overflow: hidden; }
@@ -498,4 +532,7 @@ body.dx-no-scroll { overflow: hidden; }
   .dx-test-map { height: 340px; }
   .dx-live-line > b { min-width: 0; width: 100%; }
   .dx-type-name .dx-num { margin-left: 0; }
+  .dx-reasons li { grid-template-columns: minmax(0, 1fr); }
+  .dx-reason { grid-template-columns: minmax(0, 1fr); }
+  .dx-reason-tools { justify-content: flex-start; }
 }

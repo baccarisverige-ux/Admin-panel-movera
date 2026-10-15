@@ -10,6 +10,9 @@ import type { MarketId } from "../markets/markets";
 import { BonusAreaMap } from "../drivers/BonusAreaMap";
 import { Card, Check, Choice, Num, Row, Switch } from "./fields";
 import { ReservationSettings } from "./ReservationSettings";
+import { CancelRateCard, OfferCardSettings } from "./OfferSettings";
+import { PickupWaitCard, type WaitBaseRow } from "./PickupWaitCard";
+import type { PickupWait } from "./offers";
 import {
   ALERTS, EXTRAS, FACTORS, modeLabel, WAIT_KINDS,
   type CountryDispatch, type DriverGroup, type ExtraId, type OfferMode, type TabId, type WaitKind, type WaitStep, type ZoneDispatch,
@@ -42,6 +45,9 @@ type Props = {
   /** Movera's commission for a normal ride in this zone (Pricing) and a sample booked-ride fare, for the fare raise check. */
   commissionPct: number;
   sampleFare: number;
+  /** Waiting at pickup per category, from Pricing for this zone. */
+  waitBases: WaitBaseRow[];
+  onWaitAllZones: (pickupWait: PickupWait) => number;
 };
 
 export function ZoneSettings(props: Props) {
@@ -83,7 +89,12 @@ function Modes({ zone, onChange, busy, disabled }: Props) {
         <Row label="If all say no">
           <Choice label="After Exclusive" value={zone.exclusive.then} disabled={disabled || !zone.exclusive.on} onChange={(then) => set({ exclusive: { ...zone.exclusive, then } })} options={[{ id: "radar", label: "Radar" }, { id: "widen", label: "Wider area" }, { id: "widen_then_radar", label: "Wider area, then Radar" }]} />
         </Row>
+        <Row label="Exclusive while driving" help="Offers for the next ride during a trip. Only Exclusive, never Radar. Off: no offers while driving a rider." on={zone.exclusiveWhileDriving.on} disabled={disabled || !zone.exclusive.on} onToggle={(on) => set({ exclusiveWhileDriving: { ...zone.exclusiveWhileDriving, on } })}>
+          <Num label="Exclusive offers while driving" before="up to" value={zone.exclusiveWhileDriving.count} unit="at a time" min={1} max={5} disabled={disabled || !zone.exclusive.on} onChange={(count) => set({ exclusiveWhileDriving: { ...zone.exclusiveWhileDriving, count } })} />
+        </Row>
       </Card>
+
+      <OfferCardSettings zone={zone} onChange={onChange} disabled={disabled} />
 
       <Card title="Radar in the driver app" tone="purple" icon={<Smartphone size={18} />} help="How many Radar offers one driver sees at the same time." off={!zone.radar.on}>
         <Row label="Full-screen radar" help="When the driver opens the radar screen." on={zone.radarApp.fullOn} disabled={disabled || !zone.radar.on} onToggle={(fullOn) => set({ radarApp: { ...zone.radarApp, fullOn } })}>
@@ -92,9 +103,10 @@ function Modes({ zone, onChange, busy, disabled }: Props) {
         <Row label="Popup over the map" help="Small offer cards while the driver waits on the map." on={zone.radarApp.popupOn} disabled={disabled || !zone.radar.on} onToggle={(popupOn) => set({ radarApp: { ...zone.radarApp, popupOn } })}>
           <Num label="Offers in the popup" before="up to" value={zone.radarApp.popup} unit="offers" min={1} max={5} disabled={disabled || !zone.radar.on} onChange={(popup) => set({ radarApp: { ...zone.radarApp, popup } })} />
         </Row>
-        <Row label="While driving a rider" help="Offers for the next ride, shown during a trip. Off means no Radar offers while driving." on={zone.radarApp.drivingOn} disabled={disabled || !zone.radar.on} onToggle={(drivingOn) => set({ radarApp: { ...zone.radarApp, drivingOn } })}>
-          <Num label="Offers while driving" before="up to" value={zone.radarApp.driving} unit="offers" min={1} max={5} disabled={disabled || !zone.radar.on} onChange={(driving) => set({ radarApp: { ...zone.radarApp, driving } })} />
+        <Row label="Hidden with ×: comes back after" help="A trip the driver hid in the Live list can come back if nobody took it and it is still in Radar. It never counts against the driver.">
+          <Num label="Hidden Radar trip comes back after" value={zone.hiddenComesBackMin} unit="min" min={1} max={60} disabled={disabled || !zone.radar.on} onChange={(hiddenComesBackMin) => set({ hiddenComesBackMin })} />
         </Row>
+        <p className="dx-note"><Route size={13} aria-hidden="true" /> No Radar offers while driving a rider. Only Exclusive offers come during a trip.</p>
       </Card>
 
       <Card title="Which mode runs" tone="green" icon={<Gauge size={18} />} help="Let the system choose by how busy the zone is, or choose yourself.">
@@ -191,9 +203,8 @@ function Best({ zone, onChange, disabled }: Props) {
         <Row label="Starts when busy level is at least"><Num label="Smart waiting from busy level" value={zone.batching.fromRatio} unit="per driver" step={0.1} min={0.1} max={10} disabled={disabled || !zone.batching.on} onChange={(fromRatio) => set({ batching: { ...zone.batching, fromRatio } })} /></Row>
       </Card>
 
-      <Card title="Drivers finishing a ride" tone="orange" icon={<Route size={18} />} help="A driver about to drop off a rider can get the next request.">
-        <Row label="On Radar" on={zone.finishing.radar} disabled={disabled} onToggle={(radar) => set({ finishing: { ...zone.finishing, radar } })} />
-        <Row label="On Exclusive" on={zone.finishing.exclusive} disabled={disabled} onToggle={(exclusive) => set({ finishing: { ...zone.finishing, exclusive } })} />
+      <Card title="Drivers finishing a ride" tone="orange" icon={<Route size={18} />} help="A driver about to drop off a rider can get the next request, as an Exclusive offer only. Never Radar during a trip.">
+        <Row label="On Exclusive" help="Uses Exclusive while driving in Modes." on={zone.finishing.exclusive} disabled={disabled} onToggle={(exclusive) => set({ finishing: { ...zone.finishing, exclusive } })} />
         <Row label="Finishes within"><Num label="Finishing within minutes" value={zone.finishing.withinMin} unit="min" min={1} max={15} disabled={disabled} onChange={(withinMin) => set({ finishing: { ...zone.finishing, withinMin } })} /></Row>
         <Row label="Drop-off within"><Num label="Finishing within km" value={zone.finishing.withinKm} unit="km of the pickup" step={0.5} min={0.5} max={10} disabled={disabled} onChange={(withinKm) => set({ finishing: { ...zone.finishing, withinKm } })} /></Row>
       </Card>
@@ -265,10 +276,12 @@ function Waiting({ zone, onChange, disabled }: Props) {
   );
 }
 
-function Rides({ zone, onChange, disabled, airport, symbol, countryId, zoneName }: Props) {
+function Rides({ zone, onChange, disabled, airport, symbol, countryId, zoneName, money, waitBases, onWaitAllZones }: Props) {
   const set = (patch: Partial<ZoneDispatch>) => onChange({ ...zone, ...patch });
   return (
     <div className="dx-cards">
+      <PickupWaitCard zone={zone} onChange={onChange} disabled={disabled} symbol={symbol} money={money} countryId={countryId} waitBases={waitBases} onAllZones={onWaitAllZones} />
+
       <Card title="Special requests" tone="purple" icon={<ListOrdered size={18} />} help="Only drivers who have it get the request. The badge shows on the driver's offer and in the rider app.">
         {zone.extras.map((extra) => {
           const info = EXTRAS.find((item) => item.id === extra.id)!;
@@ -347,7 +360,7 @@ function Drivers({ zone, onChange, disabled, country, onCountry, countryName }: 
       </Card>
 
       <Card title="Saying no" tone="orange" icon={<UserX size={18} />} help="When a driver declines or ignores an offer." off={!zone.decline.on} aside={<Switch label="Saying no rules" on={zone.decline.on} disabled={disabled} onChange={(on) => set({ decline: { ...zone.decline, on } })} />}>
-        <Row label="It lowers the acceptance rate" on={zone.decline.countsAcceptance} disabled={disabled || !zone.decline.on} onToggle={(countsAcceptance) => set({ decline: { ...zone.decline, countsAcceptance } })} />
+        <Row label="It lowers the acceptance rate" help="The acceptance rate counts only Exclusive and other one-driver offers. Radar trips never count." on={zone.decline.countsAcceptance} disabled={disabled || !zone.decline.on} onToggle={(countsAcceptance) => set({ decline: { ...zone.decline, countsAcceptance } })} />
         <Row label="Pause after no's in a row">
           <Num label="Pause after no's" value={zone.decline.pauseAfter} unit="no's" min={1} max={10} disabled={disabled || !zone.decline.on} onChange={(pauseAfter) => set({ decline: { ...zone.decline, pauseAfter } })} />
           <Num label="No pause minutes" value={zone.decline.pauseMin} unit="min" min={1} max={60} disabled={disabled || !zone.decline.on} onChange={(pauseMin) => set({ decline: { ...zone.decline, pauseMin } })} />
@@ -359,15 +372,22 @@ function Drivers({ zone, onChange, disabled, country, onCountry, countryName }: 
       </Card>
 
       <Card title="Go offline automatically" tone="red" icon={<Power size={18} />} help="A driver who does not accept offers is set offline, so riders are not kept waiting." off={!zone.autoOffline.on} aside={<Switch label="Go offline automatically" on={zone.autoOffline.on} disabled={disabled} onChange={(on) => set({ autoOffline: { ...zone.autoOffline, on } })} />}>
-        <Row label="After offers not accepted in a row" help="Declined or ignored, on Radar or Exclusive. The driver can go online again at once.">
-          <Num label="Offline after offers not accepted" value={zone.autoOffline.after} unit="offers" min={2} max={30} disabled={disabled || !zone.autoOffline.on} onChange={(after) => set({ autoOffline: { ...zone.autoOffline, after } })} />
+        <Row label="After offers not accepted in a row" help="Exclusive and other one-driver offers, declined or left to run out, also rides given by Movera and offers while driving. Radar trips never count, here or in the acceptance rate. The driver can go online again at once.">
+          <Num label="Offline after offers not accepted" value={zone.autoOffline.after} unit="offers" min={1} max={99} disabled={disabled || !zone.autoOffline.on} onChange={(after) => set({ autoOffline: { ...zone.autoOffline, after: Math.round(after) } })} />
         </Row>
       </Card>
 
       <Card title={`Rest after long work · all of ${countryName}`} tone="purple" icon={<Timer size={18} />} help="After this many hours of work, a driver cannot go online until the rest is done. This is a country rule." off={!country.rest.on} aside={<Switch label="Rest after long work" on={country.rest.on} disabled={disabled} onChange={(on) => onCountry({ ...country, rest: { ...country.rest, on } })} />}>
         <Row label="Work hours"><Num label="Work hours before rest" value={country.rest.workHours} unit="h" min={4} max={16} disabled={disabled || !country.rest.on} onChange={(workHours) => onCountry({ ...country, rest: { ...country.rest, workHours } })} /></Row>
         <Row label="Rest"><Num label="Rest hours" value={country.rest.restHours} unit="h" min={1} max={12} disabled={disabled || !country.rest.on} onChange={(restHours) => onCountry({ ...country, rest: { ...country.rest, restHours } })} /></Row>
+        <Row label="Warnings before the limit" help="On the island and in the app, with the time left.">
+          <Num label="First driving limit warning" value={country.rest.warnFirstMin} unit="min left" min={1} max={120} disabled={disabled || !country.rest.on} onChange={(warnFirstMin) => onCountry({ ...country, rest: { ...country.rest, warnFirstMin } })} />
+          <Num label="Second driving limit warning" before="and" value={country.rest.warnLastMin} unit="min left" min={1} max={120} disabled={disabled || !country.rest.on} onChange={(warnLastMin) => onCountry({ ...country, rest: { ...country.rest, warnLastMin } })} />
+        </Row>
+        <Row label="Block going online at the limit" help={`The driver sees “Rest until 04:30” and can go online again after ${country.rest.restHours} h of rest.`} on={country.rest.blockOnline} disabled={disabled || !country.rest.on} onToggle={(blockOnline) => onCountry({ ...country, rest: { ...country.rest, blockOnline } })} />
       </Card>
+
+      <CancelRateCard country={country} onCountry={onCountry} countryName={countryName} disabled={disabled} />
     </div>
   );
 }

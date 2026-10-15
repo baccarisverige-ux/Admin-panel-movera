@@ -1,0 +1,63 @@
+import { Link } from "react-router";
+import { CreditCard, EyeOff, MessageSquareText, Percent, RotateCcw } from "lucide-react";
+import { Card, Choice, Num, Row, Switch } from "./fields";
+import { CANCEL_RATE_DRIVER_TEXT, EXCLUSIVE_REASON_MAX, EXCLUSIVE_REASONS, OFFER_CARD_DETAILS, type OfferCardDetails } from "./offers";
+import type { CountryDispatch, ZoneDispatch } from "./rules";
+
+type Props = { zone: ZoneDispatch; onChange: (next: ZoneDispatch) => void; disabled: boolean };
+
+/** Q14 and Q15: what the driver sees on an offer card, and the short text that says why an offer is Exclusive. */
+export function OfferCardSettings({ zone, onChange, disabled }: Props) {
+  const card = zone.offerCard;
+  const setCard = (patch: Partial<OfferCardDetails>) => onChange({ ...zone, offerCard: { ...card, ...patch } });
+  const reasons = zone.exclusiveReasons;
+  return (
+    <>
+      <Card title="Offer card" tone="blue" icon={<CreditCard size={18} />} help="What the driver sees before accepting, on the Radar card, the Exclusive card and the reservation popup. Switch each detail on or off.">
+        <Row label="Fare shown" help={card.netFare ? "The driver's share, after Movera's commission." : "The full fare the rider pays."}>
+          <Choice label="Fare on the offer card" value={card.netFare ? "net" : "full"} disabled={disabled} onChange={(value) => setCard({ netFare: value === "net" })} options={[{ id: "full", label: "Full fare" }, { id: "net", label: "Driver's share" }]} />
+        </Row>
+        <Row label="Drop-off" help={card.dropoffAreaOnly ? "Only the area, for example Vasastan. The street shows after accepting." : "The full address."}>
+          <Choice label="Drop-off on the offer card" value={card.dropoffAreaOnly ? "area" : "address"} disabled={disabled} onChange={(value) => setCard({ dropoffAreaOnly: value === "area" })} options={[{ id: "address", label: "Full address" }, { id: "area", label: "Area only" }]} />
+        </Row>
+        {OFFER_CARD_DETAILS.map((item) => (
+          <Row key={item.id} label={item.label} help={item.help} on={card[item.id]} disabled={disabled} onToggle={(on) => setCard({ [item.id]: on } as Partial<OfferCardDetails>)} />
+        ))}
+      </Card>
+
+      <Card title="Exclusive reasons" tone="purple" icon={<MessageSquareText size={18} />} help={`The short text on an Exclusive offer that says why it is for this driver. Keep it short and professional, at most ${EXCLUSIVE_REASON_MAX} characters. Off: no reason text.`} off={!zone.exclusive.on}>
+        <ul className="dx-reasons" aria-label="Exclusive reasons">
+          {EXCLUSIVE_REASONS.map((item) => {
+            const reason = reasons[item.id];
+            const set = (patch: Partial<typeof reason>) => onChange({ ...zone, exclusiveReasons: { ...reasons, [item.id]: { ...reason, ...patch } } });
+            const long = reason.text.trim().length > EXCLUSIVE_REASON_MAX;
+            return (
+              <li key={item.id} className={reason.on ? undefined : "off"}>
+                <span className="dx-reason-when"><small>{item.when}</small></span>
+                <input className={long || (reason.on && !reason.text.trim()) ? "dx-text invalid" : "dx-text"} aria-label={`Exclusive reason text: ${item.when}`} value={reason.text} maxLength={EXCLUSIVE_REASON_MAX + 12} disabled={disabled} onChange={(event) => set({ text: event.target.value })} />
+                <span className="dx-reason-tools">
+                  {reason.text !== item.text ? <button data-command="admin.dispatch.edit" type="button" className="icon-ghost" aria-label={`Use the default text for ${item.when}`} title={`Back to “${item.text}”`} disabled={disabled} onClick={() => set({ text: item.text })}><RotateCcw size={13} aria-hidden="true" /></button> : null}
+                  <Switch label={`Exclusive reason ${item.text}`} on={reason.on} disabled={disabled} onChange={(on) => set({ on })} />
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="dx-note">A ride Movera gives to a driver always says “Assigned by Movera”.</p>
+      </Card>
+    </>
+  );
+}
+
+/** Q22: the cancel rate drivers should stay under. A country rule, never shown to drivers. */
+export function CancelRateCard({ country, onCountry, countryName, disabled }: { country: CountryDispatch; onCountry: (next: CountryDispatch) => void; countryName: string; disabled: boolean }) {
+  return (
+    <Card title={`Cancel rate · all of ${countryName}`} tone="orange" icon={<Percent size={18} />} help="The cancel rate a driver should stay under. A normal-trip cancel only counts in the cancel rate: no pause and no fee.">
+      <Row label="Cancel rate limit" help="Drivers see their own rate, never this number.">
+        <Num label="Cancel rate limit" before="under" value={country.cancelRateLimitPct} unit="%" min={1} max={100} disabled={disabled} onChange={(cancelRateLimitPct) => onCountry({ ...country, cancelRateLimitPct: Math.round(cancelRateLimitPct) })} />
+      </Row>
+      <p className="dx-note dx-resv-tie"><EyeOff size={13} aria-hidden="true" /> <span>Never shown to drivers. Under their cancel rate they see: “{CANCEL_RATE_DRIVER_TEXT}”.</span></p>
+      <p className="dx-note"><span>Reasons marked “Doesn't count” never count (<Link to="/dispatch?view=reasons">Cancel reasons</Link>). Scheduled rides also follow the late-cancel rule in Reservations. The acceptance rate has no rules.</span></p>
+    </Card>
+  );
+}

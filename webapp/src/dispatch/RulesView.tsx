@@ -5,6 +5,7 @@ import { CommandButton } from "../ui/CommandButton";
 import { Modal } from "../ui/Modal";
 import { beforeAfter, zoneResults } from "./demo";
 import { ZoneSettings } from "./ZoneSettings";
+import type { WaitBaseRow } from "./PickupWaitCard";
 import { DriverOfferPreview, ReservationDriverPreview, ReservationRiderPreview, RiderWaitingPreview } from "./Previews";
 import {
   applyPreset, BUILT_IN_PRESETS, copyParts, DISPATCH_KEY, liveRules, mainMode, modeLabel, modeNow, presetFrom, TABS, zoneIssues,
@@ -34,6 +35,8 @@ type Props = {
   /** Movera's commission for a normal ride in a zone (Pricing), and a sample booked-ride fare there. */
   commissionOf: (zoneId: string) => number;
   sampleFareOf: (zoneId: string) => number;
+  /** Waiting at pickup per category, from Pricing. */
+  waitBasesOf: (zoneId: string) => WaitBaseRow[];
 };
 
 const TAB_ICON: Record<TabId, typeof Radar> = { modes: Radar, reservations: CalendarClock, best: Star, waiting: Smartphone, rides: MapPin, drivers: Users, safety: Shield, alerts: Bell };
@@ -171,6 +174,12 @@ export function RulesView(props: Props) {
               groups={book.groups.filter((item) => item.country === market.id)}
               commissionPct={props.commissionOf(zone.id)}
               sampleFare={props.sampleFareOf(zone.id)}
+              waitBases={props.waitBasesOf(zone.id)}
+              onWaitAllZones={(pickupWait) => {
+                const targets = zones.filter((item) => canEdit(item.id));
+                for (const item of targets) onRules(item.id, { ...rulesOf(item.id), pickupWait: JSON.parse(JSON.stringify(pickupWait)) as typeof pickupWait });
+                return targets.length;
+              }}
             />
           </div>
           <aside className="dx-zone-side" aria-label="Phone preview">
@@ -180,7 +189,7 @@ export function RulesView(props: Props) {
             </div>
             {tab === "reservations"
               ? (shownPhone === "driver" ? <ReservationDriverPreview zone={rules} money={money} country={market.id} /> : <ReservationRiderPreview zone={rules} money={money} />)
-              : shownPhone === "driver" ? <DriverOfferPreview zone={rules} money={money} country={market.id} /> : <RiderWaitingPreview zone={rules} />}
+              : shownPhone === "driver" ? <DriverOfferPreview zone={rules} money={money} country={market.id} commissionPct={props.commissionOf(zone.id)} /> : <RiderWaitingPreview zone={rules} />}
           </aside>
         </div>
       </div>
