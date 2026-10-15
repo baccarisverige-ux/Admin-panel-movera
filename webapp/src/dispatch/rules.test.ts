@@ -22,6 +22,7 @@ import {
   reservationStepAt,
   reservationTimeline,
   ridesClash,
+  riderScheduledRules,
   rulesFile,
   simulate,
   smartGapMin,
@@ -238,14 +239,18 @@ assert(resvFile.zones[0].rules.reservation.homePopupAfterMin === 10 && resvFile.
 // Round 3: who gets it, the Home popup, smart gap, cancels, no driver near pickup and rides given by Movera.
 assert(resv.listGroupId === "" && resv.homePopupTo === "list" && resv.popupClosedExclusive, "Home popup goes to the list's drivers and a closed popup comes back as Exclusive by default");
 assert(resv.hideClashing && resv.leaveNow && resv.lateWarn && resv.lateBackupAfterMin === 5 && resv.towardPickup, "smart gap parts are on by default");
-assert(Object.values(resv.types).every((type) => type.spareMin === 15) && resv.types.normal.onlineBeforeMin === 30 && resv.types.airport.onlineBeforeMin === 60 && resv.types.long.onlineBeforeMin === 60, "spare minutes start at 15; airport and long trips be online 60 min before");
+assert(Object.values(resv.types).every((type) => type.spareMin === 15), "spare minutes start at 15 for every kind of ride");
+assert(resv.types.normal.onlineBeforeMin === 30 && resv.types.airport.onlineBeforeMin === 60 && resv.types.long.onlineBeforeMin === 60 && resv.types.premium.onlineBeforeMin === 45 && resv.types.event.onlineBeforeMin === 45, "be online before: normal 30, airport 60, long trip 60, Comfort/Premium 45, events 45 (same as the driver app)");
 assert(resv.types.normal.remindFirstMin === 60 && resv.types.normal.remindLastMin === 15, "reminders 60 and 15 min before pickup");
-assert(resv.riderFreeCancelHours === 1 && resv.driverLateCancelHours === 1 && resv.riderLateFee === 50 && zoneDefault("FR-PC").reservation.riderLateFee === 5, "riders free until 1 h, a late driver cancel is under 1 h, the fee is in the country's money");
+assert(resv.freeCancelMinutesBeforePickup === 60 && resv.driverLateCancelHours === 1 && resv.lateCancelFee === 50 && zoneDefault("FR-PC").reservation.lateCancelFee === 5 && zoneDefault("TN-TC").reservation.lateCancelFee === 3, "riders free until 60 min before pickup, a late driver cancel is under 1 h, the fee is in the country's money");
 assert(resv.latePause && resv.latePauseAfter === 2 && resv.latePeriodDays === 7, "2 late cancels a week pause scheduled rides");
-assert(resv.riderSeesDriver, "the rider sees the driver at once by default");
+assert(resv.showDriverOnAccept, "the rider sees the driver at once by default");
+assert(JSON.stringify(riderScheduledRules(resv, "SE")) === JSON.stringify({ freeCancelMinutesBeforePickup: 60, lateCancelFeeMinor: 5000, currency: "SEK", showDriverOnAccept: true }), "the rider app's rules: 60 min, 5000 öre, SEK, driver shown on accept");
+assert(riderScheduledRules(zoneDefault("TN-TC").reservation, "TN").lateCancelFeeMinor === 3000 && riderScheduledRules(zoneDefault("FR-PC").reservation, "FR").currency === "EUR", "the rider app's fee is in minor units of the country's money");
 assert(raiseCap("SE") === 500 && raiseCap("FR") === 47.5 && raiseCap("TN") === 150, "the raise cap is 500 kr, the same value in local money elsewhere");
 assert(resv.raiseFare && resv.raiseMax === 500 && zoneDefault("FR-PC").reservation.raiseMax === 47.5 && zoneDefault("TN-TC").reservation.raiseMax === 150, "the highest raise starts at the country cap");
-assert(resv.assignAcceptSec === 60, "a ride given by Movera has 60 s to accept");
+assert(resv.assignAcceptSec === 30, "a ride given by Movera has 30 s to accept");
+assert(resv.lateBackupAfterMin === 5 && resv.exclusiveBeforeMin === 20 && resv.radarBeforeMin === 15 && resv.latePauseDays === 7, "the same defaults as the driver app");
 
 const groups = emptyDispatchBook().groups;
 assert(resvIssues({ listTo: "group" })[0] === "Reservations: pick the driver group that gets Scheduled rides.", "A driver group needs a group");
@@ -263,7 +268,8 @@ const typeIssues = (patch: Partial<ReservationRules["types"]["airport"]>) => zon
 assert(typeIssues({ onlineBeforeMin: 2 }).includes("Reservations, Airport: be online before must be 5 to 240 minutes."), "be online before has a limit per kind");
 assert(typeIssues({ spareMin: 90 }).includes("Reservations, Airport: spare minutes must be 0 to 60."), "spare minutes have a limit");
 assert(typeIssues({ remindFirstMin: 10, remindLastMin: 15 }).includes("Reservations, Airport: the first reminder must come before the second (a larger number of minutes)."), "reminders come in order");
-assert(resvIssues({ riderFreeCancelHours: 80 })[0] === "Reservations: free cancel for riders must end 0 to 72 hours before pickup.", "rider free cancel has a limit");
+assert(resvIssues({ freeCancelMinutesBeforePickup: 20000 })[0] === "Reservations: free cancel for riders must end 0 to 10080 minutes (7 days) before pickup, in whole minutes.", "rider free cancel has the rider app's limit");
+assert(resvIssues({ freeCancelMinutesBeforePickup: 30.5 }).length === 1, "rider free cancel is in whole minutes");
 assert(resvIssues({ driverLateCancelHours: 0 })[0] === "Reservations: a driver's late cancel must be set 0.5 to 72 hours before pickup.", "late cancel time has a limit");
 assert(resvIssues({ latePauseAfter: 0 })[0] === "Reservations: the pause must come after 1 to 20 late cancels.", "pause count has a limit");
 assert(resvIssues({ latePause: false, latePauseAfter: 0 }).length === 0, "a pause that is off is not checked");
@@ -279,29 +285,30 @@ assert(leaveNowBeforeMin(18, 15) === 33, "leave now: drive time + spare minutes"
 assert(JSON.stringify(raiseSplit(50, 520, 20)) === JSON.stringify({ commission: 104, fromCommission: 50, beyond: 0 }), "a small raise comes from the commission");
 assert(raiseSplit(150, 520, 20).beyond === 46 && raiseSplit(150, 520, 20).fromCommission === 104, "the part beyond the commission is shown");
 
-const r3Change = changeLines(base, withResv({ listTo: "group", listGroupId: "G-airport", homePopupTo: "zone", popupClosedExclusive: false, riderFreeCancelHours: 2, raiseMax: 300, types: { ...resv.types, airport: { ...resv.types.airport, onlineBeforeMin: 90 } } }));
+const r3Change = changeLines(base, withResv({ listTo: "group", listGroupId: "G-airport", homePopupTo: "zone", popupClosedExclusive: false, freeCancelMinutesBeforePickup: 120, raiseMax: 300, types: { ...resv.types, airport: { ...resv.types.airport, onlineBeforeMin: 90 } } }));
 assert(r3Change.includes("Scheduled rides go to: all drivers in the zone → a driver group"), "change line for a driver group");
 assert(r3Change.includes("Driver group for Scheduled rides: none → G-airport"), "change line for the group");
 assert(r3Change.includes("Home popup goes to: same drivers as the list → all drivers in the zone"), "change line for the popup audience");
 assert(r3Change.includes("Closed popup comes back as Exclusive: on → off"), "change line for the closed popup");
-assert(r3Change.includes("Rider free cancel, hours before pickup: 1 → 2") && r3Change.includes("Highest fare raise: 500 → 300"), "change lines for cancels and the raise");
+assert(r3Change.includes("Rider free cancel, minutes before pickup: 60 → 120") && r3Change.includes("Highest fare raise: 500 → 300"), "change lines for cancels and the raise");
 assert(r3Change.includes("Airport rides: be online before: 60 → 90"), "change line per kind of ride");
 
 // Saves from before Round 3 get the new settings from the defaults.
-const R3_KEYS = ["listGroupId", "homePopupTo", "popupClosedExclusive", "hideClashing", "leaveNow", "lateWarn", "lateBackupAfterMin", "towardPickup", "towardPickupBeforeMin", "types", "riderFreeCancelHours", "riderLateFee", "driverLateCancelHours", "latePause", "latePauseAfter", "latePeriodDays", "latePauseDays", "riderSeesDriver", "raiseFare", "raiseMax", "assignAcceptSec"];
+const R3_KEYS = ["listGroupId", "homePopupTo", "popupClosedExclusive", "hideClashing", "leaveNow", "lateWarn", "lateBackupAfterMin", "towardPickup", "towardPickupBeforeMin", "types", "freeCancelMinutesBeforePickup", "lateCancelFee", "driverLateCancelHours", "latePause", "latePauseAfter", "latePeriodDays", "latePauseDays", "showDriverOnAccept", "raiseFare", "raiseMax", "assignAcceptSec"];
 const preR3 = Object.fromEntries(Object.entries(zoneDefault("FR-PC").reservation).filter(([key]) => !R3_KEYS.includes(key)));
 const r3Book = normalizeDispatchBook(JSON.parse(JSON.stringify({ ...emptyDispatchBook(), live: { "FR-PC": { ...zoneDefault("FR-PC"), reservation: { ...preR3, homePopupTo: "everyone", types: { airport: { onlineBeforeMin: 75 }, normal: "bad" } } } } })));
 const r3Live = liveRules(r3Book, "FR-PC").reservation;
-assert(r3Live.homePopupTo === "list" && r3Live.popupClosedExclusive && r3Live.riderLateFee === 5 && r3Live.raiseMax === 47.5 && r3Live.assignAcceptSec === 60, "an old save gets the new settings in the country's money");
-assert(r3Live.types.airport.onlineBeforeMin === 75 && r3Live.types.airport.spareMin === 15 && r3Live.types.normal.onlineBeforeMin === 30 && r3Live.types.event.onlineBeforeMin === 45, "kinds of ride are filled in one by one");
+assert(r3Live.homePopupTo === "list" && r3Live.popupClosedExclusive && r3Live.lateCancelFee === 5 && r3Live.raiseMax === 47.5 && r3Live.assignAcceptSec === 30 && r3Live.freeCancelMinutesBeforePickup === 60 && r3Live.showDriverOnAccept, "an old save gets the new settings in the country's money");
+assert(r3Live.types.airport.onlineBeforeMin === 75 && r3Live.types.airport.spareMin === 15 && r3Live.types.normal.onlineBeforeMin === 30 && r3Live.types.event.onlineBeforeMin === 45 && r3Live.types.premium.onlineBeforeMin === 45, "kinds of ride are filled in one by one");
 assert(zoneIssues(liveRules(r3Book, "FR-PC")).length === 0, "an old save stays valid");
 assert(changeLines(liveRules(r3Book, "FR-PC"), draftRules(r3Book, "FR-PC")).length === 0, "an old save does not show as changed");
 const r3Preset = applyPreset(zoneDefault("TN-TC"), BUILT_IN_PRESETS[0], "TN");
-assert(r3Preset.reservation.riderLateFee === 3 && r3Preset.reservation.raiseMax === 150, "a ready-made preset keeps the country's money for reservations");
+assert(r3Preset.reservation.lateCancelFee === 3 && r3Preset.reservation.raiseMax === 150, "a ready-made preset keeps the country's money for reservations");
 const r3Copy = copyParts(withResv({ leaveNow: false }), zoneDefault("Z002"), ["reservations"]);
 assert(!r3Copy.reservation.leaveNow && r3Copy.zoneId === "Z002", "reservations copy as their own part");
 assert(copyParts(withResv({ leaveNow: false }), zoneDefault("Z002"), ["modes"]).reservation.leaveNow, "Modes no longer copies reservations");
 const r3File = rulesFile(emptyDispatchBook(), "SE", "now");
 assert(r3File.glossary.smartGap.includes("spareMin") && r3File.glossary.raiseFare.includes("500 kr") && r3File.zones[0].rules.reservation.types.normal.spareMin === 15, "the rules file explains the new settings");
+assert(r3File.riderApp.Z001.lateCancelFeeMinor === 5000 && r3File.glossary.riderApp.includes("/api/v1/rider/scheduled-rides/rules"), "the rules file has what the rider app reads");
 
 console.log("dispatch rules ok");

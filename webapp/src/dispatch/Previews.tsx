@@ -275,7 +275,7 @@ export function ReservationDriverPreview({ zone, money, country }: { zone: ZoneD
 /** The rider's booked ride: the driver right after accepting, and the free cancel time. */
 export function ReservationRiderPreview({ zone, money }: { zone: ZoneDispatch; money: (value: number) => string }) {
   const resv = zone.reservation;
-  const freeUntil = 7 * 60 + 40 - Math.round(resv.riderFreeCancelHours * 60);
+  const freeUntil = 7 * 60 + 40 - resv.freeCancelMinutesBeforePickup;
   const at = `${String(Math.floor(((freeUntil % 1440) + 1440) % 1440 / 60)).padStart(2, "0")}:${String(((freeUntil % 60) + 60) % 60).padStart(2, "0")}`;
   return (
     <figure className="dp-phone dx-phone" aria-label="Rider reservation preview">
@@ -284,7 +284,7 @@ export function ReservationRiderPreview({ zone, money }: { zone: ZoneDispatch; m
         <div className="dx-rider-map" aria-hidden="true" />
         <div className="dx-rider-sheet" aria-label="Rider screen">
           <span className="dx-rider-wait"><CalendarClock size={12} aria-hidden="true" /> Booked · Tomorrow 07:40</span>
-          {resv.riderSeesDriver ? (
+          {resv.showDriverOnAccept ? (
             <>
               <b><UserCheck size={13} aria-hidden="true" /> Your driver</b>
               <span className="dx-rider-driver">
@@ -299,7 +299,7 @@ export function ReservationRiderPreview({ zone, money }: { zone: ZoneDispatch; m
               <p>You see your driver's name, photo and car when they head to the pickup.</p>
             </>
           )}
-          <span className="dx-rider-cancel">Free cancel until {at}{resv.riderLateFee > 0 ? ` · then ${money(resv.riderLateFee)}` : ""}</span>
+          <span className="dx-rider-cancel">Free cancel until {at}{resv.lateCancelFee > 0 ? ` · then ${money(resv.lateCancelFee)}` : ""}</span>
         </div>
       </div>
       <figcaption>Rider app · booked ride</figcaption>

@@ -55,7 +55,7 @@ test("R11 assignment contact return unassign and cancel lifecycle persists", asy
   await confirm(page);
   await expect(page.getByText(`Sent to ${first} as “Assigned by Movera”. Waiting for the driver to accept.`)).toBeVisible();
   await expect(page.getByTestId("reservation-ask")).toContainText(`waiting for`);
-  await expect(page.getByTestId("reservation-ask")).toContainText("60 s left");
+  await expect(page.getByTestId("reservation-ask")).toContainText("30 s left");
   await expect(page.getByRole("button", { name: "Assign driver" })).toBeDisabled();
   await expect(page.getByTestId("reservation-summary")).toContainText("Driver Unassigned");
   await page.getByRole("button", { name: "Driver said no (demo)" }).click();

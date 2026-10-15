@@ -6,7 +6,7 @@ import { Card, Choice, Num, Row, Switch } from "./fields";
 import { ReservationTimelinePreview, spanLabel } from "./Previews";
 import { BookingPolicyCard } from "./BookingPolicy";
 import {
-  HOME_POPUP_TO, leaveNowBeforeMin, raiseCap, raiseSplit, RESERVATION_CANCEL_TO, RESERVATION_LIST_TO, RIDE_TYPES, smartGapMin,
+  HOME_POPUP_TO, leaveNowBeforeMin, raiseCap, raiseSplit, RESERVATION_CANCEL_TO, RESERVATION_LIST_TO, RIDE_TYPES, RIDER_FREE_CANCEL_MAX_MIN, smartGapMin,
   type DriverGroup, type ReservationRules, type RideTypeId, type RideTypeRule, type ZoneDispatch,
 } from "./rules";
 
@@ -93,7 +93,7 @@ export function ReservationSettings({ zone, onChange, disabled, symbol, money, c
         <Row label="If the driver who took it cancels" help={`${RESERVATION_CANCEL_TO.find((item) => item.id === resv.onDriverCancel)?.help ?? ""}${resv.onDriverCancel === "byTime" ? "" : " A step closer to pickup always wins."}`}>
           <Choice label="After a driver cancels" value={resv.onDriverCancel} disabled={off} onChange={(onDriverCancel) => setResv({ onDriverCancel })} options={RESERVATION_CANCEL_TO.map((item) => ({ id: item.id, label: item.label, hint: item.help }))} />
         </Row>
-        <Row label="Rider sees the driver at once" help="Name, photo and car as soon as a driver accepts. If the driver changes, the rider sees the new one. Off: the rider sees the driver when they head to the pickup." on={resv.riderSeesDriver} disabled={off} onToggle={(riderSeesDriver) => setResv({ riderSeesDriver })} />
+        <Row label="Rider sees the driver at once" help="Name, photo and car as soon as a driver accepts. If the driver changes, the rider sees the new one. Off: the rider sees the driver when they head to the pickup." on={resv.showDriverOnAccept} disabled={off} onToggle={(showDriverOnAccept) => setResv({ showDriverOnAccept })} />
         <p className="dx-note dx-resv-tie"><Users size={13} aria-hidden="true" /> <span>Two drivers take it at the same time → the first tap wins; exact same moment → the system picks one at random.</span></p>
         <ReservationTimelinePreview zone={zone} groups={groups} />
       </Card>
@@ -139,10 +139,10 @@ export function ReservationSettings({ zone, onChange, disabled, symbol, money, c
 
       <Card title="Cancels" tone="red" icon={<UserX size={18} />} help="Drivers never pay a fee when they cancel. Every driver cancel counts in the driver's cancel rate." off={!resv.on}>
         <Row label="Riders cancel for free until" help="After that the rider pays the late cancel fee.">
-          <Num label="Rider free cancel, hours before pickup" value={resv.riderFreeCancelHours} unit="h before pickup" step={0.5} min={0} max={72} disabled={off} onChange={(riderFreeCancelHours) => setResv({ riderFreeCancelHours })} />
+          <Num label="Rider free cancel, minutes before pickup" value={resv.freeCancelMinutesBeforePickup} unit="min before pickup" min={0} max={RIDER_FREE_CANCEL_MAX_MIN} disabled={off} onChange={(freeCancelMinutesBeforePickup) => setResv({ freeCancelMinutesBeforePickup: Math.round(freeCancelMinutesBeforePickup) })} />
         </Row>
         <Row label="Rider's late cancel fee" help="Paid by the rider for a cancel after the free time.">
-          <Num label="Rider late cancel fee" value={resv.riderLateFee} unit={symbol} step={0.5} min={0} max={1000} disabled={off} onChange={(riderLateFee) => setResv({ riderLateFee })} />
+          <Num label="Rider late cancel fee" value={resv.lateCancelFee} unit={symbol} step={0.5} min={0} max={1000} disabled={off} onChange={(lateCancelFee) => setResv({ lateCancelFee })} />
         </Row>
         <Row label="A driver's late cancel" help="A driver cancel this close to pickup is a late cancel. The driver still pays nothing.">
           <Num label="Driver late cancel, hours before pickup" before="under" value={resv.driverLateCancelHours} unit="h before pickup" step={0.5} min={0.5} max={72} disabled={off} onChange={(driverLateCancelHours) => setResv({ driverLateCancelHours })} />

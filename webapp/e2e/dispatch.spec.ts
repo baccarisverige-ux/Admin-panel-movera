@@ -304,6 +304,7 @@ test("reservations in one place: a driver group, the Home popup, smart gap, canc
   await gap.getByLabel("Normal spare minutes").fill("20");
   await expect(gap.getByLabel("Smart gap example")).toContainText("08:55");
   await expect(gap.getByLabel("Airport be online before")).toHaveValue("60");
+  await expect(gap.getByLabel("Comfort and Premium be online before")).toHaveValue("45");
   await gap.getByLabel("Airport first reminder").fill("10");
   const alert = page.getByLabel("Norrmalm rules").getByRole("alert");
   await expect(alert).toContainText("Reservations, Airport: the first reminder must come before the second");
@@ -314,9 +315,10 @@ test("reservations in one place: a driver group, the Home popup, smart gap, canc
   // Cancels: drivers never pay; riders free until 1 h before.
   const cancels = page.getByRole("region", { name: "Cancels" });
   await expect(cancels).toContainText("Drivers never pay");
-  await expect(cancels.getByLabel("Rider free cancel, hours before pickup")).toHaveValue("1");
+  await expect(cancels.getByLabel("Rider free cancel, minutes before pickup")).toHaveValue("60");
   await expect(cancels.getByLabel("Driver late cancel, hours before pickup")).toHaveValue("1");
   await expect(cancels.getByLabel("Late cancels before a pause")).toHaveValue("2");
+  await expect(cancels.getByLabel("Rider late cancel fee")).toHaveValue("50");
   await cancels.getByLabel("Rider late cancel fee").fill("75");
 
   // No driver near pickup: raise from Movera's commission, never over 500 kr.
@@ -356,7 +358,7 @@ test("reservations in one place: a driver group, the Home popup, smart gap, canc
   await expect(list).toContainText("Airport rides: first reminder: 60 → 90");
   await expect(list).toContainText("Rider late cancel fee: 50 → 75");
   await expect(list).toContainText("Highest fare raise: 500 → 300");
-  await expect(list).toContainText("Time to accept a ride assigned by Movera: 60 → 90");
+  await expect(list).toContainText("Time to accept a ride assigned by Movera: 30 → 90");
   await bar.getByRole("button", { name: "Publish now" }).click();
   await confirm(page);
   await expect(page.getByText("Live now: Norrmalm.")).toBeVisible();
