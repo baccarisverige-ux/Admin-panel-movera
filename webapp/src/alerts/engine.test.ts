@@ -34,6 +34,11 @@ const facts: Facts = {
   incidents: [
     { id: "I1", zoneId: "Z001", who: "Ali", status: "queued", owner: null, takenAt: null, createdAt: null },
     { id: "I2", zoneId: "Z002", who: "Eva", status: "taken", owner: "lena", takenAt: "2026-10-12T09:20:00Z", createdAt: null },
+    { id: "I3", zoneId: "Z001", who: "Ola", status: "queued", owner: null, takenAt: null, createdAt: null, kind: "ride_check" },
+  ],
+  rideChecks: [
+    { id: "RC1", incidentId: "I3", zoneId: "Z001", status: "queued", title: "Accident or collision (driver)", detail: "Is anyone hurt? Not sure", since: now - 3 * 60_000 },
+    { id: "RC2", incidentId: "I4", zoneId: "Z002", status: "resolved", title: "I feel unsafe (rider)", detail: "", since: now - 600 * 60_000 },
   ],
   requests: [
     { tripId: "T1", rider: "Sara", zoneId: "Z001", waitingMin: 9, searching: true },
@@ -73,6 +78,17 @@ assert(by("payment_failed:P1")?.level === "critical", "system payment failure is
 assert(by("payout_big:PO1")?.level === "important", "large payout");
 assert(by("rider_fraud:U1") && by("rider_cancels:U1")?.level === "important", "rider alerts");
 assert(by("system_health:maps:2026-10-12")?.level === "important", "slow system is important");
+
+// Ride check: a critical alert tied to its incident, not an SOS, and gone once the incident is solved.
+const ride = by("ride_check:RC1");
+assert(ride?.level === "critical" && ride.group === "safety" && ride.incidentId === "I3" && ride.rideCheckId === "RC1" && ride.path === "/incidents?case=I3", "ride check alert is critical and opens its incident");
+assert(!by("sos:I3") && !by("ride_check:RC2"), "a ride check incident is not an SOS, and a solved one has no alert");
+assert(takeAlert(emptyAlertBook(), ride!, "nora", "x").error && snoozeAlert(emptyAlertBook(), ride!, "nora", 10, "2026-10-12T10:00:00Z").error, "ride checks use the Incidents take and cannot be snoozed");
+assert(openAlerts([ride!], emptyAlertBook(), now, () => "erik")[0].owner === "erik", "ride check owner comes from Incidents");
+const sees = (permissions: string[]) => visibleTo(ride!, emptyAlertBook(), { id: "x", role: "viewer", can: (permission) => permissions.includes(permission) }, now);
+assert(sees(["incidents.read"]) && sees(["trips.intervene"]) && !sees(["trips.read"]) && !sees(["finance.read"]), "the safety team and dispatchers see ride check alerts");
+const offBook = { ...emptyAlertBook().settings, kinds: { ...emptyAlertBook().settings.kinds, ride_check: { ...emptyAlertBook().settings.kinds.ride_check, on: false } } };
+assert(!computeAlerts(facts, offBook, []).some((alert) => alert.kind === "ride_check"), "ride check alerts can be switched off");
 
 // Who sees it: everyone by default, the roles set, and the next person after the wait.
 const sos = by("sos:I1")!;

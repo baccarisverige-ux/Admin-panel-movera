@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 const MUTE_KEY = "movera-admin-alert-sound";
 
-function readMuted(): boolean {
+/** The bell's sound switch, shared by every part of the panel that plays a sound. */
+export function readMuted(): boolean {
   try {
     return localStorage.getItem(MUTE_KEY) === "off";
   } catch {
@@ -12,24 +13,43 @@ function readMuted(): boolean {
   }
 }
 
-function tone(urgent: boolean) {
+/**
+ * A short tone made with Web Audio. With waitForClick, a browser that holds sound until the
+ * person clicks plays it on that first click instead of not at all.
+ */
+export function tone(urgent: boolean, waitForClick = false) {
+  if (typeof window === "undefined") return;
   try {
     const AudioContext = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof window.AudioContext }).webkitAudioContext;
     if (!AudioContext) return;
     const context = new AudioContext();
-    const notes = urgent ? [880, 660, 880] : [660];
-    notes.forEach((frequency, index) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, context.currentTime + index * 0.22);
-      gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + index * 0.22 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + index * 0.22 + 0.2);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(context.currentTime + index * 0.22);
-      oscillator.stop(context.currentTime + index * 0.22 + 0.21);
-    });
-    window.setTimeout(() => void context.close(), 1200);
+    const play = () => {
+      const start = context.currentTime;
+      const notes = urgent ? [880, 660, 880] : [660];
+      notes.forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, start + index * 0.22);
+        gain.gain.exponentialRampToValueAtTime(0.18, start + index * 0.22 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + index * 0.22 + 0.2);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start(start + index * 0.22);
+        oscillator.stop(start + index * 0.22 + 0.21);
+      });
+      window.setTimeout(() => void context.close(), 1200);
+    };
+    if (context.state !== "suspended" || !waitForClick) {
+      play();
+      return;
+    }
+    const resume = () => {
+      document.removeEventListener("pointerdown", resume);
+      document.removeEventListener("keydown", resume);
+      void context.resume().then(play, () => void context.close());
+    };
+    document.addEventListener("pointerdown", resume, { once: true });
+    document.addEventListener("keydown", resume, { once: true });
   } catch {
     // Sound is a convenience; the on-screen alert stays either way.
   }

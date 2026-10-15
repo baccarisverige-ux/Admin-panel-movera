@@ -17,6 +17,7 @@ import { zoneAllowed } from "../markets/scope";
 import { useMarketScope } from "../markets/useMarketScope";
 import { failureCause, failureHandled } from "../payments/failures";
 import { useRidersData } from "../riders/useRidersData";
+import { RIDE_CHECK_KEY, alertBy, alertTitle, asRideChecks, emptyRideCheckOps, followText, normalizeRideCheckOps, reasonText, shiftOf, shifted, worries, type RideCheckOps } from "../safety/rideCheck";
 import { ALERTS_KEY, computeAlerts, emptyAlertBook, normalizeAlertBook, openAlerts, visibleTo, type AlertBook, type Facts, type OpenAlert } from "./engine";
 
 const SYMBOL = { SE: "kr", FR: "€", TN: "DT" } as const;
@@ -56,6 +57,12 @@ export function useAlerts() {
   const tickets = useRecords("tickets", undefined, { refetchMs: 30_000 });
   const approvals = useApprovals(30_000);
   const riders = useRidersData("month");
+  // Ride check alerts go to the safety team and to dispatchers.
+  const canRideCheck = Boolean(agent && (can(agent.role, "incidents.read") || can(agent.role, "trips.intervene")));
+  const rideCheckRows = useRecords("rideChecks", undefined, { refetchMs: 10_000 });
+  const rideChecks = useMemo(() => asRideChecks(rideCheckRows.data), [rideCheckRows.data]);
+  const rideSlice = useSlice<RideCheckOps>(RIDE_CHECK_KEY, emptyRideCheckOps(), { enabled: canRideCheck });
+  const rideOps = useMemo(() => normalizeRideCheckOps(rideSlice.value), [rideSlice.value]);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 30_000) * 30_000);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 30_000) * 30_000), 30_000);
@@ -76,6 +83,7 @@ export function useAlerts() {
     const activeDrivers = (drivers.data ?? []).filter((row) => row.status === "active");
     const shift = demoShift(now, api.demo);
     const day = new Date(now).toISOString().slice(0, 10);
+    const zoneName = (id: string) => market.zones.find((zone) => zone.id === id)?.name ?? id;
     const hour = Math.floor(now / 3_600_000);
     return {
       now,
@@ -83,7 +91,23 @@ export function useAlerts() {
       zones: zones.map((zone) => ({ id: zone.id, name: zone.name })),
       incidents: (incidents.data ?? []).map((row) => {
         const record = safety.value.incidents[row.id];
-        return { id: row.id, zoneId: row.zoneId, who: row.name, status: row.status, owner: record?.owner ?? null, takenAt: record?.events.find((event) => event.kind === "take")?.at ?? null, createdAt: row.createdAt ?? null, late: lateText(caseOf(row, safety.value, incidentOps, now), incidentOps.settings, now) };
+        return { id: row.id, zoneId: row.zoneId, who: row.name, status: row.status, owner: record?.owner ?? null, takenAt: record?.events.find((event) => event.kind === "take")?.at ?? null, createdAt: row.createdAt ?? null, late: lateText(caseOf(row, safety.value, incidentOps, now), incidentOps.settings, now), kind: row.kind };
+      }),
+      rideChecks: rideChecks.flatMap((check) => {
+        const row = check.incidentId ? (incidents.data ?? []).find((item) => item.id === check.incidentId) : undefined;
+        const first = alertBy(check);
+        if (!row || !first) return [];
+        const opened = caseOf(row, safety.value, incidentOps, now).openedAt;
+        const said = worries(check).map((item) => followText(item.follow));
+        return [{
+          id: check.id,
+          incidentId: row.id,
+          zoneId: check.zoneId,
+          status: row.status,
+          title: `Ride check: ${alertTitle(check)}`,
+          detail: [...(said.length ? said : [reasonText(check)]), zoneName(check.zoneId), check.tripId].join(" · "),
+          since: shifted(first.answer.at, shiftOf(check, opened, shift)),
+        }];
       }),
       requests: requests.map((request) => ({ tripId: request.tripId, rider: request.rider, zoneId: request.zoneId, waitingMin: request.waitingMin, searching: request.status === "searching" })),
       freeByZone,
@@ -131,13 +155,15 @@ export function useAlerts() {
       money,
     };
     // money depends only on the market, which is already a dependency.
-  }, [now, zones, drivers.data, vehicles.data, trips.data, incidents.data, reservations.data, payments.data, payouts.data, tickets.data, approvals.data, riders.rows, safety.value, incidentOps, dispatchBook, driverStore.value, market, api.demo]);
+  }, [now, zones, drivers.data, vehicles.data, trips.data, incidents.data, reservations.data, payments.data, payouts.data, tickets.data, approvals.data, riders.rows, safety.value, incidentOps, dispatchBook, driverStore.value, market, api.demo, rideChecks]);
 
   const all = useMemo(() => computeAlerts(facts, book.settings, book.rules.filter((rule) => rule.country === market.id)), [facts, book.settings, book.rules, market.id]);
   const sosOwner = (incidentId: string) => safety.value.incidents[incidentId]?.owner ?? null;
   const viewer = agent ? { id: agent.id, role: agent.role, can: (permission: string) => can(agent.role, permission) } : null;
   const open: OpenAlert[] = useMemo(() => openAlerts(all, book, now, (id) => safety.value.incidents[id]?.owner ?? null).filter((alert) => (viewer ? visibleTo(alert, book, viewer, now) : false)), [all, book, now, safety.value, viewer?.id, viewer?.role]);
   const active = open.filter((alert) => alert.status !== "snoozed" && !alert.muted);
+  // The red banner: ride check alerts nobody has opened yet.
+  const unopened = rideSlice.loading ? [] : open.filter((alert) => alert.kind === "ride_check" && alert.rideCheckId && !rideOps.opened[alert.rideCheckId]);
   return {
     book,
     slice,
@@ -151,6 +177,7 @@ export function useAlerts() {
     money,
     now,
     sosOwner,
+    rideCheck: { checks: rideChecks, ops: rideOps, loading: rideSlice.loading, unopened, demoShift: demoShift(now, api.demo) },
     loading: slice.loading || incidents.isLoading || trips.isLoading,
     counts: {
       critical: active.filter((alert) => alert.level === "critical").length,

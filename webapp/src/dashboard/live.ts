@@ -53,8 +53,9 @@ export function liveDrivers(
   tick: number,
 ): LiveDriver[] {
   // An SOS sits on the exact driver it belongs to; older records without one fall back to the zone.
-  const sosDrivers = new Set(incidents.filter((row) => row.status === "queued" && row.driverId).map((row) => row.driverId!));
-  const sosZones = new Set(incidents.filter((row) => row.status === "queued" && !row.driverId).map((row) => row.zoneId));
+  const sos = incidents.filter((row) => row.status === "queued" && row.kind !== "ride_check");
+  const sosDrivers = new Set(sos.filter((row) => row.driverId).map((row) => row.driverId!));
+  const sosZones = new Set(sos.filter((row) => !row.driverId).map((row) => row.zoneId));
   const flagged = new Set<string>();
   return drivers
     .filter((driver) => isOnline(driver) && zoneById(driver.zoneId))

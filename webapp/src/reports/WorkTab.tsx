@@ -36,7 +36,7 @@ export function WorkTab({ market, zones, window, compare, fmt, onCsv, settings }
   const [kindFilter, setKindFilter] = useState<WorkKind | "all">("all");
   const others = Boolean(agent && canSeeOthers(agent.role, settings.access.roles));
   const zoneIds = useMemo(() => new Set(zones.map((zone) => zone.id)), [zones]);
-  const history = useMemo(() => (shared ? solvedHistory(shared.book, shared.safety.value, (id) => shared.facts.incidents.find((row) => row.id === id)?.zoneId ?? null) : []), [shared?.book, shared?.safety.value, shared?.facts.incidents]);
+  const history = useMemo(() => (shared ? solvedHistory(shared.book, shared.safety.value, (id) => shared.facts.incidents.find((row) => row.id === id)?.zoneId ?? null, (id) => shared.facts.incidents.find((row) => row.id === id)?.kind === "ride_check") : []), [shared?.book, shared?.safety.value, shared?.facts.incidents]);
   const [now] = useState(() => Date.now());
   const events = useMemo(() => {
     const label = (action: string) => `${sectionOf(action)}: ${commandById(action)?.label ?? action}`;

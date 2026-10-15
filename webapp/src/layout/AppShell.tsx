@@ -40,6 +40,7 @@ import { useInbox, useSearch, useSlice } from "../api/hooks";
 import { PANEL_OPS_KEY, emptyPanelOps, normalizePanelOps, showInMenu, type PanelOps } from "../platform/panel";
 import { AlertsProvider, useAlertsData } from "../alerts/AlertsContext";
 import { AlertBell } from "../alerts/AlertBell";
+import { RideCheckBanner } from "../alerts/RideCheckBanner";
 import { MENU, MENU_GROUPS, type MenuItem, type NavIcon } from "../nav";
 import { CommandButton } from "../ui/CommandButton";
 import { useMarketScope } from "../markets/useMarketScope";
@@ -193,6 +194,7 @@ function ShellInner({ page, children }: AppShellProps) {
             </div>
           </div>
         </header>
+        <RideCheckBanner />
         {scopeDenied ? <p className="state-line">No access to scope {scope}. Choose an allowed zone.</p> : null}
         {searchOpen ? (
           <div className="panel">

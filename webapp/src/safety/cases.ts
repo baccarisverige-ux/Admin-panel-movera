@@ -12,7 +12,7 @@ import type { IncidentEvent, SafetyBook } from "./ops.ts";
 export const INCIDENT_OPS_KEY = "incidentOps";
 
 export type Level = "low" | "high" | "critical";
-export type Kind = "sos" | "accident" | "harassment" | "route" | "lost" | "other";
+export type Kind = "sos" | "ride_check" | "accident" | "harassment" | "route" | "lost" | "other";
 
 export const LEVELS: { id: Level; label: string; help: string }[] = [
   { id: "critical", label: "Critical", help: "Someone is in danger now: SOS, accident, violence." },
@@ -22,6 +22,7 @@ export const LEVELS: { id: Level; label: string; help: string }[] = [
 
 export const KINDS: { id: Kind; label: string; level: Level }[] = [
   { id: "sos", label: "SOS button", level: "critical" },
+  { id: "ride_check", label: "Ride check", level: "critical" },
   { id: "accident", label: "Accident", level: "critical" },
   { id: "harassment", label: "Harassment or threat", level: "high" },
   { id: "route", label: "Strange route or stop", level: "high" },
@@ -110,12 +111,20 @@ export type Case = {
   takenAt: number | null;
   solvedAt: number | null;
   driverId: string | null;
+  /** The trip the case is about, when the incident names it (Ride check). */
+  tripId: string | null;
   events: IncidentEvent[];
 };
 
 const OPEN = new Set(["queued", "taken"]);
 
+/** A "Ride check" incident: opened by itself when the driver or rider app sends a ride check alert. */
+export function isRideCheckIncident(row: Pick<DemoRecord, "kind">): boolean {
+  return row.kind === "ride_check";
+}
+
 export function kindOf(row: DemoRecord, handledLive = false): Kind {
+  if (isRideCheckIncident(row)) return "ride_check";
   // An SOS stays an SOS after it is solved.
   if (OPEN.has(row.status) || handledLive) return "sos";
   const order: Kind[] = ["accident", "harassment", "route", "lost", "other", "sos"];
@@ -152,6 +161,7 @@ export function caseOf(row: DemoRecord, safety: SafetyBook, ops: IncidentOps, no
     takenAt: takenAt ?? (!open ? openedAt + (1 + (seed % 4)) * 60_000 : null),
     solvedAt: resolve ? Date.parse(resolve.at) : demoSolved,
     driverId: row.driverId ?? null,
+    tripId: row.tripId ?? null,
     events,
   };
 }
@@ -202,6 +212,8 @@ export function pastCases(item: Case, all: readonly Case[]): Case[] {
 
 /** The trip the case is about: the rider's live trip, or their latest one. */
 export function linkedTrip(item: Case, trips: readonly DemoRecord[]): DemoRecord | null {
+  const named = item.tripId ? trips.find((trip) => trip.id === item.tripId) : undefined;
+  if (named) return named;
   const mine = trips.filter((trip) => trip.name === item.who && trip.zoneId === item.zoneId);
   return mine.find((trip) => ["accepted", "driver_to_pickup", "arrived", "rider_onboard", "in_trip", "approaching_dropoff"].includes(trip.status)) ?? mine[0] ?? trips.find((trip) => trip.name === item.who) ?? null;
 }
