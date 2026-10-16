@@ -92,7 +92,7 @@ const stopped = stopManualSurges(surged.store, ["Z001", "Z003"], "nora", "Over",
 assert(stopped.stopped.join() === "Z003" && !zoneLive(stopped.store, "Z003").manual, "stop all stops only running surges");
 
 // Quote: waiting after the free minutes, stops, seats, app fee, min fare, split.
-const input: QuoteInput = { categoryId: "economy", km: 10, minutes: 20, waitMin: 5, stops: 1, stopWaitMin: 2, babySeats: 1, childSeats: 0, longPickup: false, airportPickup: false, airportDropoff: false, reservation: false, surge: 1 };
+const input: QuoteInput = { categoryId: "economy", km: 10, minutes: 20, waitMin: 5, stops: 1, stopWaitMin: 2, babySeats: 1, childSeats: 0, airportPickup: false, airportDropoff: false, reservation: false, surge: 1 };
 const quote = quoteRide(norrmalm, input);
 // 29 + 120 + 80 = 229; waiting 3 × 12.26 = 36.78; stop 15; stop wait 10; baby seat 30 → 320.78; app fee 10% → 352.86 → 353
 assert(quote.total === 353, `quote total ${quote.total}`);

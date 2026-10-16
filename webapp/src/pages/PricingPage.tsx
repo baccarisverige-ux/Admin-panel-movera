@@ -6,6 +6,7 @@ import {
   Calculator,
   CircleDollarSign,
   Copy,
+  HandCoins,
   History,
   Plane,
   Receipt,
@@ -30,6 +31,7 @@ import { CommissionPanel } from "../pricing/CommissionPanel";
 import { CopyZones } from "../pricing/CopyZones";
 import { FeesPanel, FixedRoutes } from "../pricing/FeesPanel";
 import { HistoryPanel } from "../pricing/HistoryPanel";
+import { PickupPayPanel } from "../pricing/PickupPayPanel";
 import { PriceTable } from "../pricing/PriceTable";
 import { alertsFor, surgeRows } from "../pricing/rows";
 import { LEVEL_COLOR } from "../pricing/surge";
@@ -51,6 +53,7 @@ import {
   zoneLive,
   type CategoryPrice,
   type CategoryUsage,
+  type CopyPart,
   type ZoneBook,
 } from "../pricing/zonePricing";
 import { CommandButton } from "../ui/CommandButton";
@@ -61,6 +64,7 @@ const TABS = [
   { id: "fees", label: "Fees", icon: Receipt },
   { id: "surge", label: "Surge", icon: Zap },
   { id: "commission", label: "Commission", icon: BadgePercent },
+  { id: "pickup", label: "Pickup pay", icon: HandCoins },
   { id: "history", label: "History", icon: History },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -94,7 +98,7 @@ export function PricingPage() {
   const [drafts, setDrafts] = useState<Record<string, ZoneBook>>({});
   const [notice, setNotice] = useState("");
   const [testOpen, setTestOpen] = useState(false);
-  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyOpen, setCopyOpen] = useState<false | CopyPart[]>(false);
   const [catsOpen, setCatsOpen] = useState(false);
   const surgeMap = useSurgePref("pricing", { shown: true, style: "zones" });
   const now = useNow(15_000);
@@ -211,7 +215,7 @@ export function PricingPage() {
         <CommandButton command="admin.pricing.stopAllSurges" className="quick-tile stop" targetId={market.id} confirmTarget={false} scope="all" before={`${stopAll.stopped.length} manual surges`} after="none" expectedSliceRev={store.draftRev} sliceKey={SLICE_KEY} value={stopAll.store} disabled={!canPublish || Boolean(stopAll.error)} title={stopAll.error} onDone={() => setNotice(`Stopped ${stopAll.stopped.length} manual surge${stopAll.stopped.length === 1 ? "" : "s"} in ${market.name}.`)}>
           <Square size={18} aria-hidden="true" /><span><b>Stop all surges</b><small>{stopAll.stopped.length ? `${stopAll.stopped.length} manual running` : "None running"}</small></span>
         </CommandButton>
-        <button data-command="admin.pricing.copyZones" type="button" className="quick-tile" disabled={!canPublish} onClick={() => setCopyOpen(true)}>
+        <button data-command="admin.pricing.copyZones" type="button" className="quick-tile" disabled={!canPublish} onClick={() => setCopyOpen(["prices", "fees"])}>
           <Copy size={18} aria-hidden="true" /><span><b>Copy to zones</b><small>As drafts to review</small></span>
         </button>
         <button data-command="admin.pricing.testRide" type="button" className="quick-tile" onClick={() => setTestOpen((open) => !open)}>
@@ -324,6 +328,30 @@ export function PricingPage() {
             </section>
           ) : null}
 
+          {tab === "pickup" ? (
+            <PickupPayPanel
+              zoneName={zone?.name ?? zoneId}
+              currency={currency}
+              categories={categories}
+              book={book}
+              published={published}
+              problems={problems}
+              canEdit={canPublish}
+              onChange={(pickupPay) => update((draft) => { draft.pickupPay = pickupPay; })}
+              onCopy={() => setCopyOpen(["pickup"])}
+              onUseInAllZones={() => {
+                if (!canPublish) return;
+                const targets = zones.filter((item) => item.id !== zoneId).map((item) => item.id);
+                setDrafts((current) => {
+                  const next = { ...current, [zoneId]: book };
+                  for (const target of targets) next[target] = copyInto(book, current[target] ?? zoneBook(store, target), ["pickup"]);
+                  return next;
+                });
+                setNotice(`Pickup pay from ${zone?.name} copied to all ${targets.length} other zones in ${market.name} as drafts. Review and publish.`);
+              }}
+            />
+          ) : null}
+
           {tab === "history" ? (
             <section className="dash-card" aria-labelledby="history-title">
               <div className="card-head">
@@ -355,6 +383,7 @@ export function PricingPage() {
         <CopyZones
           fromZoneId={zoneId}
           fromName={zone?.name ?? zoneId}
+          initialParts={copyOpen}
           allowed={(id) => !agent || canUseZone(agent, id)}
           onClose={() => setCopyOpen(false)}
           onCopy={(targets, parts) => {

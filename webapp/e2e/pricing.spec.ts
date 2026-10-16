@@ -35,3 +35,34 @@ test("test a ride follows the zone price list, in each country's currency", asyn
     }
   }
 });
+
+test("pickup pay is set per category, paid by Movera, and published with the zone", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("link", { name: "Pricing", exact: true }).click();
+  await page.getByRole("tab", { name: "Pickup pay" }).click();
+  await expect(page.getByRole("heading", { name: "Pickup pay · paid by Movera" })).toBeVisible();
+  await expect(page.getByLabel("Comfort pickup per km")).toHaveValue("3");
+  await expect(page.getByText("Normal reservations taken from Scheduled rides")).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Pickup pay for normal reservations from Scheduled rides" })).toBeDisabled();
+  await expect(page.getByText(/The old "Long pickup fee"/)).toBeVisible();
+
+  const toggle = (name: string) => page.locator("label.mini-switch", { has: page.getByRole("switch", { name, exact: true }) }).click();
+  const example = page.getByTestId("pickup-example");
+  // Comfort 3 kr/km + 1 kr/min, 4.2 km / 9 min, 1 km and 2 min free: 3.2 × 3 + 7 × 1 = 16.60
+  await expect(example.getByTestId("pickup-pay-total")).toHaveText("16,60 kr");
+  await toggle("Comfort free first km");
+  await toggle("Comfort free first minutes");
+  // No free part: 4.2 × 3 + 9 × 1 = 21.60
+  await expect(example.getByTestId("pickup-pay-total")).toHaveText("21,60 kr");
+
+  await page.getByRole("radio", { name: "Fare + pickup line" }).click();
+  await expect(page.getByTestId("offer-breakdown")).toContainText("incl. 21,60 kr pickup · 4.2 km · 9 min");
+  await toggle("Pickup pay for Radar trips");
+  await expect(page.getByRole("switch", { name: "Pickup pay for Radar trips", exact: true })).not.toBeChecked();
+
+  await page.getByRole("region", { name: "Unpublished changes" }).getByRole("button", { name: "Publish changes" }).click();
+  await page.locator(".modal.open").last().getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText(/Published as pricing revision/)).toBeVisible();
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByText(/Pickup pay for Radar trips turned off/).first()).toBeVisible();
+});

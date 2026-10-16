@@ -9,21 +9,24 @@ const PARTS: { id: CopyPart; label: string }[] = [
   { id: "fees", label: "Fees" },
   { id: "surge", label: "Surge settings" },
   { id: "commission", label: "Commission" },
+  { id: "pickup", label: "Pickup pay" },
 ];
 
 type Props = {
   fromZoneId: string;
   fromName: string;
+  /** Parts ticked when the dialog opens. */
+  initialParts?: CopyPart[];
   allowed: (zoneId: string) => boolean;
   onCopy: (zoneIds: string[], parts: CopyPart[]) => void;
   onClose: () => void;
 };
 
 /** Copy this zone's set into other zones as drafts. Nothing goes live until it is published. */
-export function CopyZones({ fromZoneId, fromName, allowed, onCopy, onClose }: Props) {
+export function CopyZones({ fromZoneId, fromName, initialParts = ["prices", "fees"], allowed, onCopy, onClose }: Props) {
   const root = useDialogFocus(true, onClose);
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
-  const [parts, setParts] = useState<Set<CopyPart>>(() => new Set(["prices", "fees"]));
+  const [parts, setParts] = useState<Set<CopyPart>>(() => new Set(initialParts));
   const toggle = <T,>(set: Set<T>, value: T) => {
     const next = new Set(set);
     if (next.has(value)) next.delete(value);
