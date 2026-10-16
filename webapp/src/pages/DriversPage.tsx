@@ -10,6 +10,7 @@ import { periodWindow } from "../dashboard/period";
 import { DRIVER_DOCUMENTS } from "../drivers/gate";
 import { driverOps, emptyDriverOpsBook, type DriverOpsBook } from "../drivers/ops";
 import { countHealth } from "../fleet/documents";
+import { useDocWarnDays } from "../drivers/useDocWarnDays";
 import { driverPerformance } from "../fleet/performance";
 import { liveDrivers } from "../dashboard/live";
 import { driverCode } from "../fleet/codes";
@@ -44,6 +45,7 @@ export function DriversPage() {
   const trips = useRecords("trips", null);
   const incidents = useRecords("incidents", null);
   const store = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
+  const warnDaysFor = useDocWarnDays();
   const [view, setView] = useState<View>("all");
   const [type, setType] = useState("all");
   const [now] = useState(() => Date.now());
@@ -56,13 +58,13 @@ export function DriversPage() {
     .map((driver) => {
       const ops = driverOps(store.value, { id: driver.id, name: driver.name, fleetId: driver.fleetId, status: driver.status, kind: driver.kind });
       const docs = DRIVER_DOCUMENTS.filter((id) => !(driver.fleetId && id === "company_registration")).map((id) => ops.documents[id]);
-      const counts = countHealth(docs, now);
+      const counts = countHealth(docs, now, warnDaysFor(driver.zoneId));
       const perf = driverPerformance({ id: driver.id, zoneId: driver.zoneId, status: driver.status, stars: ops.ratings.stars, acceptancePct: ops.ratings.acceptancePct, cancellationPct: ops.ratings.cancellationPct }, month, false).current;
       const car = (vehicles.data ?? []).find((row) => row.driverId === driver.id);
       const fleet = (fleets.data ?? []).find((row) => row.id === driver.fleetId);
       const cats = CATEGORIES.filter((category) => ops.categories[category.id]).map((category) => category.label);
       return { driver, counts, total: docs.length, perf, car, fleet, cats, code: driverCode(driver), online: presence.get(driver.id) ?? ("offline" as Presence) };
-    }), [drivers.data, vehicles.data, fleets.data, store.value, agent, now, month, presence]);
+    }), [drivers.data, vehicles.data, fleets.data, store.value, agent, now, month, presence, warnDaysFor]);
 
   const counts = {
     all: enriched.length,

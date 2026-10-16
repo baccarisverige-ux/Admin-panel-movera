@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { Building2, CalendarClock, Car, PauseCircle, UserCheck, Users } from "lucide-react";
 import { useRecords, useSlice } from "../api/hooks";
 import { countHealth } from "../fleet/documents";
+import { useDocWarnDays } from "../drivers/useDocWarnDays";
 import { emptyOwnerOpsBook, OWNER_DOCUMENTS, ownerOps, type OwnerOpsBook } from "../fleet/ownerOps";
 import { ownerCode } from "../fleet/codes";
 import { ContactActions, DocSummary } from "../fleet/ui";
@@ -26,6 +27,7 @@ export function FleetOwnersPage() {
   const drivers = useRecords("drivers", null);
   const vehicles = useRecords("vehicles", null);
   const store = useSlice<OwnerOpsBook>("fleetOwnerOps", emptyOwnerOpsBook());
+  const warnDaysFor = useDocWarnDays();
   const [view, setView] = useState<View>("all");
   const [now] = useState(() => Date.now());
 
@@ -40,10 +42,10 @@ export function FleetOwnersPage() {
       fleets: ownFleets,
       crew,
       cars: (vehicles.data ?? []).filter((car) => car.fleetId && fleetIds.has(car.fleetId)).length,
-      counts: countHealth(docs, now),
+      counts: countHealth(docs, now, warnDaysFor(owner.zoneId)),
       total: docs.length,
     };
-  }), [owners.data, fleets.data, drivers.data, vehicles.data, store.value, now]);
+  }), [owners.data, fleets.data, drivers.data, vehicles.data, store.value, now, warnDaysFor]);
 
   const shown = rows.filter((row) => view === "all" || row.owner.status === view);
   const count = (status: string) => rows.filter((row) => row.owner.status === status).length;

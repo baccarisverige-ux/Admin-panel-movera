@@ -1,3 +1,4 @@
+import { accessLabel, accessState, choiceError, clearAccess, emptyAccessBook, lateCancelsFor, normalizeAccessBook, setAccess } from "./scheduledAccess.ts";
 import {
   approveRequiredDocuments,
   driverActivationIssue,
@@ -64,5 +65,27 @@ assert(driverOps(book, independent).note === "Call after 14:00", "private note p
 
 const badVehicleBook = updateVehicleOps(book, vehicleSeed, { category: "xl", seats: 4 });
 assert(driverActivationIssue(badVehicleBook, independent, vehicleOps(badVehicleBook, vehicleSeed))?.includes("6 seats"), "vehicle rule blocks activation");
+
+// Q11: scheduled rides on or off per driver, the late cancels and the pause by the rule.
+const lateRule = { latePause: true, latePauseAfter: 2, latePeriodDays: 7, latePauseDays: 7, driverLateCancelHours: 1 };
+const accessNow = Date.parse("2026-10-15T12:00:00Z");
+const twoLate = lateCancelsFor("D0006", accessNow);
+assert(twoLate.length === 2 && lateCancelsFor("D0001", accessNow).length === 0, "demo late cancels: every 6th driver has 2 this week");
+const paused = accessState(undefined, twoLate, lateRule, accessNow);
+assert(!paused.allowed && paused.source === "rule" && paused.pausedByRule && paused.lateInPeriod.length === 2, "2 late cancels in 7 days pause scheduled rides");
+assert(accessLabel(paused, undefined, lateRule).startsWith("Paused until 2026-10-2") && accessLabel(paused, undefined, lateRule).endsWith("2 late cancels in 7 days"), "the pause says until when and why");
+assert(accessState(undefined, twoLate, { ...lateRule, latePause: false }, accessNow).allowed && accessState(undefined, twoLate, { ...lateRule, latePauseAfter: 3 }, accessNow).allowed, "the rule can be off or need more late cancels");
+assert(accessState(undefined, lateCancelsFor("D0007", accessNow), lateRule, accessNow).lateInPeriod.length === 0, "a late cancel before the period does not count");
+const accessIso = new Date(accessNow).toISOString();
+const turnedOn = setAccess(emptyAccessBook(), "D0006", { on: true, period: "days", days: 3, until: "" }, "nora", accessIso);
+const onState = accessState(turnedOn.book.drivers.D0006, twoLate, lateRule, accessNow);
+assert(!turnedOn.error && onState.allowed && onState.source === "admin" && onState.pausedByRule && turnedOn.book.draftRev === 2 && turnedOn.book.log[0].line === "Scheduled rides on for 3 days", "an admin can turn scheduled rides on over the pause");
+assert(accessState(turnedOn.book.drivers.D0006, twoLate, lateRule, accessNow + 4 * 86_400_000).source === "rule", "after the days the rule decides again, and the pause lasts its 7 days");
+assert(accessState(undefined, twoLate, lateRule, accessNow + 7 * 86_400_000).allowed, "the pause ends 7 days after the late cancel that reached the limit");
+const turnedOff = setAccess(emptyAccessBook(), "D0001", { on: false, period: "always", days: 7, until: "" }, "nora", accessIso).book;
+assert(!accessState(turnedOff.drivers.D0001, [], lateRule, accessNow + 400 * 86_400_000).allowed && accessLabel(accessState(turnedOff.drivers.D0001, [], lateRule, accessNow), turnedOff.drivers.D0001, lateRule) === "Off always, set by nora", "off always stays off");
+assert(setAccess(emptyAccessBook(), "D0001", { on: false, period: "until", days: 7, until: "2026-10-01" }, "nora", accessIso).error === "The last day must be in the future." && choiceError({ on: true, period: "days", days: 0, until: "" }, accessNow) === "Choose 1 to 365 days.", "the period is checked");
+const back = clearAccess(turnedOff, "D0001", "nora", accessIso);
+assert(!back.drivers.D0001 && back.log[0].line === "Back to the late-cancel rule" && normalizeAccessBook(null).draftRev === 1, "back to the rule");
 
 console.log("driver ops ok");

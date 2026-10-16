@@ -57,7 +57,7 @@ export function CancelRateCard({ country, onCountry, countryName, disabled }: { 
         <Num label="Cancel rate limit" before="under" value={country.cancelRateLimitPct} unit="%" min={1} max={100} disabled={disabled} onChange={(cancelRateLimitPct) => onCountry({ ...country, cancelRateLimitPct: Math.round(cancelRateLimitPct) })} />
       </Row>
       <p className="dx-note dx-resv-tie"><EyeOff size={13} aria-hidden="true" /> <span>Never shown to drivers. Under their cancel rate they see: “{CANCEL_RATE_DRIVER_TEXT}”.</span></p>
-      <p className="dx-note"><span>Reasons marked “Doesn't count” never count (<Link to="/dispatch?view=reasons">Cancel reasons</Link>). Scheduled rides also follow the late-cancel rule in Reservations. The acceptance rate has no rules.</span></p>
+      <p className="dx-note"><span>Zones with “Over the cancel rate limit” on in Safety send no requests to drivers over it. Reasons marked “Doesn't count” never count (<Link to="/dispatch?view=reasons">Cancel reasons</Link>). Scheduled rides also follow the late-cancel rule in Reservations. The acceptance rate has no rules.</span></p>
     </Card>
   );
 }

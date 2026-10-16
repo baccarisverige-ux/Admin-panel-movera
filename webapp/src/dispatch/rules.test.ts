@@ -422,4 +422,12 @@ const a2File = rulesFile(emptyDispatchBook(), "SE", "now");
 assert(a2File.driverApp.cancelReasons.sv.groups.rider.length === 8 && a2File.driverApp.exclusiveReasons.Z001[0].id === "best-match", "the rules file has the driver app's shapes");
 assert(a2File.country.cancelRateLimitPct === 30 && a2File.glossary.pickupWait.includes("Pricing") && a2File.zones[0].rules.offerCard.badges, "the rules file has the new settings");
 
+// Round 3, A3: one cancel rate number. Safety's switch uses the country's cancel rate limit (30%).
+const overLimit = rankDrivers(base, se, request, [driver("ok", { cancelPct: 25 }), driver("high", { cancelPct: 31 })]);
+assert(!overLimit.find((row) => row.driver.id === "ok")!.out && overLimit.find((row) => row.driver.id === "high")!.out === "Cancel rate 31% is over the 30% limit", "drivers over the country's cancel rate limit get no requests");
+assert(rankDrivers(base, { ...se, cancelRateLimitPct: 20 }, request, [driver("ok", { cancelPct: 25 })])[0].out === "Cancel rate 25% is over the 20% limit", "a lower country limit blocks more drivers");
+assert(!rankDrivers({ ...base, safety: { ...base.safety, maxCancel: false } }, se, request, [driver("high", { cancelPct: 31 })])[0].out, "with the Safety switch off, the limit does not block requests");
+const oldSafety = liveRules({ ...emptyDispatchBook(), live: { Z001: { safety: { minRating: true, ratingBelow: 4.3, maxCancel: true, cancelAbove: 20, doNotMatch: true, womenOnly: true } } as never } }, "Z001");
+assert(!("cancelAbove" in oldSafety.safety) && oldSafety.safety.maxCancel && !("cancelAbove" in zoneDefault("Z001").safety), "the old zone cancel rate number is gone");
+
 console.log("dispatch rules ok");

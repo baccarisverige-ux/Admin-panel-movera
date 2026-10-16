@@ -3,6 +3,7 @@ import type { DocStatus } from "../drivers/gate.ts";
 /** Colour a document shows: green valid, orange expiring soon, red missing / wrong / expired, blue waiting review. */
 export type DocHealth = "valid" | "expiring" | "invalid" | "review";
 
+/** Used when no country rule is known. Each country sets its own first warning in Drivers › Onboarding › Steps and papers. */
 export const EXPIRY_WARNING_DAYS = 30;
 
 export type DocState = { status: DocStatus; expiresAt: string };
@@ -24,14 +25,17 @@ export function daysUntil(date: string, nowMs: number): number | null {
   return Math.floor((Date.parse(`${date}T23:59:59Z`) - nowMs) / DAY);
 }
 
-/** The colour follows the chosen status, and the expiry date can only make it worse. */
-export function docHealth(doc: DocState, nowMs: number): { health: DocHealth; label: string } {
+/**
+ * The colour follows the chosen status, and the expiry date can only make it worse. warnDays: the country's first
+ * expiry warning; from then the document shows orange.
+ */
+export function docHealth(doc: DocState, nowMs: number, warnDays = EXPIRY_WARNING_DAYS): { health: DocHealth; label: string } {
   const days = daysUntil(doc.expiresAt, nowMs);
   if (doc.status === "needed") return { health: "invalid", label: "Missing" };
   if (doc.status === "rejected") return { health: "invalid", label: "Wrong" };
   if (doc.status === "expired" || (days !== null && days < 0)) return { health: "invalid", label: "Expired" };
   if (doc.status === "in_review") return { health: "review", label: "Waiting review" };
-  if (doc.status === "expiring" || (days !== null && days <= EXPIRY_WARNING_DAYS)) {
+  if (doc.status === "expiring" || (days !== null && days <= warnDays)) {
     return { health: "expiring", label: days === null ? "Expires soon" : `Expires in ${days} day${days === 1 ? "" : "s"}` };
   }
   return { health: "valid", label: "Valid" };
@@ -39,9 +43,9 @@ export function docHealth(doc: DocState, nowMs: number): { health: DocHealth; la
 
 export type HealthCount = Record<DocHealth, number>;
 
-export function countHealth(docs: readonly DocState[], nowMs: number): HealthCount {
+export function countHealth(docs: readonly DocState[], nowMs: number, warnDays = EXPIRY_WARNING_DAYS): HealthCount {
   const counts: HealthCount = { valid: 0, expiring: 0, invalid: 0, review: 0 };
-  for (const doc of docs) counts[docHealth(doc, nowMs).health] += 1;
+  for (const doc of docs) counts[docHealth(doc, nowMs, warnDays).health] += 1;
   return counts;
 }
 

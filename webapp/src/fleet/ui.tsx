@@ -75,6 +75,8 @@ type DocumentsProps = {
   label: string;
   rows: DocRow[];
   nowMs: number;
+  /** The country's first expiry warning in days: documents show orange from then. */
+  warnDays?: number;
   canEdit: boolean;
   targetId: string;
   scope: string;
@@ -94,12 +96,12 @@ export function DocumentsTable(props: DocumentsProps) {
   );
 }
 
-function DocumentRow({ row, nowMs, canEdit, targetId, scope, sliceKey, expectedSliceRev, build, onSaved }: DocumentsProps & { row: DocRow }) {
+function DocumentRow({ row, nowMs, warnDays, canEdit, targetId, scope, sliceKey, expectedSliceRev, build, onSaved }: DocumentsProps & { row: DocRow }) {
   const [status, setStatus] = useState<DocStatus>(row.status);
   const [expiresAt, setExpiresAt] = useState(row.expiresAt);
   const [note, setNote] = useState(row.note);
-  const shown = docHealth({ status, expiresAt }, nowMs);
-  const saved = docHealth(row, nowMs);
+  const shown = docHealth({ status, expiresAt }, nowMs, warnDays);
+  const saved = docHealth(row, nowMs, warnDays);
   const changed = status !== row.status || expiresAt !== row.expiresAt || note.trim() !== row.note;
   const save = changed ? build(row, { status, expiresAt, note }) : null;
   const name = docLabel(row.id);
@@ -153,7 +155,7 @@ function DocumentRow({ row, nowMs, canEdit, targetId, scope, sliceKey, expectedS
             sliceKey={sliceKey}
             value={save.value}
             aria-label={`Save ${name}`}
-            onDone={() => onSaved(`${name} saved: ${docHealth({ status, expiresAt }, nowMs).label}.`)}
+            onDone={() => onSaved(`${name} saved: ${docHealth({ status, expiresAt }, nowMs, warnDays).label}.`)}
           >
             Save
           </CommandButton>

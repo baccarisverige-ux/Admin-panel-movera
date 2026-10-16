@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from "react-router";
 import { useMemo, useState } from "react";
-import { ArrowLeft, Banknote, Car, Clock3, Eye, FileText, Flag, History, ListOrdered, Lock, MapPinned, MessagesSquare, Route as RouteIcon, ShieldCheck, Star, Users, Wrench } from "lucide-react";
+import { ArrowLeft, Banknote, Car, Clock3, Coins, Eye, FileText, Flag, History, ListOrdered, Lock, MapPinned, MessagesSquare, Radar, Route as RouteIcon, ShieldCheck, Star, Users, Wrench } from "lucide-react";
 import { useAdminApi } from "../api/AdminApiContext";
 import { emptySafety, useAudit, useDrivers, useRecords, useSlice, useTrips, type SafetyBook } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
@@ -26,7 +26,6 @@ import {
   maskPhone,
   moneySplit,
   normalizeTripOps,
-  offersOf,
   routeOf,
   type TripOps,
 } from "../trips/file";
@@ -54,6 +53,8 @@ import {
 } from "../trips/present";
 import { AdminActions, ChatCalls, Section, SplitView, Waiting, agentName, entryLine } from "../trips/TripParts";
 import { RouteMap } from "../trips/RouteMap";
+import { cashFigures, isCashTrip } from "../trips/cash";
+import { offerLog, timelineOffers } from "../trips/offerLog";
 import { adjustFare, waitingMinutes } from "../trips/rules";
 import { CommandButton } from "../ui/CommandButton";
 import { StatusDot } from "../ui/kit";
@@ -139,8 +140,8 @@ export function TripPage() {
   const split = moneySplit(trip, zoneBook(store, trip.zoneId), Boolean(driver?.fleetId), ops.entries);
   const chat = chatOf(trip);
   const calls = callsOf(trip);
-  const zoneDrivers = (drivers.data ?? []).filter((row) => row.zoneId === trip.zoneId).map((row) => row.id);
-  const offers = offersOf(trip, zoneDrivers.length ? zoneDrivers : (drivers.data ?? []).map((row) => row.id));
+  const offerSteps = offerLog(trip, (drivers.data ?? []).map((row) => ({ id: row.id, name: row.name, zoneId: row.zoneId })));
+  const offers = timelineOffers(offerSteps);
   const driverName = (id: string) => drivers.data?.find((row) => row.id === id)?.name ?? "A driver";
   const allowed = canSeePrivate(role, ops.settings);
   const entries = entriesFor(ops, trip.id);
@@ -148,6 +149,9 @@ export function TripPage() {
   const riderId = riderIdFor(trip);
   const zone = zoneById(trip.zoneId);
   const time = (iso: string) => new Intl.DateTimeFormat(place.locale, { timeZone: place.timeZone, timeStyle: "short" }).format(new Date(iso));
+  const timeSec = (iso: string) => new Intl.DateTimeFormat(place.locale, { timeZone: place.timeZone, hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(iso));
+  const cashTrip = isCashTrip(trip, country);
+  const cash = cashTrip ? cashFigures(split) : null;
 
   // Ride checks on this trip: when the card opened and what each person answered.
   const now = Date.now();
@@ -245,12 +249,27 @@ export function TripPage() {
           <div className="op-facts-list">
             <p>Driver {driver ? <><Link to={`/drivers/${driver.id}`}>{driver.name}</Link> · {driver.id}</> : "Unassigned"}</p>
             <p><Car size={13} aria-hidden="true" /> Vehicle {vehicle ? `${vehicle.plate} · ${vehicle.make ?? ""} ${vehicle.model ?? ""}` : "Unassigned"}</p>
-            <p data-testid="trip-payment"><Banknote size={13} aria-hidden="true" /> Payment {statusLabel(payment)}</p>
+            <p data-testid="trip-payment"><Banknote size={13} aria-hidden="true" /> Payment {statusLabel(payment)} · {cashTrip ? "Cash" : "In the app"}</p>
             <p data-testid="trip-rating"><Star size={13} aria-hidden="true" /> Rating {ratingLabel(trip)}</p>
             <p data-testid="trip-pin">PIN verified {pinVerified(trip.id)}</p>
           </div>
         </Section>
       </div>
+
+      <Section id="offers" title="Offer log" icon={<Radar size={16} />} testId="trip-offer-log" wide>
+        {offerSteps.length ? (
+          <ol className="op-offer-log" aria-label="Offer log">
+            {offerSteps.map((step, index) => (
+              <li key={`${step.at}-${index}`} className={step.kind}>
+                <time>{timeSec(step.at)}</time>
+                <b>{step.title}</b>
+                <span>{step.detail}</span>
+              </li>
+            ))}
+          </ol>
+        ) : <p className="dx-calm">No offer was sent for this trip.</p>}
+        <p className="op-help">One line per step: Scheduled rides, Home popup, Exclusive (to whom and the answer), Radar (how many saw it), who tried to take it, who won and who got “No longer available”.</p>
+      </Section>
 
       <Section id="route" title="Route" icon={<RouteIcon size={16} />} testId="trip-route" wide>
         <div className="op-route-grid">
@@ -285,6 +304,20 @@ export function TripPage() {
         </Section>
         <Section id="split" title="Who gets what" icon={<Banknote size={16} />}>
           <SplitView split={split} money={money} />
+          {cashTrip ? (
+            <div className="op-cash" data-testid="trip-cash">
+              <b><Coins size={13} aria-hidden="true" /> Cash trip</b>
+              {cash ? (
+                <>
+                  <dl className="op-split-lines">
+                    <div><dt>Cash collected by driver</dt><dd>{money(cash.collected)}</dd></div>
+                    <div className="minus"><dt>Owed to Movera</dt><dd>{money(cash.owed)}</dd></div>
+                  </dl>
+                  <p className="op-help">The owed amount is taken from the driver's next payout. <Link to="/payouts">Payouts</Link></p>
+                </>
+              ) : <p className="op-help">The driver collects the fare in cash at the drop-off.</p>}
+            </div>
+          ) : null}
         </Section>
       </div>
 

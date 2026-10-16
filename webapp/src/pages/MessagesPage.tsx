@@ -8,16 +8,17 @@ import { useSession } from "../auth/SessionContext";
 import { Card, Choice, Num, Row } from "../dispatch/fields";
 import { COUNTRY_LANGS, GROUPS, LANG_LABEL, MSG_OPS_KEY, TRIGGERS, autoError, campaignResults, emptyMessageOps, normalizeMessageOps, rulesError, type AutoMessage, type MessageOps, type SendRules, type Extra } from "../messages/extra";
 import { useMarketScope } from "../markets/useMarketScope";
+import { DriverNoticesView } from "../messages/DriverNotices";
 import { Cards } from "../reports/ui";
 import { CommandButton } from "../ui/CommandButton";
 
-type Tab = "campaigns" | "auto" | "rules";
+type Tab = "campaigns" | "auto" | "rules" | "drivers";
 
 export function MessagesPage() {
   const { agent } = useSession();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const tab = (["campaigns", "auto", "rules"].includes(params.get("tab") ?? "") ? params.get("tab") : "campaigns") as Tab;
+  const tab = (["campaigns", "auto", "rules", "drivers"].includes(params.get("tab") ?? "") ? params.get("tab") : "campaigns") as Tab;
   const scope = useMarketScope();
   const store = useSlice<CampaignBook>("campaignOps", emptyCampaigns());
   const extraSlice = useSlice<MessageOps>(MSG_OPS_KEY, emptyMessageOps());
@@ -58,11 +59,11 @@ export function MessagesPage() {
         </div>
       </header>
       <div className="dash-tabs dx-views" role="tablist" aria-label="Message sections">
-        {([["campaigns", "Campaigns"], ["auto", "Automatic messages"], ["rules", "Limits and quiet hours"]] as const).map(([id, label]) => <button data-command="admin.campaigns.view" key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "active" : undefined} onClick={() => selectTab(id)}>{label}</button>)}
+        {([["campaigns", "Campaigns"], ["auto", "Automatic messages"], ["rules", "Limits and quiet hours"], ["drivers", "Driver notifications"]] as const).map(([id, label]) => <button data-command="admin.campaigns.view" key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "active" : undefined} onClick={() => selectTab(id)}>{label}</button>)}
       </div>
       <p role="status" className="gr-status">{notice}</p>
 
-      {tab === "auto" ? <AutoMessages ops={extra} country={scope.market.id} editable={Boolean(agent && can(agent.role, "settings.publish"))} onNotice={setNotice} /> : tab === "rules" ? <SendRulesView ops={extra} country={scope.market.id} editable={Boolean(agent && can(agent.role, "settings.publish"))} /> : (
+      {tab === "drivers" ? <DriverNoticesView key={scope.market.id} country={scope.market.id} editable={Boolean(agent && can(agent.role, "settings.publish"))} onNotice={setNotice} /> : tab === "auto" ? <AutoMessages ops={extra} country={scope.market.id} editable={Boolean(agent && can(agent.role, "settings.publish"))} onNotice={setNotice} /> : tab === "rules" ? <SendRulesView ops={extra} country={scope.market.id} editable={Boolean(agent && can(agent.role, "settings.publish"))} /> : (
         <>
           <Cards
             compare={false}

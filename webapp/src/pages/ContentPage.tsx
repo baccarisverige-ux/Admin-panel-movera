@@ -1,6 +1,6 @@
 import { useDirtyWarning } from "../ui/useDirtyWarning";
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, GitCompare, ImagePlus, MapPin, Smartphone, TriangleAlert } from "lucide-react";
 import { STUDIO_SLOTS, emptyStudio, studioSlot, changeStudio, useSlice, type StudioBook, type StudioText } from "../api/hooks";
 import { useSession } from "../auth/SessionContext";
@@ -11,6 +11,7 @@ import { MARKETS } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
 import { CommandButton } from "../ui/CommandButton";
 import { DiffTable } from "../content/DiffTable";
+import { DriverTextsView } from "../content/DriverTexts";
 
 const SLOT_LABEL: Record<string, string> = {
   "driver-home": "Driver app · home",
@@ -27,6 +28,8 @@ function slotLabel(id: string): string {
 export function ContentPage() {
   const { agent } = useSession();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const view = params.get("view") === "driver-texts" ? "driver-texts" : "slots";
   const scope = useMarketScope();
   const store = useSlice<StudioBook>("studioOps", emptyStudio());
   const extraSlice = useSlice<ContentOps>(CONTENT_OPS_KEY, emptyContentOps());
@@ -77,11 +80,17 @@ export function ContentPage() {
         <button data-command="admin.content.view" type="button" className="dash-btn ghost dx-back" onClick={() => (globalThis.history.length > 1 ? navigate(-1) : navigate("/"))}><ArrowLeft size={16} aria-hidden="true" /> Back</button>
         <div className="dx-head-text">
           <h2>Content</h2>
-          <p>Bilingual content studio. A second agent must publish. Originals and every publication remain in history. Simulation only.</p>
+          <p>{view === "driver-texts" ? "Island, offer and button texts in the driver app, in English, Swedish, French and Arabic." : "Bilingual content studio. A second agent must publish. Originals and every publication remain in history. Simulation only."}</p>
         </div>
       </header>
+      <div className="dash-tabs dx-views" role="tablist" aria-label="Content sections">
+        {([["slots", "Content slots"], ["driver-texts", "Driver app texts"]] as const).map(([tabId, label]) => (
+          <button data-command="admin.content.view" key={tabId} type="button" role="tab" aria-selected={view === tabId} className={view === tabId ? "active" : undefined} onClick={() => { setNotice(""); setParams(() => { const next = new URLSearchParams(globalThis.location.search); if (tabId === "slots") next.delete("view"); else next.set("view", tabId); return next; }, { replace: true }); }}>{label}</button>
+        ))}
+      </div>
       <p role="status" className="gr-status">{notice}</p>
 
+      {view === "driver-texts" ? <DriverTextsView editable={editable} onNotice={setNotice} /> : (
       <div className="gr-content">
         <nav className="gr-slots" aria-label="All slots">
           {STUDIO_SLOTS.map((item) => {
@@ -186,6 +195,7 @@ export function ContentPage() {
           <p className="gr-help">Published: {slot.published?.en ?? "No publication"}</p>
         </aside>
       </div>
+      )}
     </div>
   );
 }

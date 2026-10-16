@@ -95,7 +95,7 @@ export type Line = { label: string; minor: number; kind: "plus" | "minus" | "tot
  * so they add up to it exactly: trips, bonuses and tips, minus commission, the fleet owner's
  * part, fees and debts.
  */
-export function payoutLines(record: DemoRecord, fleet: boolean, sched: Schedule): { lines: Line[]; trips: number; fleetMinor: number; instant: boolean } {
+export function payoutLines(record: DemoRecord, fleet: boolean, sched: Schedule, cash: { minor: number; trips: number } = { minor: 0, trips: 0 }): { lines: Line[]; trips: number; fleetMinor: number; instant: boolean; cashMinor: number } {
   const net = record.fareOre ?? 0;
   const seed = hash(record.id);
   const minor = market(countryOfPayout(record)).minorUnits;
@@ -106,23 +106,28 @@ export function payoutLines(record: DemoRecord, fleet: boolean, sched: Schedule)
   const debts = seed % 5 === 2 ? round(net * 0.04) : 0;
   const fee = instant ? Math.round(net * (sched.instant.feePct / 100)) : 0;
   const fleetPct = fleet ? sched.fleetPct / 100 : 0;
-  // net = G − cG − fleet·(G − cG) + bonus + tips − fee − debts
-  const gross = Math.round((net - bonus - tips + fee + debts) / ((1 - 0.2) * (1 - fleetPct)));
+  // Cash the driver collected for Movera on cash trips is taken off this payout (Q23).
+  const cashMinor = Math.max(0, Math.round(cash.minor));
+  // net = G − cG − fleet·(G − cG) + bonus + tips − fee − debts − cash
+  const gross = Math.round((net - bonus - tips + fee + debts + cashMinor) / ((1 - 0.2) * (1 - fleetPct)));
   const fleetMinor = Math.round((gross - Math.round(gross * 0.2)) * fleetPct);
   // Whatever rounding is left goes into the commission line, so the lines always add up.
-  const commission = gross - fleetMinor + bonus + tips - fee - debts - net;
+  const commission = gross - fleetMinor + bonus + tips - fee - debts - cashMinor - net;
   const trips = Math.max(1, Math.round(gross / (minor * (minor === 100 ? 1.6 : 1) * 160)));
   const lines: Line[] = [
-    { label: `${trips} trips`, minor: gross, kind: "plus", help: "What riders paid for the driver's rides, before commission." },
+    cashMinor
+      ? { label: `${trips} trips paid in the app`, minor: gross, kind: "plus", help: "What riders paid in the app for the driver's rides, before commission. Cash rides are not in here: the driver already has that money." }
+      : { label: `${trips} trips`, minor: gross, kind: "plus", help: "What riders paid for the driver's rides, before commission." },
     ...(bonus ? [{ label: "Bonuses", minor: bonus, kind: "plus" as const, help: "Ride and area bonuses earned this period." }] : []),
     { label: "Tips", minor: tips, kind: "plus", help: "Tips go to the driver in full." },
     { label: "Movera commission 20%", minor: -commission, kind: "minus", help: "From the zone's price book." },
     ...(fleetMinor ? [{ label: `Fleet owner ${sched.fleetPct}%`, minor: -fleetMinor, kind: "minus" as const, help: "Paid to the driver's fleet owner." }] : []),
     ...(fee ? [{ label: `Instant cash-out fee ${sched.instant.feePct}%`, minor: -fee, kind: "minus" as const }] : []),
-    ...(debts ? [{ label: "Debts (cash rides, damage)", minor: -debts, kind: "minus" as const, help: "Money the driver owes Movera." }] : []),
+    ...(cashMinor ? [{ label: `Cash rides: owed to Movera (${cash.trips} trip${cash.trips === 1 ? "" : "s"})`, minor: -cashMinor, kind: "minus" as const, help: "The driver collected these fares in cash. Movera's part is taken from this payout." }] : []),
+    ...(debts ? [{ label: "Other debts (damage, fines)", minor: -debts, kind: "minus" as const, help: "Money the driver owes Movera." }] : []),
     { label: "Driver gets", minor: net, kind: "total" },
   ];
-  return { lines, trips, fleetMinor, instant };
+  return { lines, trips, fleetMinor, instant, cashMinor };
 }
 
 /** The next run date for the country's schedule, in the country's time. */

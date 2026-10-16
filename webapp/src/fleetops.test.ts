@@ -1,5 +1,6 @@
 import { DRIVER_DOCUMENTS, type DocStatus } from "./drivers/gate.ts";
-import { countryActivationIssue, demoLeads, docProgress, driverMessage, emptyOnboardingRules, funnel, neededDocs, normalizeOnboardingRules, remind, reminderDue, rulesError as onboardingError, stepOf, type Applicant } from "./drivers/onboarding.ts";
+import { docHealth, countHealth } from "./fleet/documents.ts";
+import { countryActivationIssue, demoLeads, docProgress, driverMessage, emptyOnboardingRules, firstWarningDays, funnel, neededDocs, normalizeOnboardingRules, remind, reminderDue, rulesError as onboardingError, stepOf, type Applicant } from "./drivers/onboarding.ts";
 import { carDocs, carEarnings, categoryProblem, checks, emptyVehicleRules, fits, photosOf, rulesError, rulesImpact, setPhoto, shouldHold } from "./vehicles/rules.ts";
 
 const assert = (ok: unknown, message: string) => {
@@ -20,6 +21,7 @@ const now = Date.parse("2026-10-12T12:00:00Z");
 const profile = { insuranceExpiresAt: "2026-10-20", inspectionExpiresAt: "2026-09-01", registrationStatus: "approved" as const };
 const docs = carDocs(profile, {}, now);
 assert(docs.find((doc) => doc.id === "insurance")?.health === "expiring", "insurance expiring soon");
+assert(carDocs(profile, {}, now, 5).find((doc) => doc.id === "insurance")?.health === "valid", "car papers follow the country's warning days");
 assert(docs.find((doc) => doc.id === "inspection")?.health === "invalid", "inspection expired");
 assert(shouldHold(docs, se) && !shouldHold(docs, { ...se, autoHold: false }), "auto hold follows the switch");
 assert(carDocs({ ...profile, inspectionExpiresAt: "2027-09-01" }, { vehicle_insurance: { status: "expired" as DocStatus, expiresAt: "2026-10-01" } }, now).find((doc) => doc.id === "insurance")?.expiresAt === "2026-10-01", "the worse paper and its date count");
@@ -64,5 +66,11 @@ assert(onboardingError({ ...onboarding.countries.SE, docWarnDays: [7, 30, 1] }) 
 assert(onboardingError({ ...onboarding.countries.SE, docWarnDays: [120, 7, 1] }) === "Document warnings: 1 to 90 days before expiry.", "warnings have a range");
 const oldOnboarding = normalizeOnboardingRules({ draftRev: 3, countries: { SE: { ...onboarding.countries.SE, docWarnDays: undefined, blockAtExpiry: undefined } } });
 assert(oldOnboarding.countries.SE.docWarnDays.join() === "30,7,1" && oldOnboarding.countries.SE.blockAtExpiry && oldOnboarding.draftRev === 3, "old saves get the document rules");
+// Document colours follow the country's first warning instead of a fixed 30 days.
+const in20 = { status: "approved" as DocStatus, expiresAt: new Date(Date.parse("2026-10-15T12:00:00Z") + 20 * 86_400_000).toISOString().slice(0, 10) };
+const at = Date.parse("2026-10-15T12:00:00Z");
+assert(firstWarningDays(onboarding, "SE") === 30 && firstWarningDays({ ...onboarding, countries: { ...onboarding.countries, FR: { ...onboarding.countries.FR, docWarnDays: [14, 3] } } }, "FR") === 14, "the first warning is the largest number of days");
+assert(docHealth(in20, at).health === "expiring" && docHealth(in20, at, 14).health === "valid" && docHealth(in20, at, 21).label === "Expires in 20 days", "a document turns orange at the country's first warning");
+assert(countHealth([in20, in20], at, 14).valid === 2 && countHealth([in20], at, 30).expiring === 1, "counts follow the warning days");
 
 console.log("fleet ops ok");

@@ -59,6 +59,12 @@ export function normalizeOnboardingRules(value: unknown): OnboardingRules {
   return { draftRev: typeof raw.draftRev === "number" ? raw.draftRev : 1, countries, reminders: Array.isArray(raw.reminders) ? raw.reminders : [] };
 }
 
+/** The country's first document warning, in days before expiry. Documents show orange from then. */
+export function firstWarningDays(rules: OnboardingRules, country: MarketId): number {
+  const days = rules.countries[country]?.docWarnDays ?? [];
+  return days.length ? Math.max(...days) : 30;
+}
+
 const DONE: DocStatus[] = ["approved", "expiring"];
 
 export type Applicant = {
