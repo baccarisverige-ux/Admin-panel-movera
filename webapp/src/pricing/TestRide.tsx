@@ -20,7 +20,7 @@ export function TestRide({ zoneName, currency, categories, book, liveSurge, draf
   const enabled = categories.filter((category) => book.prices[category.id]?.enabled);
   const [input, setInput] = useState<QuoteInput>({
     categoryId: enabled[0]?.id ?? "economy", km: 8, minutes: 18, waitMin: 0, stops: 0, stopWaitMin: 0, babySeats: 0, childSeats: 0,
-    longPickup: false, airportPickup: false, airportDropoff: false, reservation: false, surge: liveSurge, fixedRouteId: null,
+    airportPickup: false, airportDropoff: false, reservation: false, surge: liveSurge, fixedRouteId: null,
   });
   const set = (patch: Partial<QuoteInput>) => setInput((current) => ({ ...current, ...patch }));
   const quote = quoteRide(book, input);
@@ -61,7 +61,7 @@ export function TestRide({ zoneName, currency, categories, book, liveSurge, draf
           <label className="field">Child seats<NumberField label="Quote child seats" value={input.childSeats} max={3} onChange={(childSeats) => set({ childSeats: Math.round(childSeats) })} /></label>
         </div>
         <div className="check-chips">
-          {([["longPickup", "Long pickup"], ["airportPickup", "Airport pickup"], ["airportDropoff", "Airport drop-off"], ["reservation", "Reservation"]] as const).map(([key, label]) => (
+          {([["airportPickup", "Airport pickup"], ["airportDropoff", "Airport drop-off"], ["reservation", "Reservation"]] as const).map(([key, label]) => (
             <label key={key} className={input[key] ? "check-chip on" : "check-chip"}>
               <input type="checkbox" aria-label={`Quote ${label}`} checked={input[key]} onChange={(event) => set({ [key]: event.target.checked })} />
               {label}

@@ -1,0 +1,247 @@
+import { useState } from "react";
+import { AlertTriangle, Car, Copy, Info, Layers, Route, Wallet } from "lucide-react";
+import { market, type MarketId } from "../markets/markets";
+import { NumberField } from "./NumberField";
+import { PICKUP_DISPLAYS, PICKUP_OFFERS, pickupPayFor, pickupSplit, type PickupPay, type PickupRate } from "./pickupPay";
+import { currencySymbol, fromSek, inputStep, money, quoteRide, type CategoryDef, type Problem, type ZoneBook } from "./zonePricing";
+
+type Props = {
+  zoneName: string;
+  currency: MarketId;
+  categories: CategoryDef[];
+  book: ZoneBook;
+  published: ZoneBook;
+  problems: Problem[];
+  canEdit: boolean;
+  onChange: (pay: PickupPay) => void;
+  onUseInAllZones: () => void;
+  onCopy: () => void;
+};
+
+/** The sample ride the worked example uses for the rider's price and the driver's share. */
+const SAMPLE_TRIP = { km: 8, minutes: 18 };
+
+function Switch({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <label className="mini-switch big">
+      <input type="checkbox" role="switch" aria-label={label} checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      <span aria-hidden="true"><i /></span>
+    </label>
+  );
+}
+
+/** A big amount with the decimals and currency smaller, like the driver app's offer card. */
+function BigAmount({ value, currency }: { value: number; currency: MarketId }) {
+  const item = market(currency);
+  const digits = item.minorUnits === 1000 ? 3 : 2;
+  const parts = new Intl.NumberFormat(item.locale, { style: "currency", currency: item.currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).formatToParts(value);
+  const whole = parts.filter((part) => part.type === "integer" || part.type === "group" || part.type === "minusSign").map((part) => part.value).join("");
+  const fraction = parts.filter((part) => part.type === "decimal" || part.type === "fraction").map((part) => part.value).join("");
+  return (
+    <span className="pp-big" aria-label={money(value, currency)}>
+      <b>{whole}</b>
+      <small>{fraction}{currencySymbol(currency)}</small>
+    </span>
+  );
+}
+
+/** Driver pickup pay for one zone: rates per category, which offers get it, and how the driver sees it. */
+export function PickupPayPanel({ zoneName, currency, categories, book, published, problems, canEdit, onChange, onUseInAllZones, onCopy }: Props) {
+  const pay = book.pickupPay;
+  const before = published.pickupPay;
+  const bad = new Set(problems.map((problem) => problem.path));
+  const symbol = currencySymbol(currency);
+  const locale = market(currency).locale;
+  const num = (value: number, digits = 2) => new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
+  const short = (value: number) => String(Number(value.toFixed(2)));
+
+  const firstOn = categories.find((category) => category.id === "comfort" && pay.rates.comfort?.enabled) ?? categories.find((category) => pay.rates[category.id]?.enabled) ?? categories[0];
+  const [exampleId, setExampleId] = useState(firstOn?.id ?? "comfort");
+  const [exampleKm, setExampleKm] = useState(4.2);
+  const [exampleMin, setExampleMin] = useState(9);
+
+  const setRate = (categoryId: string, patch: Partial<PickupRate>) => onChange({ ...pay, rates: { ...pay.rates, [categoryId]: { ...pay.rates[categoryId], ...patch } } });
+
+  const exampleCategory = categories.find((category) => category.id === exampleId) ?? firstOn;
+  const rate = exampleCategory ? pay.rates[exampleCategory.id] : undefined;
+  const pickup = pickupPayFor(rate, exampleKm, exampleMin);
+  const quote = exampleCategory ? quoteRide(book, { categoryId: exampleCategory.id, ...SAMPLE_TRIP, waitMin: 0, stops: 0, stopWaitMin: 0, babySeats: 0, childSeats: 0, airportPickup: false, airportDropoff: false, reservation: false, surge: 1 }) : null;
+  const split = quote && !quote.error ? pickupSplit(quote.total, quote.driverGets, pickup.total) : null;
+  const pickupLine = `incl. ${money(pickup.total, currency)} pickup · ${short(exampleKm)} km · ${short(exampleMin)} min`;
+
+  return (
+    <div className="pp-layout">
+      <div className="pp-main">
+        <div className="pp-zone-tools">
+          <button data-command="admin.pricing.edit" type="button" className="dash-btn small ghost" disabled={!canEdit} onClick={onUseInAllZones}>
+            <Layers size={14} aria-hidden="true" /> Use in all zones
+          </button>
+          <button data-command="admin.pricing.copyZones" type="button" className="dash-btn small ghost" disabled={!canEdit} onClick={onCopy}>
+            <Copy size={14} aria-hidden="true" /> Copy to…
+          </button>
+        </div>
+
+        <section className="dash-card pp-card" aria-labelledby="pickup-title">
+          <header className="pp-head blue">
+            <span className="pp-icon blue"><Route size={20} aria-hidden="true" /></span>
+            <div>
+              <h3 id="pickup-title">Pickup pay · paid by Movera</h3>
+              <p>Drivers are paid for the drive to the pickup, from their live location when the offer shows. It is worked out again each time the offer shows. The rider's price never changes.</p>
+            </div>
+          </header>
+
+          <div className="pp-section">
+            <h4>Per category · {zoneName}</h4>
+            <div className="pp-table-wrap" tabIndex={0} aria-label="Pickup pay per category">
+              <table className="pp-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Category</th>
+                    <th scope="col">On</th>
+                    <th scope="col">Per km</th>
+                    <th scope="col">Per minute</th>
+                    <th scope="col">Free first km</th>
+                    <th scope="col">Free first minutes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categories.map((category) => {
+                    const item = pay.rates[category.id];
+                    const old = before.rates[category.id];
+                    if (!item) return null;
+                    const off = !item.enabled;
+                    const locked = !canEdit || off;
+                    return (
+                      <tr key={category.id} className={off ? "off" : undefined}>
+                        <th scope="row">{category.label}</th>
+                        <td><Switch label={`${category.label} pickup pay`} checked={item.enabled} disabled={!canEdit} onChange={(enabled) => setRate(category.id, { enabled })} /></td>
+                        <td><NumberField className="pp-unit" label={`${category.label} pickup per km`} value={item.perKm} unit={`${symbol}/km`} step={inputStep(currency)} disabled={locked} changed={item.perKm !== old?.perKm} invalid={bad.has(`pickup.${category.id}.perKm`)} onChange={(perKm) => setRate(category.id, { perKm })} /></td>
+                        <td><NumberField className="pp-unit" label={`${category.label} pickup per minute`} value={item.perMin} unit={`${symbol}/min`} step={inputStep(currency)} disabled={locked} changed={item.perMin !== old?.perMin} invalid={bad.has(`pickup.${category.id}.perMin`)} onChange={(perMin) => setRate(category.id, { perMin })} /></td>
+                        <td>
+                          <span className="pp-free">
+                            <Switch label={`${category.label} free first km`} checked={item.freeKmOn} disabled={locked} onChange={(freeKmOn) => setRate(category.id, { freeKmOn })} />
+                            <NumberField label={`${category.label} free km`} value={item.freeKm} unit="km" step={0.1} disabled={locked || !item.freeKmOn} changed={item.freeKm !== old?.freeKm || item.freeKmOn !== old?.freeKmOn} invalid={bad.has(`pickup.${category.id}.freeKm`)} onChange={(freeKm) => setRate(category.id, { freeKm })} />
+                          </span>
+                        </td>
+                        <td>
+                          <span className="pp-free">
+                            <Switch label={`${category.label} free first minutes`} checked={item.freeMinOn} disabled={locked} onChange={(freeMinOn) => setRate(category.id, { freeMinOn })} />
+                            <NumberField label={`${category.label} free minutes`} value={item.freeMin} unit="min" disabled={locked || !item.freeMinOn} changed={item.freeMin !== old?.freeMin || item.freeMinOn !== old?.freeMinOn} invalid={bad.has(`pickup.${category.id}.freeMin`)} onChange={(freeMin) => setRate(category.id, { freeMin })} />
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="fine-print">The free part is not paid. Turn either one, both or none on. There is no cap.</p>
+          </div>
+
+          <div className="pp-section">
+            <h4>Which offers get pickup pay</h4>
+            <ul className="pp-offers">
+              {PICKUP_OFFERS.map((item) => (
+                <li key={item.kind} className={pay.offers[item.kind] !== before.offers[item.kind] ? "changed" : undefined}>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <small>{item.hint}</small>
+                  </div>
+                  <Switch label={`Pickup pay for ${item.label}`} checked={pay.offers[item.kind]} disabled={!canEdit} onChange={(value) => onChange({ ...pay, offers: { ...pay.offers, [item.kind]: value } })} />
+                </li>
+              ))}
+              <li className="pp-never" aria-disabled="true">
+                <div>
+                  <strong>Normal reservations taken from Scheduled rides</strong>
+                  <small>Never paid. This cannot be changed.</small>
+                </div>
+                <Switch label="Pickup pay for normal reservations from Scheduled rides" checked={false} disabled onChange={() => undefined} />
+              </li>
+            </ul>
+            <p className="pp-note"><Info size={15} aria-hidden="true" /> Reservations taken from the Scheduled rides list never get pickup pay.</p>
+          </div>
+        </section>
+
+        <p className="pp-warning" role="note"><AlertTriangle size={15} aria-hidden="true" /> The old "Long pickup fee" ({money(fromSek(20, currency), currency)}, added to the rider's price) is removed. Pickup pay replaces it.</p>
+      </div>
+
+      <div className="pp-side">
+        <section className="dash-card pp-card" aria-labelledby="pickup-card-title">
+          <header className="pp-head violet">
+            <span className="pp-icon violet"><Car size={20} aria-hidden="true" /></span>
+            <div>
+              <h3 id="pickup-card-title">On the driver's offer card</h3>
+              <p>The driver always gets the total. You choose if the card also shows the pickup part.</p>
+            </div>
+          </header>
+          <div className="pp-section">
+            <div className="segmented pp-segmented" role="radiogroup" aria-label="Offer card shows">
+              {PICKUP_DISPLAYS.map((item) => (
+                <button data-command="admin.pricing.edit" key={item.id} type="button" role="radio" aria-checked={pay.display === item.id} className={pay.display === item.id ? "active" : undefined} disabled={!canEdit} onClick={() => onChange({ ...pay, display: item.id })}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className={pay.display === "total" ? "pp-offer chosen" : "pp-offer"} data-testid="offer-total-only">
+              <BigAmount value={split?.driverGets ?? 0} currency={currency} />
+              <small>Total only: the pickup pay is inside the price.</small>
+            </div>
+            <div className={pay.display === "breakdown" ? "pp-offer chosen" : "pp-offer"} data-testid="offer-breakdown">
+              <BigAmount value={split?.driverGets ?? 0} currency={currency} />
+              <span className="pp-pickup-line">{pickupLine}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="dash-card pp-card" aria-labelledby="pickup-example-title" data-testid="pickup-example">
+          <header className="pp-head green">
+            <span className="pp-icon green"><Wallet size={20} aria-hidden="true" /></span>
+            <div>
+              <h3 id="pickup-example-title">Example · {exampleCategory?.label}</h3>
+              <p>Driver {short(exampleKm)} km / {short(exampleMin)} min from the pickup when the offer shows. Ride {SAMPLE_TRIP.km} km, {SAMPLE_TRIP.minutes} min.</p>
+            </div>
+          </header>
+          <div className="pp-section">
+            <div className="pp-example-inputs">
+              <label className="field">
+                Category
+                <select aria-label="Example category" value={exampleCategory?.id ?? ""} onChange={(event) => setExampleId(event.target.value)}>
+                  {categories.map((category) => <option key={category.id} value={category.id}>{category.label}{pay.rates[category.id]?.enabled ? "" : " (pickup pay off)"}</option>)}
+                </select>
+              </label>
+              <label className="field">To pickup<NumberField label="Example pickup km" value={exampleKm} unit="km" step={0.1} onChange={setExampleKm} /></label>
+              <label className="field">Time<NumberField label="Example pickup minutes" value={exampleMin} unit="min" onChange={setExampleMin} /></label>
+            </div>
+            <div className="pp-receipt">
+              {rate?.enabled ? (
+                <dl className="pp-lines">
+                  <div><dt>({short(exampleKm)}{pickup.freeKm ? ` − ${short(pickup.freeKm)} free` : ""}) km × {num(rate.perKm)}</dt><dd>{money(pickup.kmPay, currency)}</dd></div>
+                  <div><dt>({short(exampleMin)}{pickup.freeMin ? ` − ${short(pickup.freeMin)} free` : ""}) min × {num(rate.perMin)}</dt><dd>{money(pickup.minPay, currency)}</dd></div>
+                </dl>
+              ) : <p className="pp-muted">Pickup pay is off for {exampleCategory?.label}.</p>}
+              <dl className="pp-lines total">
+                <div><dt>Pickup pay</dt><dd data-testid="pickup-pay-total">{money(pickup.total, currency)}</dd></div>
+              </dl>
+              {split ? (
+                <>
+                  <dl className="pp-lines">
+                    <div><dt>Rider pays (unchanged)</dt><dd>{money(split.riderPays, currency)}</dd></div>
+                    <div><dt>Driver's share of the fare</dt><dd>{money(split.driverFare, currency)}</dd></div>
+                    <div><dt>+ Pickup pay</dt><dd>{money(split.pickup, currency)}</dd></div>
+                  </dl>
+                  <dl className="pp-lines total">
+                    <div><dt>Driver gets</dt><dd data-testid="pickup-driver-gets">{money(split.driverGets, currency)}</dd></div>
+                  </dl>
+                  <dl className="pp-lines">
+                    <div><dt>Movera keeps</dt><dd data-testid="pickup-movera-keeps">{money(split.moveraKeeps, currency)}</dd></div>
+                  </dl>
+                  <p className="pp-muted">instead of {money(split.commission, currency)}: pickup pay comes out of Movera's commission.</p>
+                </>
+              ) : <p className="pp-muted">{quote?.error ?? "Pick a category."}</p>}
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

@@ -1,7 +1,8 @@
 import { MARKETS, market, marketOfZone, zoneById, type MarketId } from "../markets/markets.ts";
+import { completePickupPay, convertPickupPay, defaultPickupPay, diffPickupPay, validatePickupPay, type PickupPay } from "./pickupPay.ts";
 
 /**
- * Prices, fees, surge settings and commission, one full set per zone.
+ * Prices, fees, surge settings, commission and driver pickup pay, one full set per zone.
  * Amounts are in the zone's own currency, as major units (kr, €, DT), VAT included.
  * Edits stay in a local draft until an admin publishes them as a new revision.
  */
@@ -27,7 +28,6 @@ export type CategoryPrice = {
   cancelFee: number;
   freeCancelMin: number;
   noShowFee: number;
-  longPickupFee: number;
   extraStopFee: number;
   babySeatFee: number;
   childSeatFee: number;
@@ -89,6 +89,8 @@ export type ZoneBook = {
   scheduled: ScheduledSurge[];
   commission: Record<string, number>;
   fleetCommissionPct: number;
+  /** Driver pickup pay, paid by Movera from its commission. */
+  pickupPay: PickupPay;
 };
 
 export type ManualSurge = { multiplier: number; startedAt: string; endsAt: string; by: string; reason: string };
@@ -155,7 +157,6 @@ export const PRICE_ROWS: { field: PriceField; label: string; unit: "money" | "mi
   { field: "freeCancelMin", label: "Rider free cancellation window", unit: "min", group: "Cancellation" },
   { field: "cancelFee", label: "Cancellation fee (after the window)", unit: "money", group: "Cancellation" },
   { field: "noShowFee", label: "No-show fee", unit: "money", group: "Cancellation" },
-  { field: "longPickupFee", label: "Long pickup fee", unit: "money", group: "Extras", hint: "When the driver is far from the pickup" },
   { field: "extraStopFee", label: "Extra stop fee", unit: "money", group: "Extras" },
   { field: "babySeatFee", label: "Baby seat fee", unit: "money", group: "Extras" },
   { field: "childSeatFee", label: "Child seat fee", unit: "money", group: "Extras" },
@@ -210,7 +211,7 @@ export function currencySymbol(id: MarketId): string {
 
 const SEK_BASE: Omit<CategoryPrice, "enabled"> = {
   base: 29, perKm: 12, perMin: 4, freeWaitMin: 2, waitPerMin: 5, stopWaitPerMin: 5,
-  cancelFee: 40, freeCancelMin: 2, noShowFee: 50, longPickupFee: 20, extraStopFee: 15,
+  cancelFee: 40, freeCancelMin: 2, noShowFee: 50, extraStopFee: 15,
   babySeatFee: 30, childSeatFee: 30, minimum: 49, maximum: 1500, appFeePct: 10,
 };
 
@@ -221,7 +222,7 @@ const NO_SHOW_FEE_SEK = 65;
 
 const CATEGORY_LIFT: Record<string, number> = { economy: 1, comfort: 1.25, premium: 1.8, priority: 1.35, xl: 1.5, electric: 1.1, pet: 1.15, child_seat: 1.2 };
 
-const MONEY_FIELDS: PriceField[] = ["base", "perKm", "perMin", "waitPerMin", "stopWaitPerMin", "cancelFee", "noShowFee", "longPickupFee", "extraStopFee", "babySeatFee", "childSeatFee", "minimum", "maximum"];
+const MONEY_FIELDS: PriceField[] = ["base", "perKm", "perMin", "waitPerMin", "stopWaitPerMin", "cancelFee", "noShowFee", "extraStopFee", "babySeatFee", "childSeatFee", "minimum", "maximum"];
 
 export function defaultCategoryPrice(categoryId: string, id: MarketId, airport = false): CategoryPrice {
   const lift = CATEGORY_LIFT[categoryId] ?? 1;
@@ -276,6 +277,7 @@ export function defaultZoneBook(zoneId: string, categories: readonly CategoryDef
     scheduled: [],
     commission: Object.fromEntries(categories.map((category) => [category.id, category.id === "premium" ? 22 : 20])),
     fleetCommissionPct: 5,
+    pickupPay: defaultPickupPay(categories.map((category) => category.id), factor),
   };
 }
 
@@ -313,13 +315,23 @@ function completeBook(book: ZoneBook, categories: readonly CategoryDef[]): ZoneB
   return {
     ...fallback,
     ...book,
-    prices: Object.fromEntries(categories.map((category) => [category.id, { ...defaultCategoryPrice(category.id, id, airport), ...(book.prices?.[category.id] ?? {}) }])),
+    prices: Object.fromEntries(categories.map((category) => [category.id, withoutRetiredFields({ ...defaultCategoryPrice(category.id, id, airport), ...(book.prices?.[category.id] ?? {}) })])),
     commission: Object.fromEntries(categories.map((category) => [category.id, book.commission?.[category.id] ?? fallback.commission[category.id] ?? 20])),
     fees: { ...fallback.fees, ...(book.fees ?? {}) },
     smart: { ...fallback.smart, ...(book.smart ?? {}), profiles: book.smart?.profiles?.length ? book.smart.profiles : fallback.smart.profiles },
     routes: book.routes ?? [],
     scheduled: book.scheduled ?? [],
+    pickupPay: completePickupPay(book.pickupPay, categories.map((category) => category.id), CURRENCY[id].factor),
   };
+}
+
+/** Fields older data may still carry. The rider "Long pickup fee" is gone: drivers get pickup pay from Movera instead. */
+const RETIRED_PRICE_FIELDS = ["longPickupFee"];
+
+function withoutRetiredFields(price: CategoryPrice): CategoryPrice {
+  const copy: Record<string, unknown> = { ...price };
+  for (const field of RETIRED_PRICE_FIELDS) delete copy[field];
+  return copy as CategoryPrice;
 }
 
 export function zoneLive(store: PricingStore, zoneId: string): ZoneLive {
@@ -352,6 +364,7 @@ export function validateZoneBook(book: ZoneBook, categories: readonly CategoryDe
     const commission = book.commission[category.id];
     if (!Number.isFinite(commission) || commission < 0 || commission > 60) add(`commission.${category.id}`, `${category.label}: commission must be between 0 and 60%.`);
   }
+  problems.push(...validatePickupPay(book.pickupPay, categories));
   if (book.fleetCommissionPct < 0 || book.fleetCommissionPct > 30) add("commission.fleet", "Fleet owner share must be between 0 and 30%.");
   for (const [key, value] of Object.entries(book.fees)) {
     if (typeof value === "number" && (!Number.isFinite(value) || value < 0)) add(`fees.${key}`, "Fees must be 0 or more.");
@@ -411,6 +424,7 @@ export function diffBooks(before: ZoneBook, after: ZoneBook, categories: readonl
   if (JSON.stringify(before.routes) !== JSON.stringify(after.routes)) lines.push(`Fixed routes: ${after.routes.length} route${after.routes.length === 1 ? "" : "s"}`);
   if (JSON.stringify(before.smart) !== JSON.stringify(after.smart)) lines.push(before.smart.enabled !== after.smart.enabled ? `Smart surge turned ${after.smart.enabled ? "on" : "off"}` : "Smart surge settings changed");
   if (JSON.stringify(before.scheduled) !== JSON.stringify(after.scheduled)) lines.push(`Scheduled surges: ${after.scheduled.length}`);
+  lines.push(...diffPickupPay(before.pickupPay, after.pickupPay, categories));
   return lines;
 }
 
@@ -465,7 +479,7 @@ export function undoLastPublish(store: PricingStore, actorId: string, at: string
   return result.error ? { store, error: result.error } : { store: result.store };
 }
 
-export type CopyPart = "prices" | "fees" | "surge" | "commission";
+export type CopyPart = "prices" | "fees" | "surge" | "commission" | "pickup";
 
 /** Copy parts of one zone into another. Amounts are converted when the countries differ. */
 export function copyInto(source: ZoneBook, target: ZoneBook, parts: readonly CopyPart[]): ZoneBook {
@@ -493,6 +507,9 @@ export function copyInto(source: ZoneBook, target: ZoneBook, parts: readonly Cop
   if (parts.includes("commission")) {
     next.commission = { ...source.commission };
     next.fleetCommissionPct = source.fleetCommissionPct;
+  }
+  if (parts.includes("pickup")) {
+    next.pickupPay = convertPickupPay(source.pickupPay, (value) => (from === to ? value : roundTo(value * rate, 0.01)));
   }
   return next;
 }
@@ -607,7 +624,6 @@ export type QuoteInput = {
   stopWaitMin: number;
   babySeats: number;
   childSeats: number;
-  longPickup: boolean;
   airportPickup: boolean;
   airportDropoff: boolean;
   reservation: boolean;
@@ -664,7 +680,6 @@ export function quoteRide(book: ZoneBook, input: QuoteInput): Quote {
   extra(`Waiting at stops ${input.stopWaitMin} min`, input.stopWaitMin * price.stopWaitPerMin);
   extra(`${input.babySeats} baby seat${input.babySeats === 1 ? "" : "s"}`, input.babySeats * price.babySeatFee);
   extra(`${input.childSeats} child seat${input.childSeats === 1 ? "" : "s"}`, input.childSeats * price.childSeatFee);
-  if (input.longPickup) extra("Long pickup", price.longPickupFee);
   if (input.airportPickup) extra("Airport pickup", book.fees.airportPickup, "fee");
   if (input.airportDropoff) extra("Airport drop-off", book.fees.airportDropoff, "fee");
   if (input.reservation) extra("Reservation", book.fees.reservationFee, "fee");

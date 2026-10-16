@@ -207,7 +207,7 @@ test("R9 content role can look at pricing but cannot change it", async ({ page }
 test("R9 pricing remains usable at 390px", async ({ page }) => {
   await session(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const tab of ["prices", "fees", "surge", "commission", "history"]) {
+  for (const tab of ["prices", "fees", "surge", "commission", "pickup", "history"]) {
     await page.goto(`/pricing?tab=${tab}`);
     await expect(page.getByRole("tab", { name: new RegExp(tab, "i") })).toHaveAttribute("aria-selected", "true");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
