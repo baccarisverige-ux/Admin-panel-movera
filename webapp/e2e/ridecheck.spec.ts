@@ -109,6 +109,8 @@ test("ride check log: every check with filters, repeats, and links to the trip",
   await page.getByRole("tab", { name: /Ride checks/ }).click();
   await expect(page.getByRole("heading", { name: "Ride checks in Sweden" })).toBeVisible();
   const rows = page.getByRole("table", { name: "Ride check log" }).locator("tbody tr");
+  // The log loads after the tab opens; wait for it before counting.
+  await expect.poll(() => rows.count()).toBeGreaterThanOrEqual(12);
   const all = await rows.count();
   expect(all).toBeGreaterThanOrEqual(12);
   await page.getByLabel("Trigger", { exact: true }).selectOption({ label: "Dropped far away" });
