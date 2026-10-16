@@ -116,7 +116,7 @@ export function VehicleDetailPage() {
   const countryRules = rules.countries[country];
   const driver = drivers.data?.find((item) => item.id === record.driverId);
   const dops = driver ? driverOps(store.value, { id: driver.id, name: driver.name, fleetId: driver.fleetId, status: driver.status }) : null;
-  const docs = carDocs(profile, dops ? { vehicle_insurance: dops.documents.vehicle_insurance, vehicle_registration: dops.documents.vehicle_registration } : {}, now);
+  const docs = carDocs(profile, dops ? { vehicle_insurance: dops.documents.vehicle_insurance, vehicle_registration: dops.documents.vehicle_registration } : {}, now, countryRules.warnDays);
   const photos = photosOf(rules, record.id);
   const car = { year: profile.year, seats: profile.seats, fuel: profile.fuel, category: profile.category };
   const fitsList = fits(car, countryRules);

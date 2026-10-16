@@ -12,6 +12,7 @@ import {
   type ReservationBook,
 } from "../api/hooks";
 import { DataTable } from "../ui/DataTable";
+import { ScheduledAccessCard } from "../drivers/ScheduledAccess";
 
 const VIEWS = [
   { id: "all", label: "All" },
@@ -119,6 +120,10 @@ export function ReservationsPage() {
           if (id) navigate(`/reservations/${id}`);
         }}
       />
+
+      <div className="resv-access">
+        <ScheduledAccessCard />
+      </div>
     </>
   );
 }

@@ -291,6 +291,24 @@ body.dx-no-scroll { overflow: hidden; }
 .dx-reason-texts { display: grid; gap: 4px; min-width: 0; }
 .dx-reason-texts small { font-size: 11px; color: var(--muted); }
 
+/* Round 3, A3: scheduled rides access, offer log, cash, driver texts and notifications */
+.resv-access { margin-top: 16px; }
+.sa-list { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 6px; }
+.sa-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+.sa-list li.off { border-color: #f3d1a8; background: #fffaf3; }
+.sa-list li > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.sa-list small { font-size: 12px; color: var(--dash-ink-2); }
+.sa-tools { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.sa-driver { display: grid; gap: 4px; }
+.sa-state { margin: 6px 0 0; padding: 8px 12px; border-radius: 10px; background: #e9f7ef; color: #13723f; font-size: 13px; }
+.sa-state.off { background: #fff4e5; color: #8a4a00; }
+.sa-rule { margin: 4px 0; font-size: 12.5px; color: var(--dash-ink-2); }
+.sa-late, .sa-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; color: var(--dash-ink-2); }
+.sa-late li { padding: 5px 10px; border-radius: 9px; background: #fff6f6; }
+.sa-log li { display: flex; gap: 5px; align-items: center; }
+.dx-limit-link { font-size: 13px; font-weight: 700; display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: baseline; }
+.dx-limit-link a { font-weight: 600; }
+
 /* Phones */
 .dx-phone .dp-screen { width: 250px; height: 500px; }
 .dx-offer { position: absolute; left: 10px; right: 10px; bottom: 12px; display: grid; gap: 5px; padding: 12px 12px 14px; border-radius: 20px; background: #fff; color: #1d252c; box-shadow: 0 -6px 20px rgba(0, 0, 0, .3); overflow: hidden; }

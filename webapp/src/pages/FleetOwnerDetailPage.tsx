@@ -12,6 +12,7 @@ import { DRIVER_DOCUMENTS } from "../drivers/gate";
 import { driverOps, emptyDriverOpsBook, type DriverOpsBook } from "../drivers/ops";
 import { statusLabel } from "../domain/labels";
 import { countHealth } from "../fleet/documents";
+import { useDocWarnDays } from "../drivers/useDocWarnDays";
 import {
   emptyOwnerOpsBook,
   OWNER_DOCUMENTS,
@@ -52,6 +53,7 @@ export function FleetOwnerDetailPage() {
   const audit = useAudit();
   const store = useSlice<OwnerOpsBook>("fleetOwnerOps", emptyOwnerOpsBook());
   const driverStore = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
+  const warnDaysFor = useDocWarnDays();
   const [tab, setTab] = useState(() => params.get("tab") ?? "overview");
   useEffect(() => {
     const restore = () => setTab(new URLSearchParams(window.location.search).get("tab") ?? "overview");
@@ -79,8 +81,8 @@ export function FleetOwnerDetailPage() {
     const ops = driverOps(driverStore.value, { id: driver.id, name: driver.name, fleetId: driver.fleetId, status: driver.status, kind: driver.kind });
     const docs = DRIVER_DOCUMENTS.filter((id) => id !== "company_registration").map((id) => ops.documents[id]);
     const report = driverPerformance({ id: driver.id, zoneId: driver.zoneId, status: driver.status, stars: ops.ratings.stars, acceptancePct: ops.ratings.acceptancePct, cancellationPct: ops.ratings.cancellationPct }, span, false);
-    return { driver, counts: countHealth(docs, now), total: docs.length, perf: report.current, prev: report.previous };
-  }), [crew, driverStore.value, span, now]);
+    return { driver, counts: countHealth(docs, now, warnDaysFor(driver.zoneId)), total: docs.length, perf: report.current, prev: report.previous };
+  }), [crew, driverStore.value, span, now, warnDaysFor]);
 
   if (owners.isLoading || store.loading) return <p className="state-line">Loading fleet owner.</p>;
   if (!owner) {
@@ -99,7 +101,8 @@ export function FleetOwnerDetailPage() {
   const seed = { id: owner.id, name: owner.name, status: owner.status, kind: owner.kind };
   const ops = ownerOps(store.value, seed);
   const docRows: DocRow[] = OWNER_DOCUMENTS.map((id) => ops.documents[id]);
-  const health = countHealth(docRows, now);
+  const warnDays = warnDaysFor(owner.zoneId);
+  const health = countHealth(docRows, now, warnDays);
   const money = (minor: number) => formatMoney(minor, country);
   const compact = (minor: number) => formatMoney(minor, country, { compact: true });
   const total = combine(crewStats.map((row) => row.perf));
@@ -278,6 +281,7 @@ export function FleetOwnerDetailPage() {
             label="Fleet owner documents"
             rows={docRows}
             nowMs={now}
+            warnDays={warnDays}
             canEdit={can(role, "documents.approve")}
             targetId={owner.id}
             scope={owner.zoneId}

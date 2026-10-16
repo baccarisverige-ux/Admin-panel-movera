@@ -392,7 +392,7 @@ function Drivers({ zone, onChange, disabled, country, onCountry, countryName }: 
   );
 }
 
-function Safety({ zone, onChange, disabled }: Props) {
+function Safety({ zone, onChange, disabled, country, countryName }: Props) {
   const safety = zone.safety;
   const set = (patch: Partial<ZoneDispatch["safety"]>) => onChange({ ...zone, safety: { ...safety, ...patch } });
   return (
@@ -401,8 +401,8 @@ function Safety({ zone, onChange, disabled }: Props) {
         <Row label="Lowest rating" help="Drivers under this rating get no requests." on={safety.minRating} disabled={disabled} onToggle={(minRating) => set({ minRating })}>
           <Num label="Lowest rating" value={safety.ratingBelow} unit="stars" step={0.1} min={1} max={5} disabled={disabled} onChange={(ratingBelow) => set({ ratingBelow })} />
         </Row>
-        <Row label="Highest cancel rate" help="Drivers over this cancel rate get no requests." on={safety.maxCancel} disabled={disabled} onToggle={(maxCancel) => set({ maxCancel })}>
-          <Num label="Highest cancel rate" value={safety.cancelAbove} unit="%" min={1} max={100} disabled={disabled} onChange={(cancelAbove) => set({ cancelAbove })} />
+        <Row label="Over the cancel rate limit" help="Drivers over the cancel rate limit get no requests in this zone." on={safety.maxCancel} disabled={disabled} onToggle={(maxCancel) => set({ maxCancel })}>
+          <span className="dx-limit-link" data-testid="safety-cancel-limit">Over {country.cancelRateLimitPct}% · <Link to={`/dispatch?zone=${zone.zoneId}&tab=drivers`}>Cancel rate limit for all of {countryName}</Link></span>
         </Row>
         <Row label="Do not match list" help="A rider and a driver who reported each other never meet again." on={safety.doNotMatch} disabled={disabled} onToggle={(doNotMatch) => set({ doNotMatch })} />
         <Row label="Women-only rides" help="A female rider can ask for a female driver." on={safety.womenOnly} disabled={disabled} onToggle={(womenOnly) => set({ womenOnly })} />

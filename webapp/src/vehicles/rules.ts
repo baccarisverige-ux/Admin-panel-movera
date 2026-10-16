@@ -1,6 +1,6 @@
 import type { DemoRecord } from "../api/seed.ts";
 import type { DocStatus, Vehicle } from "../drivers/gate.ts";
-import { docHealth, type DocHealth } from "../fleet/documents.ts";
+import { EXPIRY_WARNING_DAYS, docHealth, type DocHealth } from "../fleet/documents.ts";
 import { MARKETS, marketOfZone, type MarketId } from "../markets/markets.ts";
 
 /**
@@ -94,21 +94,22 @@ export function countryOfZone(zoneId: string): MarketId {
 
 export type CarDoc = { id: "insurance" | "inspection" | "registration"; label: string; expiresAt: string; health: DocHealth; text: string };
 
-/** The car's papers. When the driver uploaded insurance or registration, the worse of the two counts. */
+/** The car's papers. When the driver uploaded insurance or registration, the worse of the two counts. warnDays: the country's warning days for papers. */
 export function carDocs(
   profile: { insuranceExpiresAt: string; inspectionExpiresAt: string; registrationStatus: "in_review" | "approved" | "rejected" },
   driverDocs: Partial<Record<"vehicle_insurance" | "vehicle_registration", { status: DocStatus; expiresAt: string }>>,
   now: number,
+  warnDays = EXPIRY_WARNING_DAYS,
 ): CarDoc[] {
   type Seen = { health: DocHealth; label: string; expiresAt: string };
   const rank: Record<DocHealth, number> = { invalid: 0, expiring: 1, review: 2, valid: 3 };
   // A paper the driver has not uploaded yet does not count against the car's own record.
-  const fromDriver = (doc?: { status: DocStatus; expiresAt: string }): Seen | undefined => (doc && doc.status !== "needed" ? { ...docHealth(doc, now), expiresAt: doc.expiresAt } : undefined);
+  const fromDriver = (doc?: { status: DocStatus; expiresAt: string }): Seen | undefined => (doc && doc.status !== "needed" ? { ...docHealth(doc, now, warnDays), expiresAt: doc.expiresAt } : undefined);
   const worse = (a: Seen, b?: Seen) => (b && rank[b.health] < rank[a.health] ? b : a);
-  const insurance = worse({ ...docHealth({ status: "approved", expiresAt: profile.insuranceExpiresAt }, now), expiresAt: profile.insuranceExpiresAt }, fromDriver(driverDocs.vehicle_insurance));
-  const inspection = { ...docHealth({ status: "approved", expiresAt: profile.inspectionExpiresAt }, now), expiresAt: profile.inspectionExpiresAt };
+  const insurance = worse({ ...docHealth({ status: "approved", expiresAt: profile.insuranceExpiresAt }, now, warnDays), expiresAt: profile.insuranceExpiresAt }, fromDriver(driverDocs.vehicle_insurance));
+  const inspection = { ...docHealth({ status: "approved", expiresAt: profile.inspectionExpiresAt }, now, warnDays), expiresAt: profile.inspectionExpiresAt };
   const regStatus: DocStatus = profile.registrationStatus === "approved" ? "approved" : profile.registrationStatus === "rejected" ? "rejected" : "in_review";
-  const registration = worse({ ...docHealth({ status: regStatus, expiresAt: "" }, now), expiresAt: "" }, fromDriver(driverDocs.vehicle_registration));
+  const registration = worse({ ...docHealth({ status: regStatus, expiresAt: "" }, now, warnDays), expiresAt: "" }, fromDriver(driverDocs.vehicle_registration));
   return [
     { id: "insurance", label: "Insurance", expiresAt: insurance.expiresAt, health: insurance.health, text: insurance.label },
     { id: "inspection", label: "Inspection", expiresAt: inspection.expiresAt, health: inspection.health, text: inspection.label },

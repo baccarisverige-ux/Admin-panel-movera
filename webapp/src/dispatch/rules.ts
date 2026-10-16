@@ -260,7 +260,8 @@ export type ZoneDispatch = {
   goingHome: { on: boolean; perDay: number; maxOffDeg: number };
   fairness: { idleBoost: boolean; idlePoints: number; hourCap: boolean; hourRides: number; skipPause: boolean; skips: number; pauseMin: number };
   decline: { on: boolean; countsAcceptance: boolean; pauseAfter: number; pauseMin: number; longTripFree: boolean; farPickupFree: boolean; farPickupKm: number };
-  safety: { minRating: boolean; ratingBelow: number; maxCancel: boolean; cancelAbove: number; doNotMatch: boolean; womenOnly: boolean };
+  /** maxCancel: drivers over the country's cancel rate limit (CountryDispatch.cancelRateLimitPct) get no requests in this zone. */
+  safety: { minRating: boolean; ratingBelow: number; maxCancel: boolean; doNotMatch: boolean; womenOnly: boolean };
   rideCheck: RideCheckRules;
   alerts: { id: AlertId; on: boolean; limit: number; panel: boolean; email: boolean; sms: boolean }[];
 };
@@ -413,7 +414,7 @@ export function defaultZone(zone: Pick<MarketZone, "id" | "kind">): ZoneDispatch
     goingHome: { on: true, perDay: 2, maxOffDeg: 45 },
     fairness: { idleBoost: true, idlePoints: 10, hourCap: false, hourRides: 4, skipPause: true, skips: 3, pauseMin: 5 },
     decline: { on: true, countsAcceptance: true, pauseAfter: 3, pauseMin: 5, longTripFree: true, farPickupFree: true, farPickupKm: 5 },
-    safety: { minRating: true, ratingBelow: 4.3, maxCancel: true, cancelAbove: 20, doNotMatch: true, womenOnly: true },
+    safety: { minRating: true, ratingBelow: 4.3, maxCancel: true, doNotMatch: true, womenOnly: true },
     rideCheck: rideCheckDefault(),
     alerts: [
       { id: "long_wait", on: true, limit: 5, panel: true, email: false, sms: false },
@@ -622,6 +623,10 @@ function complete(zoneId: string, stored: Partial<ZoneDispatch> | undefined): Zo
     merged.exclusiveWhileDriving = { on: typeof oldApp.drivingOn === "boolean" ? oldApp.drivingOn : base.exclusiveWhileDriving.on, count: Math.min(5, Math.max(1, typeof oldApp.driving === "number" ? oldApp.driving : base.exclusiveWhileDriving.count)) };
   }
   merged.finishing = { ...(merged.finishing as ZoneDispatch["finishing"]), radar: false };
+  // One cancel rate number: the country's cancel rate limit. Older saves had their own "Highest cancel rate" here.
+  const safety = { ...(merged.safety as Record<string, unknown>) };
+  delete safety.cancelAbove;
+  merged.safety = safety;
   merged.offerCard = completeOfferCard(stored.offerCard);
   merged.exclusiveReasons = completeExclusiveReasons(stored.exclusiveReasons);
   merged.pickupWait = completePickupWait(base.pickupWait, stored.pickupWait);
@@ -900,7 +905,7 @@ const LABELS: Record<string, string> = {
   "fairness.skipPause": "Pause after skips", "fairness.skips": "Skips in a row", "fairness.pauseMin": "Skip pause minutes",
   "decline.on": "Saying no rules", "decline.countsAcceptance": "No lowers acceptance", "decline.pauseAfter": "Pause after no's", "decline.pauseMin": "No pause minutes",
   "decline.longTripFree": "Long trips free to refuse", "decline.farPickupFree": "Far pickups free to refuse", "decline.farPickupKm": "Far pickup from",
-  "safety.minRating": "Lowest rating check", "safety.ratingBelow": "Lowest rating", "safety.maxCancel": "Cancel rate check", "safety.cancelAbove": "Highest cancel rate",
+  "safety.minRating": "Lowest rating check", "safety.ratingBelow": "Lowest rating", "safety.maxCancel": "No requests over the cancel rate limit",
   "safety.doNotMatch": "Do not match list", "safety.womenOnly": "Women-only rides", alerts: "Alerts",
 };
 
@@ -1282,7 +1287,7 @@ export function rankDrivers(zone: ZoneDispatch, country: CountryDispatch, reques
     else if (request.blocked.includes(driver.id) && zone.safety.doNotMatch) out = "On the do-not-match list with this rider";
     else if (request.womenOnly && zone.safety.womenOnly && !driver.female) out = "The rider asked for a woman driver";
     else if (zone.safety.minRating && driver.rating < zone.safety.ratingBelow) out = `Rating ${driver.rating.toFixed(1)} is under ${zone.safety.ratingBelow}`;
-    else if (zone.safety.maxCancel && driver.cancelPct > zone.safety.cancelAbove) out = `Cancel rate ${driver.cancelPct}% is over ${zone.safety.cancelAbove}%`;
+    else if (zone.safety.maxCancel && driver.cancelPct > country.cancelRateLimitPct) out = `Cancel rate ${driver.cancelPct}% is over the ${country.cancelRateLimitPct}% limit`;
     else if (zone.fairness.hourCap && driver.ridesThisHour >= zone.fairness.hourRides) out = `Already had ${driver.ridesThisHour} rides this hour (cap ${zone.fairness.hourRides})`;
     else if (zone.fairness.skipPause && driver.skipsInRow >= zone.fairness.skips) out = `Paused ${zone.fairness.pauseMin} min after ${driver.skipsInRow} skipped offers`;
     else if (zone.autoOffline.on && driver.noInRow >= zone.autoOffline.after) out = `Went offline after ${driver.noInRow} offers not accepted in a row`;
@@ -1421,7 +1426,7 @@ export function rulesFile(book: DispatchBook, country: MarketId, at: string) {
       exclusiveWhileDriving: "While driving a rider the driver gets Exclusive offers only (at most count at a time), never Radar trips.",
       pickupWait: "Waiting at pickup. Free wait, price per minute and the no-show fee come from Pricing per category (one source). noShowAfterMin: from then the driver can cancel for no-show. Then rideTypes (scheduled, airport, event; a scheduled ride's free wait is the reservation policy's included waiting) and farPickup (pickups over farPickupKm). A later rule wins where it sets a value; null = same as before. driverShareWaitPct and driverShareNoShowPct: the driver's part of the waiting money and the no-show fee.",
       driverApp: "driverApp has the same values in the driver app's shapes: exclusiveReasons per zone as a list, and cancelReasons per language with English filled in where a language is empty.",
-      countryRules: "country.rest: work and rest hours, warnings warnFirstMin and warnLastMin before the limit, blockOnline at the limit. country.cancelRateLimitPct: the cancel rate drivers should stay under, never shown to drivers (they see a rule text). Only normal-trip cancels count, without pause or fee; reasons with counts=false never count. country.cancelReasons: per group and language (en, sv, fr, ar); an empty language uses English.",
+      countryRules: "country.rest: work and rest hours, warnings warnFirstMin and warnLastMin before the limit, blockOnline at the limit. country.cancelRateLimitPct: the cancel rate drivers should stay under, never shown to drivers (they see a rule text). It is the only cancel rate number: in zones where safety.maxCancel is on, drivers over it get no requests. Only normal-trip cancels count, without pause or fee; reasons with counts=false never count. country.cancelReasons: per group and language (en, sv, fr, ar); an empty language uses English.",
       reservationWho: "listTo group = only the drivers of the saved group listGroupId (groups below). homePopupTo: list = the same drivers as the list, zone = every online driver in the zone. popupClosedExclusive: a driver who closed the Home popup with × can get it back as an Exclusive if nobody took it.",
       smartGap: "A driver cannot hold two scheduled rides whose times are the same or close. Gap = the first ride's trip time + the drive to the next pickup + types[kind].spareMin. With hideClashing, once a driver takes one, the rides that do not fit leave that driver's list (they still see them all before taking one).",
       leaveNow: "leaveNow: at live drive time to the pickup + types[kind].spareMin before pickup, the ride lands on the driver's screen as the active trip with Head to pickup. lateWarn: not moving toward the pickup after that, an island warning at once, then after lateBackupAfterMin an admin alert and the backup driver. towardPickup: from towardPickupBeforeMin before pickup, offers head toward the scheduled pickup, each checked with the smart gap.",

@@ -25,6 +25,7 @@ import {
 import {
   ONBOARDING_KEY,
   STEPS,
+  firstWarningDays,
   countryActivationIssue,
   demoLeads,
   docProgress,
@@ -302,7 +303,7 @@ function ApplicantView({ driver, rules, country, now, reviewNote, setReviewNote,
         {DRIVER_DOCUMENTS.map((id) => {
           const review = ops.documents[id];
           const needed = required.has(id);
-          const health = docHealth(review, now);
+          const health = docHealth(review, now, firstWarningDays(rules, country));
           return (
             <li key={id} className={needed ? undefined : "off"}>
               <span className="ob-doc-name"><b>{docLabel(id)}</b><small>{id.replaceAll("_", " ")} · {needed ? "Required" : driver.fleetId && id === "company_registration" ? "Fleet exempt" : `Not needed in ${country}`}</small></span>

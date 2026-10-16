@@ -1,4 +1,5 @@
 import { logExport } from "../reports/activityLog";
+import { ScheduledAccessCard } from "../drivers/ScheduledAccess";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { AlertTriangle, ArrowLeft, Building2, Car, CheckCircle2, Hash, Mail, MapPin, MessageSquare, Phone, Star, StickyNote } from "lucide-react";
@@ -30,6 +31,7 @@ import {
 import { CATEGORIES as CATEGORY_INFO } from "../domain/contract";
 import { statusLabel } from "../domain/labels";
 import { countHealth, docHealth } from "../fleet/documents";
+import { useDocWarnDays } from "../drivers/useDocWarnDays";
 import { driverPerformance, performanceWarning } from "../fleet/performance";
 import { liveDrivers } from "../dashboard/live";
 import { liveTrip } from "../dashboard/liveTrip";
@@ -68,6 +70,7 @@ export function DriverDetailPage() {
   const [waybillOpen, setWaybillOpen] = useState(false);
   const audit = useAudit();
   const store = useSlice<DriverOpsBook>("driverOps", emptyDriverOpsBook());
+  const warnDaysFor = useDocWarnDays();
   const [tab, setTab] = useState(() => params.get("tab") ?? "overview");
   useEffect(() => {
     const restore = () => setTab(new URLSearchParams(window.location.search).get("tab") ?? "overview");
@@ -128,7 +131,8 @@ export function DriverDetailPage() {
   const docIds = DRIVER_DOCUMENTS as readonly DocId[];
   const docRows: DocRow[] = docIds.map((id) => ({ ...ops.documents[id], exempt: Boolean(driver.fleetId && id === "company_registration") }));
   const required = docRows.filter((row) => !row.exempt);
-  const health = countHealth(required, now);
+  const warnDays = warnDaysFor(driver.zoneId);
+  const health = countHealth(required, now, warnDays);
   const allGreen = health.invalid === 0 && health.review === 0;
   const canReview = can(role, "documents.approve");
 
@@ -326,6 +330,7 @@ export function DriverDetailPage() {
               })}
             </div>
           </section>
+          <ScheduledAccessCard driverId={driver.id} />
           {current ? (
             <div className="fd-current">
               <h3>Current trip</h3>
@@ -350,8 +355,8 @@ export function DriverDetailPage() {
                 <span className="h-review"><strong>{health.review}</strong>Waiting review</span>
               </div>
               <ul className="fd-mini-docs">
-                {required.filter((row) => docHealth(row, now).health !== "valid").map((row) => {
-                  const state = docHealth(row, now);
+                {required.filter((row) => docHealth(row, now, warnDays).health !== "valid").map((row) => {
+                  const state = docHealth(row, now, warnDays);
                   return <li key={row.id} className={`h-${state.health}`}><i aria-hidden="true" />{row.id.replaceAll("_", " ")} · {state.label}</li>;
                 })}
               </ul>
@@ -401,6 +406,7 @@ export function DriverDetailPage() {
             label="Driver documents"
             rows={docRows}
             nowMs={now}
+            warnDays={warnDays}
             canEdit={canReview}
             targetId={driver.id}
             scope={driver.zoneId}

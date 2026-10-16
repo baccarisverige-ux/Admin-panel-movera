@@ -67,11 +67,11 @@ export function RunCard({ run, rows, ops, country, next, money, fileRows, starte
 }
 
 /** One payout explained line by line, with hold and retry. */
-export function PayoutLines({ record, fleet, ops, country, money, onNotice }: { record: DemoRecord; fleet: boolean; ops: PayoutOps; country: MarketId; money: (minor: number) => string; onNotice: (text: string) => void }) {
+export function PayoutLines({ record, fleet, ops, country, money, onNotice, cash }: { record: DemoRecord; fleet: boolean; ops: PayoutOps; country: MarketId; money: (minor: number) => string; onNotice: (text: string) => void; cash?: { minor: number; trips: number } }) {
   const { agent } = useSession();
   const [reason, setReason] = useState("");
   const sched = ops.schedules[country];
-  const { lines, instant } = payoutLines(record, fleet, sched);
+  const { lines, instant } = payoutLines(record, fleet, sched, cash);
   const hold = holdOf(ops, record.id);
   const failed = failedOf(ops, record);
   const next = setHold(ops, record.id, !hold, hold ? "Released" : reason, agent?.id ?? "", new Date().toISOString());

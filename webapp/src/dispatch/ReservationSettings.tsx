@@ -5,6 +5,7 @@ import type { MarketId } from "../markets/markets";
 import { Card, Choice, Num, Row, Switch } from "./fields";
 import { ReservationTimelinePreview, spanLabel } from "./Previews";
 import { BookingPolicyCard } from "./BookingPolicy";
+import { ScheduledAccessCard } from "../drivers/ScheduledAccess";
 import {
   HOME_POPUP_TO, leaveNowBeforeMin, raiseCap, raiseSplit, RESERVATION_CANCEL_TO, RESERVATION_LIST_TO, RIDE_TYPES, RIDER_FREE_CANCEL_MAX_MIN, smartGapMin,
   type DriverGroup, type ReservationRules, type RideTypeId, type RideTypeRule, type ZoneDispatch,
@@ -154,6 +155,8 @@ export function ReservationSettings({ zone, onChange, disabled, symbol, money, c
         </Row>
         <p className="dx-note"><UserX size={13} aria-hidden="true" /> Drivers never pay. Every driver cancel counts in the cancel rate{resv.latePause ? `; ${resv.latePauseAfter} late cancel${resv.latePauseAfter === 1 ? "" : "s"} in ${resv.latePeriodDays} days pause scheduled rides for ${resv.latePauseDays} days` : ""}.</p>
       </Card>
+
+      <ScheduledAccessCard />
 
       <Card title="No driver near pickup" tone="orange" icon={<Bell size={18} />} help="Nobody took it and pickup is close." off={!resv.on}>
         <Row label="Admin alert" help="The ride shows in Live and in Alerts as “Booked ride soon with no driver”, so you can give it to a driver.">

@@ -23,6 +23,9 @@ import { formatMoney } from "../markets/markets";
 import { useMarketScope } from "../markets/useMarketScope";
 import { PayoutLines, RunCard, ScheduleView } from "../payments/PayoutParts";
 import { PAYOUT_OPS_KEY, bankReady, countryOfPayout, emptyPayoutOps, failedOf, holdOf, nextRun, normalizePayoutOps, type PayoutOps } from "../payments/runs";
+import { emptyPricingStore, normalizeStore, SLICE_KEY as PRICING_KEY, zoneBook, type PricingStore } from "../pricing/zonePricing";
+import { cashOwed } from "../trips/cash";
+import { TRIP_OPS_KEY, countryOf, emptyTripOps, moneySplit, normalizeTripOps, type TripOps } from "../trips/file";
 
 export function PayoutsPage() {
   const { agent } = useSession();
@@ -34,6 +37,10 @@ export function PayoutsPage() {
   const ops = normalizePayoutOps(opsSlice.value);
   const [now] = useState(() => Date.now());
   const payouts = useRecords("payouts", null);
+  const trips = useRecords("trips", null);
+  const pricingSlice = useSlice<PricingStore>(PRICING_KEY, emptyPricingStore());
+  // Trip changes (refunds, fare changes) need trips access; without it the cash owed uses the trips as charged.
+  const tripOpsSlice = useSlice<TripOps>(TRIP_OPS_KEY, emptyTripOps(), { enabled: Boolean(agent && can(agent.role, "trips.read")) });
   const financeStore = useSlice<FinanceBook>("finance", defaultFinanceBook());
   const finance = useMemo(() => normalizeFinanceBook(financeStore.value), [financeStore.value]);
   const rows = payouts.data ?? [];
@@ -58,6 +65,10 @@ export function PayoutsPage() {
   if (!selected) return <p className="state-line">No payouts are available.</p>;
 
   const driverId = selected.driverId ?? "";
+  const selectedFleet = Boolean((drivers.data ?? []).find((row) => row.id === selected.driverId)?.fleetId);
+  const pricingStore = normalizeStore(pricingSlice.value);
+  const tripEntries = normalizeTripOps(tripOpsSlice.value).entries;
+  const selectedCash = cashOwed(trips.data ?? [], driverId, (trip) => moneySplit(trip, zoneBook(pricingStore, trip.zoneId), selectedFleet, tripEntries), (trip) => countryOf(trip.zoneId));
   const persistedBank = bankReview(finance, driverId);
   const bank = bankDraft?.driverId === driverId ? bankDraft : persistedBank;
   const state = payoutState(finance, selected);
@@ -223,7 +234,7 @@ export function PayoutsPage() {
           </CommandButton>
         </div>
       </article>
-      <PayoutLines record={selected} fleet={Boolean((drivers.data ?? []).find((row) => row.id === selected.driverId)?.fleetId)} ops={ops} country={countryOfPayout(selected)} money={(minor) => formatMoney(minor, countryOfPayout(selected))} onNotice={setNotice} />
+      <PayoutLines record={selected} fleet={selectedFleet} ops={ops} country={countryOfPayout(selected)} money={(minor) => formatMoney(minor, countryOfPayout(selected))} onNotice={setNotice} cash={selectedCash} />
       </>
       )}
     </div>

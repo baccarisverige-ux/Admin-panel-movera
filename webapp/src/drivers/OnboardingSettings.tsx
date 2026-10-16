@@ -43,7 +43,7 @@ export function OnboardingSettings({ rules, country, editable }: { rules: Onboar
           </Row>
         </Card>
         <Card title="Documents that expire" icon={<CalendarX2 size={18} />} tone="red" help="For drivers who are already driving: warn, then block.">
-          <Row label="Warn before expiry" help="On the island and as a notification, with “Upload new”.">
+          <Row label="Warn before expiry" help="On the island and as a notification, with “Upload new”. Documents show orange in the panel from the first warning.">
             {current.docWarnDays.map((day, index) => (
               <Num key={index} label={`Document warning ${index + 1}`} before={index === 0 ? undefined : "and"} value={day} unit={index === current.docWarnDays.length - 1 ? "days before" : "days"} min={1} max={90} onChange={(value) => patch({ docWarnDays: current.docWarnDays.map((item, at) => (at === index ? Math.round(value) : item)) })} />
             ))}

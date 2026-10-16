@@ -39,6 +39,12 @@ for (const fleet of [false, true]) {
   assert(sum === 125_000 && lines.at(-1)?.minor === 125_000, `the lines add up to what the driver gets (fleet ${fleet})`);
 }
 assert(payoutLines(record, true, sched).fleetMinor > 0, "the fleet owner gets a part");
+// Q23: cash the driver owes Movera is a deduction line, and the lines still add up.
+const withCash = payoutLines(record, false, sched, { minor: 9_000, trips: 3 });
+const cashLine = withCash.lines.find((line) => line.label.startsWith("Cash rides"));
+assert(cashLine?.label === "Cash rides: owed to Movera (3 trips)" && cashLine.minor === -9_000 && cashLine.kind === "minus" && withCash.cashMinor === 9_000, "cash owed is a minus line");
+assert(withCash.lines.filter((line) => line.kind !== "total").reduce((total, line) => total + line.minor, 0) === 125_000 && withCash.lines[0].label.endsWith("paid in the app"), "with cash the lines still add up to what the driver gets");
+assert(!payoutLines(record, false, sched).lines.some((line) => line.label.startsWith("Cash rides")), "no cash line without cash trips");
 assert(setHold(payouts, "PO1", true, " ", "astrid", "2026-10-12T12:00:00Z").error, "a hold needs a reason");
 const held = setHold(payouts, "PO1", true, "Damage claim", "astrid", "2026-10-12T12:00:00Z").ops;
 assert(holdOf(held, "PO1")?.reason === "Damage claim" && !holdOf(setHold(held, "PO1", false, "Released", "astrid", "2026-10-12T13:00:00Z").ops, "PO1"), "hold and release");
